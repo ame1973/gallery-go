@@ -16,6 +16,10 @@ tags:
     description: HTTPS cookie sessions, session-bound CSRF, and account security.
   - name: Administration
     description: Active administrators only. Account changes revoke sessions and rotate authorization scopes.
+  - name: Access
+    description: Versioned group membership and fail-closed library and album grants.
+  - name: Library
+    description: Session-protected metadata filtered by the shared SQL authorization predicate.
 paths:
   /health/live:
     get:
@@ -334,14 +338,341 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AuditPage' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/groups:
+    get:
+      operationId: listGroups
+      summary: List permission groups in stable ID order
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded administrative group page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupPage' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createGroup
+      summary: Create a permission group without granting access
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NameRequest' }
+      responses:
+        '201':
+          description: Group created, or its original idempotent result replayed.
+          headers:
+            ETag: { $ref: '#/components/headers/ResourceETag' }
+            Location: { $ref: '#/components/headers/CreatedLocation' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Group' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/groups/{group_id}:
+    parameters:
+      - { name: group_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getGroup
+      summary: Read a permission group and its current ETag
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Group' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      operationId: renameGroup
+      summary: Rename a permission group
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NameRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Group' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteGroup
+      summary: Remove a group without widening album restrictions
+      description: Memberships and library/album grant edges are removed atomically. Restricted albums remain restricted even when no groups remain. Affected account scopes and containing resource versions advance; sessions remain valid but cannot use removed grants.
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+      responses:
+        '204': { description: 'Group deleted, affected scopes revoked, and operation audited.' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/users/{user_id}/groups:
+    parameters:
+      - { $ref: '#/components/parameters/UserID' }
+    get:
+      operationId: getUserGroups
+      summary: Read an account's explicit group memberships
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/UserGroups' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: setUserGroups
+      summary: Replace an account's group memberships
+      description: Requires the user ETag. A change rotates scope and increments the user version without signing out valid sessions. An explicit empty group_ids array removes all memberships. A no-op preserves scope and version.
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/UserIfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/UserGroups' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/libraries:
+    get:
+      operationId: listAdminLibraries
+      summary: List all libraries, including inactive ones
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded administrative library page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryPage' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createLibrary
+      summary: Create an empty library with no grants
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLibraryRequest' }
+      responses:
+        '201':
+          description: Library created, or its original idempotent result replayed.
+          headers:
+            ETag: { $ref: '#/components/headers/ResourceETag' }
+            Location: { $ref: '#/components/headers/CreatedLocation' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Library' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/libraries/{library_id}:
+    parameters:
+      - { $ref: '#/components/parameters/LibraryID' }
+    get:
+      operationId: getAdminLibrary
+      summary: Read a library's management metadata
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Library' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      operationId: updateLibrary
+      summary: Rename, activate, or deactivate a library
+      description: Inactive libraries are hidden from content-facing APIs, including for administrators. Active-state changes rotate affected user and administrator scopes. Management endpoints remain available to active administrators.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateLibraryRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Library' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteLibrary
+      summary: Delete an empty library without touching source files
+      description: Libraries with sources or albums return 409 LIBRARY_NOT_EMPTY; deactivate them instead. No source or media file is deleted.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+      responses:
+        '204': { description: Empty library deleted and affected scopes revoked. }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/libraries/{library_id}/access:
+    parameters:
+      - { $ref: '#/components/parameters/LibraryID' }
+    get:
+      operationId: getLibraryPolicy
+      summary: Read a library's explicit group grants
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/LibraryPolicy' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: setLibraryPolicy
+      summary: Replace a library's grants without making an empty policy public
+      description: At least one matching group is mandatory for a regular user. Empty group_ids denies all regular users. Old and new grantee scopes advance atomically with the policy, audit, and outbox.
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/LibraryPolicy' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/albums/{album_id}/access:
+    parameters:
+      - { $ref: '#/components/parameters/AlbumID' }
+    get:
+      operationId: getAlbumPolicy
+      summary: Read an album's additional restriction policy
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AlbumPolicy' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: setAlbumPolicy
+      summary: Explicitly replace an album's additional restrictions
+      description: A library grant is always required for a regular user. restricted=true with an empty group_ids array denies all regular users. restricted=false requires an explicit empty group_ids array and permits users who already have the library grant. Removing a group never infers this unrestricted state.
+      tags: [Access]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumPolicyRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumPolicy' }
+        default: { $ref: '#/components/responses/Problem' }
+  /libraries:
+    get:
+      operationId: listLibraries
+      summary: List visible active libraries in stable ID order
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Only SQL-authorized active libraries; empty grants deny regular users.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /libraries/{library_id}:
+    get:
+      operationId: getLibrary
+      summary: Read a visible active library
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/LibraryID' }
+      responses:
+        '200': { $ref: '#/components/responses/Library' }
+        default: { $ref: '#/components/responses/Problem' }
+  /albums:
+    get:
+      operationId: listAlbums
+      summary: List visible albums with authorized media counts and covers
+      description: Stable ID keyset pages. A library grant is mandatory and album restrictions only narrow it. Cross-library source relationships fail closed; these live pages are not offline snapshots.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: SQL-authorized album metadata without private filesystem paths.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /albums/{album_id}:
+    get:
+      operationId: getAlbum
+      summary: Read one authorized album
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/AlbumID' }
+      responses:
+        '200': { $ref: '#/components/responses/Album' }
+        default: { $ref: '#/components/responses/Problem' }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: __Host-gallerygo_session }
   headers:
+    ResourceETag:
+      description: Strong tag in the quoted form "<kind>:<id>:<version>". Send it unchanged in If-Match.
+      schema: { type: string }
+    CreatedLocation:
+      description: Relative URL of the created resource.
+      schema: { type: string }
     UserETag:
       description: Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match.
       schema: { type: string }
   parameters:
+    LibraryID:
+      name: library_id
+      in: path
+      required: true
+      schema: { type: string }
+    AlbumID:
+      name: album_id
+      in: path
+      required: true
+      schema: { type: string }
+    ResourceIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album.
+      schema: { type: string }
     UserID:
       name: user_id
       in: path
@@ -380,6 +711,48 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    Group:
+      description: Group metadata and its current strong version tag.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Group' }
+    UserGroups:
+      description: Account memberships, current authorization scope, and user ETag.
+      headers:
+        ETag: { $ref: '#/components/headers/UserETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/UserGroups' }
+    Library:
+      description: Library metadata and current strong version tag.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Library' }
+    LibraryPolicy:
+      description: Explicit library grants and library ETag; an empty list denies regular users.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/LibraryPolicy' }
+    AlbumPolicy:
+      description: Explicit album restriction state and album ETag, independent of remaining group edges.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AlbumPolicy' }
+    Album:
+      description: Authorized album metadata, filtered media count/cover, rating aggregate, and album ETag.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Album' }
     AdminUser:
       description: Account metadata and its strong version tag, without password material.
       headers:
@@ -393,6 +766,143 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    NameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Trimmed name of 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters.
+    Group:
+      type: object
+      additionalProperties: false
+      required: [id, name, version, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+    GroupPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Group' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    GroupsRequest:
+      type: object
+      additionalProperties: false
+      required: [group_ids]
+      properties:
+        group_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Explicit replacement set. Empty removes grants or memberships; it never grants a library.
+    UserGroups:
+      type: object
+      additionalProperties: false
+      required: [user_id, group_ids, scope_id, version]
+      properties:
+        user_id: { type: string }
+        group_ids: { type: array, maxItems: 100, items: { type: string } }
+        scope_id: { type: string }
+        version: { type: integer, minimum: 1 }
+    Library:
+      type: object
+      additionalProperties: false
+      required: [id, name, active, version, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+    LibraryPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Library' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    CreateLibraryRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          {
+            type: string,
+            minLength: 1,
+            description: 'Trimmed 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters.',
+          }
+        active: { type: boolean, default: true }
+    UpdateLibraryRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          {
+            type: string,
+            minLength: 1,
+            description: 'Trimmed 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters.',
+          }
+        active: { type: boolean }
+    LibraryPolicy:
+      type: object
+      additionalProperties: false
+      required: [library_id, group_ids, version]
+      properties:
+        library_id: { type: string }
+        group_ids: { type: array, maxItems: 100, items: { type: string } }
+        version: { type: integer, minimum: 1 }
+    AlbumPolicy:
+      type: object
+      additionalProperties: false
+      required: [album_id, restricted, group_ids, version]
+      properties:
+        album_id: { type: string }
+        restricted: { type: boolean }
+        group_ids: { type: array, maxItems: 100, items: { type: string } }
+        version: { type: integer, minimum: 1 }
+    AlbumPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [restricted, group_ids]
+      properties:
+        restricted: { type: boolean }
+        group_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant.
+    Album:
+      type: object
+      additionalProperties: false
+      required: [id, title, library_id, cover_media_id, media_count, rating_avg, version]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        library_id: { type: string }
+        cover_media_id: { type: [string, 'null'] }
+        media_count: { type: integer, minimum: 0 }
+        rating_avg: { type: [number, 'null'], minimum: 1, maximum: 5 }
+        version: { type: integer, minimum: 1 }
+    AlbumPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Album' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     CreateUserRequest:
       type: object
       additionalProperties: false

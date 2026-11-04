@@ -296,10 +296,317 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List permission groups in stable ID order */
+        get: operations["listGroups"];
+        put?: never;
+        /** Create a permission group without granting access */
+        post: operations["createGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        /** Read a permission group and its current ETag */
+        get: operations["getGroup"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove a group without widening album restrictions
+         * @description Memberships and library/album grant edges are removed atomically. Restricted albums remain restricted even when no groups remain. Affected account scopes and containing resource versions advance; sessions remain valid but cannot use removed grants.
+         */
+        delete: operations["deleteGroup"];
+        options?: never;
+        head?: never;
+        /** Rename a permission group */
+        patch: operations["renameGroup"];
+        trace?: never;
+    };
+    "/admin/users/{user_id}/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        /** Read an account's explicit group memberships */
+        get: operations["getUserGroups"];
+        /**
+         * Replace an account's group memberships
+         * @description Requires the user ETag. A change rotates scope and increments the user version without signing out valid sessions. An explicit empty group_ids array removes all memberships. A no-op preserves scope and version.
+         */
+        put: operations["setUserGroups"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all libraries, including inactive ones */
+        get: operations["listAdminLibraries"];
+        put?: never;
+        /** Create an empty library with no grants */
+        post: operations["createLibrary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/libraries/{library_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        /** Read a library's management metadata */
+        get: operations["getAdminLibrary"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an empty library without touching source files
+         * @description Libraries with sources or albums return 409 LIBRARY_NOT_EMPTY; deactivate them instead. No source or media file is deleted.
+         */
+        delete: operations["deleteLibrary"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename, activate, or deactivate a library
+         * @description Inactive libraries are hidden from content-facing APIs, including for administrators. Active-state changes rotate affected user and administrator scopes. Management endpoints remain available to active administrators.
+         */
+        patch: operations["updateLibrary"];
+        trace?: never;
+    };
+    "/admin/libraries/{library_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        /** Read a library's explicit group grants */
+        get: operations["getLibraryPolicy"];
+        /**
+         * Replace a library's grants without making an empty policy public
+         * @description At least one matching group is mandatory for a regular user. Empty group_ids denies all regular users. Old and new grantee scopes advance atomically with the policy, audit, and outbox.
+         */
+        put: operations["setLibraryPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/albums/{album_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /** Read an album's additional restriction policy */
+        get: operations["getAlbumPolicy"];
+        /**
+         * Explicitly replace an album's additional restrictions
+         * @description A library grant is always required for a regular user. restricted=true with an empty group_ids array denies all regular users. restricted=false requires an explicit empty group_ids array and permits users who already have the library grant. Removing a group never infers this unrestricted state.
+         */
+        put: operations["setAlbumPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List visible active libraries in stable ID order */
+        get: operations["listLibraries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{library_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a visible active library */
+        get: operations["getLibrary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List visible albums with authorized media counts and covers
+         * @description Stable ID keyset pages. A library grant is mandatory and album restrictions only narrow it. Cross-library source relationships fail closed; these live pages are not offline snapshots.
+         */
+        get: operations["listAlbums"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/albums/{album_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one authorized album */
+        get: operations["getAlbum"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        NameRequest: {
+            /** @description Trimmed name of 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters. */
+            name: string;
+        };
+        Group: {
+            id: string;
+            name: string;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        GroupPage: {
+            items: components["schemas"]["Group"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        GroupsRequest: {
+            /** @description Explicit replacement set. Empty removes grants or memberships; it never grants a library. */
+            group_ids: string[];
+        };
+        UserGroups: {
+            user_id: string;
+            group_ids: string[];
+            scope_id: string;
+            version: number;
+        };
+        Library: {
+            id: string;
+            name: string;
+            active: boolean;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        LibraryPage: {
+            items: components["schemas"]["Library"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        CreateLibraryRequest: {
+            /** @description Trimmed 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters. */
+            name: string;
+            /** @default true */
+            active: boolean;
+        };
+        UpdateLibraryRequest: {
+            /** @description Trimmed 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters. */
+            name?: string;
+            active?: boolean;
+        };
+        LibraryPolicy: {
+            library_id: string;
+            group_ids: string[];
+            version: number;
+        };
+        AlbumPolicy: {
+            album_id: string;
+            restricted: boolean;
+            group_ids: string[];
+            version: number;
+        };
+        AlbumPolicyRequest: {
+            restricted: boolean;
+            /** @description Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant. */
+            group_ids: string[];
+        };
+        Album: {
+            id: string;
+            title: string;
+            library_id: string;
+            cover_media_id: string | null;
+            media_count: number;
+            rating_avg: number | null;
+            version: number;
+        };
+        AlbumPage: {
+            items: components["schemas"]["Album"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         CreateUserRequest: {
             /** @description Case-insensitive ASCII letters, digits, dots, underscores, and hyphens; begins with a letter or digit. Surrounding whitespace is trimmed. */
             username: string;
@@ -407,6 +714,66 @@ export interface components {
         };
     };
     responses: {
+        /** @description Group metadata and its current strong version tag. */
+        Group: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Group"];
+            };
+        };
+        /** @description Account memberships, current authorization scope, and user ETag. */
+        UserGroups: {
+            headers: {
+                ETag: components["headers"]["UserETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UserGroups"];
+            };
+        };
+        /** @description Library metadata and current strong version tag. */
+        Library: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Library"];
+            };
+        };
+        /** @description Explicit library grants and library ETag; an empty list denies regular users. */
+        LibraryPolicy: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["LibraryPolicy"];
+            };
+        };
+        /** @description Explicit album restriction state and album ETag, independent of remaining group edges. */
+        AlbumPolicy: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumPolicy"];
+            };
+        };
+        /** @description Authorized album metadata, filtered media count/cover, rating aggregate, and album ETag. */
+        Album: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Album"];
+            };
+        };
         /** @description Account metadata and its strong version tag, without password material. */
         AdminUser: {
             headers: {
@@ -428,6 +795,10 @@ export interface components {
         };
     };
     parameters: {
+        LibraryID: string;
+        AlbumID: string;
+        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+        ResourceIfMatch: string;
         UserID: string;
         /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
         UserIfMatch: string;
@@ -442,6 +813,10 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /** @description Strong tag in the quoted form "<kind>:<id>:<version>". Send it unchanged in If-Match. */
+        ResourceETag: string;
+        /** @description Relative URL of the created resource. */
+        CreatedLocation: string;
         /** @description Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match. */
         UserETag: string;
     };
@@ -926,6 +1301,456 @@ export interface operations {
                     "application/json": components["schemas"]["AuditPage"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listGroups: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded administrative group page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            /** @description Group created, or its original idempotent result replayed. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    Location: components["headers"]["CreatedLocation"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Group"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Group"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group deleted, affected scopes revoked, and operation audited. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    renameGroup: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Group"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getUserGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UserGroups"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setUserGroups: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+            };
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupsRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["UserGroups"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdminLibraries: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded administrative library page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createLibrary: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLibraryRequest"];
+            };
+        };
+        responses: {
+            /** @description Library created, or its original idempotent result replayed. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    Location: components["headers"]["CreatedLocation"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdminLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Library"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteLibrary: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Empty library deleted and affected scopes revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateLibrary: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLibraryRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Library"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getLibraryPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["LibraryPolicy"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setLibraryPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupsRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["LibraryPolicy"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAlbumPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumPolicy"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAlbumPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumPolicyRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AlbumPolicy"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listLibraries: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Only SQL-authorized active libraries; empty grants deny regular users. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library_id: components["parameters"]["LibraryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Library"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAlbums: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SQL-authorized album metadata without private filesystem paths. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAlbum: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Album"];
             default: components["responses"]["Problem"];
         };
     };

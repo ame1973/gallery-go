@@ -6,6 +6,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Group/membership/library/album-policy APIs with shared SQL visibility, explicit
+  deny-by-default library grants, and persistent album restriction state.
+- SQL-authorized library/album metadata, counts, covers, and bounded keyset pages;
+  inactive libraries and inconsistent cross-source relationships stay hidden.
+- Bulk authorization-epoch revocation with complete durable policy/outbox events,
+  2,000-account rollback tests, and real HTTPS last-group deletion regressions.
+
 - Administrative user CRUD, password reset, cross-account session control, and
   bounded audit APIs with strong account ETags and scope-bound pagination.
 - Transactional last-active-administrator protection, immediate session/scope
@@ -35,6 +42,6 @@ All notable public changes are recorded here. This project uses Conventional Com
 ### Compatibility
 
 - This is a new implementation. Old GalleryGo databases and API routes are not supported.
-- Private gallery features are not yet available; this is not a GA release.
+- A complete private gallery is not yet available; this is not a GA release.
 - TypeScript is pinned to 6.0.3 because the selected ESLint toolchain does not yet
   accept TypeScript 7. All direct dependencies use exact versions and lockfiles.

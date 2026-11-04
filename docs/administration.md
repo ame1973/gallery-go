@@ -1,9 +1,9 @@
 # Administrative account API
 
 Account administration is currently available through the HTTPS API. The dedicated
-user-management and audit screens are not implemented yet. Group grants, resource
-ACLs, and media serving are separate features still under development; creating a
-regular account does not grant access to a library.
+user-management and audit screens are not implemented yet. Group grants and
+resource ACLs are described in [access.md](access.md); media serving remains under
+development. Creating a regular account does not grant access to a library.
 
 Use an HTTPS client with cookie support. Sign in as an active administrator and
 obtain the session-bound CSRF token as described in [authentication.md](authentication.md).

@@ -71,5 +71,7 @@ Active administrators can create, inspect, update, disable, delete, and reset
 accounts, inspect and revoke another account's sessions, and read the audit API.
 See [administration.md](administration.md) for version preconditions, idempotent
 POSTs, last-active-administrator protection, and immediate online session revocation.
-Dedicated administrative screens, group/resource ACLs, and protected media routes
-are not implemented yet.
+Group/resource ACLs and authorized metadata reads are documented in
+[access.md](access.md). Grant changes rotate scope without signing out valid
+sessions; account-policy and password changes revoke sessions as described above.
+Dedicated administrative screens and protected media routes are not implemented yet.

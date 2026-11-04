@@ -35,7 +35,7 @@ test('language selection persists through a real page reload', async ({ page }) 
 
 test('private-looking paths never fall through to static files', async ({ request }) => {
   for (const path of [
-    '/api/v2/albums',
+    '/api/v2/unknown-resource',
     '/api/v1/albums',
     '/.env',
     '/.gallerygo/original.jpg',

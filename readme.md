@@ -7,10 +7,10 @@ media separately.
 **Development status:** this is not yet a production-ready private gallery.
 Database migrations, health checks, one-time administrator bootstrap, secure login,
 password changes, session management, and three-language account pages work.
-Administrative account/session/audit APIs are available; their management screens,
-group/resource ACLs, scanning, media processing, browsing, playback, and offline
-downloads are still being implemented. Do not expose this build to the Internet
-or connect sensitive media yet.
+Administrative account/session/audit, group grants, and authorized library/album
+metadata APIs are available. Their management/browsing screens, scanning, protected
+media streaming/processing, playback, and offline downloads are still being built.
+Do not expose this build to the Internet or connect sensitive media yet.
 
 ## Requirements
 
@@ -155,6 +155,16 @@ Only implemented endpoints are advertised:
 - `GET /api/v2/admin/users/{user_id}/sessions` and
   `DELETE /admin/users/{user_id}/sessions/{session_id}`: inspect/revoke target sessions.
 - `GET /api/v2/admin/audit`: private, newest-first security audit pages.
+- `GET/POST /api/v2/admin/groups`, `GET/PATCH/DELETE /admin/groups/{group_id}`:
+  versioned group management; deletion never clears an album restriction.
+- `GET/PUT /api/v2/admin/users/{user_id}/groups`: explicit memberships with user
+  version preconditions and scope revocation.
+- `GET/POST /api/v2/admin/libraries`, `GET/PATCH/DELETE /admin/libraries/{library_id}`:
+  library configuration; only empty libraries can be deleted.
+- `GET/PUT /api/v2/admin/libraries/{library_id}/access` and
+  `/admin/albums/{album_id}/access`: fail-closed grants and additive restrictions.
+- `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
+  SQL-authorized metadata, counts, and covers. See [docs/access.md](docs/access.md).
 
 HEAD is supported for these GET endpoints. API responses use
 `Cache-Control: private, no-store`. Errors use `application/problem+json` with a
@@ -189,6 +199,9 @@ the test browser ignores the self-signed certificate; Secure cookies and Origin
 checks remain enabled. Authentication tests provision an isolated account per test
 through the real administrative API and run with two parallel workers. Each worker
 has its own administrator session; tests never mutate the bootstrap credentials.
+Before serving, Node's built-in SQLite module seeds only the newly created temporary
+DB with project-isolated ACL metadata fixtures. It is test-only and may emit Node's
+experimental SQLite warning; there is no production seed command or backdoor route.
 Screenshots/traces live in ignored test-output directories. Tests never use private
 source media or an existing user database.
 
@@ -201,8 +214,11 @@ transactional security audit/outbox, CSP nonce matching, last-active-administrat
 races, safe account deletion, ETag conflicts, scope-bound pagination, and idempotent
 administrative POSTs. Real HTTPS E2E covers login, session confirmation/focus,
 password changes, cookie flags, logout, administrative deactivation/reactivation,
-reset/deletion, cross-account session revocation, and audit privacy. Container smoke
-tests use only ephemeral tmpfs storage and remove only their own container.
+reset/deletion, cross-account session revocation, audit privacy, mandatory library
+grants, additive album restrictions, safe last-group deletion, and scope/cursor
+invalidation. SQLite/race tests also cover bulk revocation of 2,000 accounts and
+transactional policy-version/outbox rollback. Container smoke tests use only
+ephemeral tmpfs storage and remove only their own container.
 
 The included GitHub Actions workflow runs these checks and dependency auditing.
 A checked-in workflow is not evidence that a remote CI run has passed.
@@ -233,6 +249,7 @@ Read [SECURITY.md](SECURITY.md) before deploying. In particular:
 ```text
 cmd/gallerygo/         CLI entry point
 internal/app/         Configuration and process lifecycle
+internal/access/      Groups, grants, authorization scopes, and shared SQL visibility
 internal/auth/        Passwords, sessions, CSRF binding, and login abuse controls
 internal/http/        HTTP endpoints and security headers
 internal/store/       SQLite and migration runner

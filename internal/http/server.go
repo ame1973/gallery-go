@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
 )
 
@@ -42,6 +43,26 @@ var Operations = []Operation{
 	{"GET", "/admin/users/{user_id}/sessions", "listUserSessions", false},
 	{"DELETE", "/admin/users/{user_id}/sessions/{session_id}", "revokeUserSession", false},
 	{"GET", "/admin/audit", "listAudit", false},
+	{"GET", "/admin/groups", "listGroups", false},
+	{"POST", "/admin/groups", "createGroup", false},
+	{"GET", "/admin/groups/{group_id}", "getGroup", false},
+	{"PATCH", "/admin/groups/{group_id}", "renameGroup", false},
+	{"DELETE", "/admin/groups/{group_id}", "deleteGroup", false},
+	{"GET", "/admin/users/{user_id}/groups", "getUserGroups", false},
+	{"PUT", "/admin/users/{user_id}/groups", "setUserGroups", false},
+	{"GET", "/admin/libraries", "listAdminLibraries", false},
+	{"POST", "/admin/libraries", "createLibrary", false},
+	{"GET", "/admin/libraries/{library_id}", "getAdminLibrary", false},
+	{"PATCH", "/admin/libraries/{library_id}", "updateLibrary", false},
+	{"DELETE", "/admin/libraries/{library_id}", "deleteLibrary", false},
+	{"GET", "/admin/libraries/{library_id}/access", "getLibraryPolicy", false},
+	{"PUT", "/admin/libraries/{library_id}/access", "setLibraryPolicy", false},
+	{"GET", "/admin/albums/{album_id}/access", "getAlbumPolicy", false},
+	{"PUT", "/admin/albums/{album_id}/access", "setAlbumPolicy", false},
+	{"GET", "/libraries", "listLibraries", false},
+	{"GET", "/libraries/{library_id}", "getLibrary", false},
+	{"GET", "/albums", "listAlbums", false},
+	{"GET", "/albums/{album_id}", "getAlbum", false},
 }
 
 type Health struct {
@@ -58,24 +79,45 @@ type PublicConfig struct {
 func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
+	authorization := authorization{service: access.New(db, service)}
 	handlers := map[string]http.HandlerFunc{
-		"login":             authentication.login,
-		"logout":            authentication.logout,
-		"me":                authentication.me,
-		"getCsrf":           authentication.csrf,
-		"changePassword":    authentication.password,
-		"listSessions":      authentication.sessions,
-		"revokeSession":     authentication.revoke,
-		"listUsers":         authentication.users,
-		"createUser":        authentication.createUser,
-		"getUser":           authentication.user,
-		"updateUser":        authentication.updateUser,
-		"deleteUser":        authentication.deleteUser,
-		"resetUserPassword": authentication.resetPassword,
-		"listUserSessions":  authentication.userSessions,
-		"revokeUserSession": authentication.revokeUserSession,
-		"listAudit":         authentication.audit,
-		"live":              func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
+		"login":              authentication.login,
+		"logout":             authentication.logout,
+		"me":                 authentication.me,
+		"getCsrf":            authentication.csrf,
+		"changePassword":     authentication.password,
+		"listSessions":       authentication.sessions,
+		"revokeSession":      authentication.revoke,
+		"listUsers":          authentication.users,
+		"createUser":         authentication.createUser,
+		"getUser":            authentication.user,
+		"updateUser":         authentication.updateUser,
+		"deleteUser":         authentication.deleteUser,
+		"resetUserPassword":  authentication.resetPassword,
+		"listUserSessions":   authentication.userSessions,
+		"revokeUserSession":  authentication.revokeUserSession,
+		"listAudit":          authentication.audit,
+		"listGroups":         authorization.groups,
+		"createGroup":        authorization.createGroup,
+		"getGroup":           authorization.group,
+		"renameGroup":        authorization.renameGroup,
+		"deleteGroup":        authorization.deleteGroup,
+		"getUserGroups":      authorization.userGroups,
+		"setUserGroups":      authorization.setUserGroups,
+		"listAdminLibraries": authorization.adminLibraries,
+		"createLibrary":      authorization.createLibrary,
+		"getAdminLibrary":    authorization.adminLibrary,
+		"updateLibrary":      authorization.updateLibrary,
+		"deleteLibrary":      authorization.deleteLibrary,
+		"getLibraryPolicy":   authorization.libraryPolicy,
+		"setLibraryPolicy":   authorization.setLibraryPolicy,
+		"getAlbumPolicy":     authorization.albumPolicy,
+		"setAlbumPolicy":     authorization.setAlbumPolicy,
+		"listLibraries":      authorization.libraries,
+		"getLibrary":         authorization.library,
+		"listAlbums":         authorization.albums,
+		"getAlbum":           authorization.album,
+		"live":               func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
 		"ready": func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
@@ -93,6 +135,9 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 	allowed := make(map[string][]string)
 	for _, op := range Operations {
 		handler := handlers[op.ID]
+		if handler == nil {
+			panic("missing API handler: " + op.ID)
+		}
 		if strings.HasPrefix(op.Path, "/admin/") {
 			handler = authentication.admin(handler)
 		}

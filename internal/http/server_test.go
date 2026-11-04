@@ -101,7 +101,7 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 		method, path string
 		status       int
 	}{
-		{"GET", "/api/v2/albums", 404}, {"GET", "/api/v1/albums", 404}, {"GET", "/api", 404},
+		{"GET", "/api/v2/albums", 401}, {"GET", "/api/v2/unknown-resource", 404}, {"GET", "/api/v1/albums", 404}, {"GET", "/api", 404},
 		{"POST", "/api/v2/health/live", 405}, {"POST", "/", 405},
 		{"GET", "/.env", 404}, {"GET", "/.gallerygo/image.webp", 404}, {"GET", "/missing.js", 404},
 		{"GET", "/assets/", 404}, {"GET", "/assets/.secret", 404},
