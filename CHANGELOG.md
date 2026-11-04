@@ -10,6 +10,10 @@ All notable public changes are recorded here. This project uses Conventional Com
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
   Complete generation publication and runnable scan workers are not available yet.
 
+- Fenced durable inventory generations, bounded immutable staging, co-committed
+  job progress, safe issue history, and complete double-pass/minimum-file sealing.
+  Indexed media reconciliation and runnable scan workers are not yet wired.
+
 - Registry-selected source configuration services with independent policy epochs,
   configurable album/person folder depths, safe reachability checks, atomic scope
   revocation, and transaction-bound cancellation of stale resource jobs.
