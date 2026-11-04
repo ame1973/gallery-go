@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 import { App } from './App';
 import { initialLocale, locales, messages } from '../lib/i18n';
 
@@ -9,7 +10,9 @@ function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={client}>
-      <App />
+      <MemoryRouter initialEntries={['/status']}>
+        <App />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -35,7 +38,7 @@ describe('service connection', () => {
     renderApp();
     expect(await screen.findByText('The service is ready.')).toBeInTheDocument();
     expect(screen.getByText('Version test-build')).toBeInTheDocument();
-    expect(screen.getByText(/not available in this build yet/)).toBeInTheDocument();
+    expect(screen.getByText(/still under development/)).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 

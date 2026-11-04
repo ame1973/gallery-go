@@ -6,6 +6,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Authenticated login/logout/me/CSRF/password/session APIs with strict bounded JSON,
+  exact Origin checks, persistent abuse limits, and session-bound CSRF tokens.
+- Three-language HTTPS login/account-security pages, Radix confirmation/focus
+  handling, and real-browser password/session rotation tests.
+- Per-response CSP style nonces for accessible dialogs without unsafe-inline or
+  unsafe-eval exceptions, plus a local TLS reverse-proxy example.
 - One-time administrator bootstrap with hidden terminal or explicit stdin password
   input, bcrypt cost 12, hashed 256-bit sessions, persistent authentication rate
   limits, atomic security events, and bounded session lifetimes.

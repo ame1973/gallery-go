@@ -6,7 +6,7 @@ test('production assets render and the real API is ready', async ({ page, reques
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
-  await page.goto('/');
+  await page.goto('/status');
   await expect(page.getByRole('heading', { name: 'Service connection' })).toBeVisible();
   await expect(page.getByText('The service is ready.')).toBeVisible();
   await expect(page.getByText('Version 2.0.0-dev.0')).toBeVisible();
@@ -23,7 +23,7 @@ test('production assets render and the real API is ready', async ({ page, reques
 });
 
 test('language selection persists through a real page reload', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/status');
   await page.getByRole('combobox', { name: 'Language' }).selectOption('zh-TW');
   await expect(page.getByRole('heading', { name: '服務連線' })).toBeVisible();
   await page.reload();
@@ -49,7 +49,7 @@ test('private-looking paths never fall through to static files', async ({ reques
 });
 
 test('a network failure is visible and can be retried', async ({ page, context }) => {
-  await page.goto('/');
+  await page.goto('/status');
   await expect(page.getByText('The service is ready.')).toBeVisible();
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Check again' }).click();

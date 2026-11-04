@@ -1,7 +1,8 @@
 # Container deployment and operations
 
-> This build is the executable foundation, not the complete gallery. Keep it on a
-> trusted development machine. It has no authentication or media ingestion yet.
+> This is an authentication/deployment development build, not the complete gallery.
+> Keep it on a trusted development machine; source ingestion and ACL management
+> are still being implemented.
 
 ## Build and initialize
 
@@ -11,11 +12,14 @@ From the repository root:
 docker compose -f deploy/compose.yaml config --quiet
 docker compose -f deploy/compose.yaml build
 docker compose -f deploy/compose.yaml run --rm app migrate --config /app/config/config.yaml
+docker compose -f deploy/compose.yaml run --rm app bootstrap-admin --config /app/config/config.yaml --username owner
 docker compose -f deploy/compose.yaml up -d
 docker compose -f deploy/compose.yaml exec app doctor --config /app/config/config.yaml
 ```
 
-Browse `http://127.0.0.1:8080` for the public connection check only. The image uses
+Browse `http://127.0.0.1:8080/status` for the public connection check only. Login
+requires the configured HTTPS origin; see TLS below. Bootstrap is interactive and
+must run only once after initial migration. The image uses
 UID/GID 65532. Fresh named volumes inherit the image directories' ownership.
 If using bind mounts instead, provision private directories with matching ownership
 before starting; do not run the application as root to hide a permission problem.
@@ -65,9 +69,25 @@ future authenticated media route. Preserve request methods, Origin, cookies,
 Range, If-Range, and streaming response bodies. Do not add a public static alias
 for source or variant storage.
 
-The current connection page can be smoke-tested over loopback HTTP because it
-contains no private data. That does not waive the HTTPS-only session requirements
-for future authenticated builds.
+For local development, install Caddy through your operating system's trusted
+package source, then run the provided proxy in a separate terminal:
+
+```sh
+caddy run --config deploy/Caddyfile
+```
+
+Trust only the CA created by your own local Caddy instance. Where appropriate,
+`caddy trust` installs that local CA and may require administrator permission;
+verify its identity before approving. Then open `https://localhost:8443/login`.
+For a real NAS hostname, configure your trusted reverse proxy/certificate instead
+and set GalleryGo's `base_url` to the exact same HTTPS origin. Do not use browser
+certificate-bypass flags in production.
+
+The public connection page can be smoke-tested over loopback HTTP at `/status`.
+Authenticated mutations intentionally reject an HTTP or different Origin. Cookies
+remain Secure/HttpOnly/host-only. The application shell receives a fresh style
+nonce per response so Radix's scroll locking works without unsafe-inline or
+unsafe-eval CSP exceptions; never cache HTML independently of its CSP header.
 
 ## Health and logs
 

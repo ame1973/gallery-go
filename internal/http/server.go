@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -114,9 +115,17 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy(""))
 		next.ServeHTTP(w, r)
 	})
+}
+
+func contentSecurityPolicy(nonce string) string {
+	style := "style-src 'self'"
+	if nonce != "" {
+		style += " 'nonce-" + nonce + "'"
+	}
+	return "default-src 'self'; script-src 'self'; " + style + "; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 }
 
 func serveAsset(assets fs.FS, w http.ResponseWriter, r *http.Request) {
@@ -161,7 +170,18 @@ func serveAsset(assets fs.FS, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name == "index.html" {
-		w.Header().Set("Cache-Control", "no-cache")
+		// A fresh nonce and matching HTML must not be mixed through a 304 response.
+		html, err := io.ReadAll(io.LimitReader(f, 1<<20+1))
+		if err != nil || len(html) > 1<<20 {
+			problem(w, 503, "ASSETS_UNAVAILABLE", "The application shell could not be loaded.")
+			return
+		}
+		nonce := rand.Text()
+		html = bytes.ReplaceAll(html, []byte("__GALLERYGO_STYLE_NONCE__"), []byte(nonce))
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy(nonce))
+		http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(html))
+		return
 	}
 	if strings.HasPrefix(name, "assets/") {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")

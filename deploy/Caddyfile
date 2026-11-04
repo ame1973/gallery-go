@@ -1,0 +1,7 @@
+# Local HTTPS development proxy. Trust only the CA created by your own Caddy instance.
+# Keep base_url: https://localhost:8443 in the GalleryGo configuration.
+https://localhost:8443 {
+	tls internal
+	header Strict-Transport-Security "max-age=86400"
+	reverse_proxy 127.0.0.1:8080
+}
