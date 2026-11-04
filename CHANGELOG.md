@@ -4,6 +4,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ## Unreleased
 
+### Fixed
+
+- Retry actual SQLite busy/locked contention in worker polling and heartbeats
+  without cancelling a live transaction-bound publisher. Readiness still uses
+  committed timestamps; genuine database, cancellation, and lease failures remain
+  fail-closed. A real writer-timeout regression covers atomic completion.
+
 ### Added
 
 - Immutable per-path metadata staging with inspector-policy pins, streamed hash
