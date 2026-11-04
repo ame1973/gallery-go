@@ -25,40 +25,43 @@ var (
 )
 
 type Generation struct {
-	ID            string     `json:"id"`
-	SourceID      string     `json:"source_id"`
-	JobID         string     `json:"job_id"`
-	Attempt       int        `json:"attempt"`
-	ConfigVersion int64      `json:"config_version"`
-	Number        int64      `json:"generation"`
-	Mode          string     `json:"mode"`
-	State         string     `json:"state"`
-	Healthy       bool       `json:"healthy"`
-	FileCount     int64      `json:"file_count"`
-	SizeBytes     int64      `json:"size_bytes"`
-	ErrorCode     *string    `json:"error_code"`
-	Version       int64      `json:"version"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	CompletedAt   *time.Time `json:"completed_at"`
-	PublishedAt   *time.Time `json:"published_at"`
-	owner         string
-	scope         string
-	base          jobs.Counts
+	ID               string     `json:"id"`
+	SourceID         string     `json:"source_id"`
+	JobID            string     `json:"job_id"`
+	Attempt          int        `json:"attempt"`
+	ConfigVersion    int64      `json:"config_version"`
+	Number           int64      `json:"generation"`
+	Mode             string     `json:"mode"`
+	State            string     `json:"state"`
+	Healthy          bool       `json:"healthy"`
+	FileCount        int64      `json:"file_count"`
+	MetadataCount    int64      `json:"metadata_count"`
+	MetadataComplete bool       `json:"metadata_complete"`
+	SizeBytes        int64      `json:"size_bytes"`
+	ErrorCode        *string    `json:"error_code"`
+	Version          int64      `json:"version"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CompletedAt      *time.Time `json:"completed_at"`
+	PublishedAt      *time.Time `json:"published_at"`
+	owner            string
+	scope            string
+	base             jobs.Counts
+	inspectionPolicy string
 }
 
 func (generation Generation) String() string {
 	return "inventory " + generation.ID + " (" + generation.State + ")"
 }
 
-const generationSelect = `SELECT id,source_id,job_id,attempt,config_version,generation,mode,state,healthy,file_count,size_bytes,error_code,version,created_at,updated_at,completed_at,published_at,lease_owner,scope_path,base_counts_json FROM inventory_generations`
+const generationSelect = `SELECT id,source_id,job_id,attempt,config_version,generation,mode,state,healthy,file_count,size_bytes,error_code,version,created_at,updated_at,completed_at,published_at,lease_owner,scope_path,base_counts_json,metadata_count,metadata_complete,inspect_policy_sha256 FROM inventory_generations`
 
 func scanGeneration(row interface{ Scan(...any) error }) (Generation, error) {
 	var generation Generation
 	var created, updated int64
 	var completed, published sql.NullInt64
 	var counts string
-	err := row.Scan(&generation.ID, &generation.SourceID, &generation.JobID, &generation.Attempt, &generation.ConfigVersion, &generation.Number, &generation.Mode, &generation.State, &generation.Healthy, &generation.FileCount, &generation.SizeBytes, &generation.ErrorCode, &generation.Version, &created, &updated, &completed, &published, &generation.owner, &generation.scope, &counts)
+	err := row.Scan(&generation.ID, &generation.SourceID, &generation.JobID, &generation.Attempt, &generation.ConfigVersion, &generation.Number, &generation.Mode, &generation.State, &generation.Healthy, &generation.FileCount, &generation.SizeBytes, &generation.ErrorCode, &generation.Version, &created, &updated, &completed, &published, &generation.owner, &generation.scope, &counts, &generation.MetadataCount, &generation.MetadataComplete, &generation.inspectionPolicy)
 	if err != nil {
 		return Generation{}, err
 	}
@@ -304,7 +307,7 @@ func (s *Inventory) save(ctx context.Context, tx *sql.Tx, generation *Generation
 	if now.After(generation.UpdatedAt) {
 		generation.UpdatedAt = now
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE inventory_generations SET state=?,healthy=?,file_count=?,size_bytes=?,error_code=?,version=?,updated_at=?,completed_at=?,published_at=? WHERE id=? AND version=?`, generation.State, generation.Healthy, generation.FileCount, generation.SizeBytes, generation.ErrorCode, generation.Version, generation.UpdatedAt.UnixMilli(), inventoryTime(generation.CompletedAt), inventoryTime(generation.PublishedAt), generation.ID, previous)
+	result, err := tx.ExecContext(ctx, `UPDATE inventory_generations SET state=?,healthy=?,file_count=?,metadata_count=?,metadata_complete=?,inspect_policy_sha256=?,size_bytes=?,error_code=?,version=?,updated_at=?,completed_at=?,published_at=? WHERE id=? AND version=?`, generation.State, generation.Healthy, generation.FileCount, generation.MetadataCount, generation.MetadataComplete, generation.inspectionPolicy, generation.SizeBytes, generation.ErrorCode, generation.Version, generation.UpdatedAt.UnixMilli(), inventoryTime(generation.CompletedAt), inventoryTime(generation.PublishedAt), generation.ID, previous)
 	if err != nil {
 		return err
 	}

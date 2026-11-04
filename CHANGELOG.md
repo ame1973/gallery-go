@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Immutable per-path metadata staging with inspector-policy pins, streamed hash
+  revalidation, explicit skipped/failed outcomes, atomic progress/issue events, and
+  live metadata-ready publication fences. This does not yet publish indexed media
+  or provide a runnable scan command.
+
 - Bounded native JPEG/PNG/GIF header metadata with magic-based MIME, dimension/pixel
   guards, explicit invalid/unsupported diagnostics, and container-header fuzz tests.
   External codecs, EXIF, and animation timing remain unimplemented; no metadata

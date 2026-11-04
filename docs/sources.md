@@ -153,3 +153,21 @@ returned without repeating work, even if it is now historical; GET refreshes the
 latest state. Reusing a key for a different command returns
 `409 IDEMPOTENCY_CONFLICT`. Source/job changes, scope revokes, event/outbox, audit,
 and successful POST receipts commit atomically. See [job controls](jobs.md).
+
+## Inventory processing boundaries
+
+The backend can stage a complete, bounded, root-confined filesystem manifest and
+native JPEG/PNG/GIF header metadata in private database tables. It revalidates
+streamed hashes instead of trusting equal sizes/timestamps, pins the inspector
+policy for retries, and records unsupported/corrupt inputs explicitly. Non-media
+paths stay in the manifest and count as skipped metadata work; invalid or unsupported
+media count as failed work, not successful decoding. Metadata, issues, generation
+counters, and job progress/events commit together in bounded batches.
+
+These are internal processing foundations, not a public scan operation. No source
+entries, albums, media revisions, or READY variants are published by staging, and
+no scan enqueue API, scheduler, or runnable worker is available yet. Header
+inspection does not prove complete pixel/frame decoding. External codecs, EXIF,
+and animation timing remain unavailable. Later indexed publication must perform
+fresh root/file validation and recheck the source configuration and live job lease;
+a completed staging snapshot alone cannot authorize publication or purge.
