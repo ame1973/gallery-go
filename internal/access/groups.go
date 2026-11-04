@@ -162,6 +162,9 @@ func (s *Service) DeleteGroup(ctx context.Context, current auth.Session, id stri
 	if err != nil {
 		return err
 	}
+	if err := journalGroupPolicyRemovals(ctx, tx, id, now); err != nil {
+		return err
+	}
 	// Keep access_restricted latched while removing RESTRICT-protected edges.
 	// Bump the containing resource versions so stale policy edits cannot overwrite
 	// the deletion's effects. Shared media and library records are never removed.
