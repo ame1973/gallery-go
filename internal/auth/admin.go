@@ -14,9 +14,9 @@ var (
 	ErrLastAdmin        = errors.New("the last active administrator cannot be removed, disabled, or demoted")
 	ErrUsernameTaken    = errors.New("the username is already in use")
 	ErrInvalidUser      = errors.New("provide a valid role and at least one editable account field")
-	ErrIdempotencyKey   = errors.New("an idempotency key of 16 to 128 ASCII letters, digits, underscores, or hyphens is required")
-	ErrIdempotencyReuse = errors.New("the idempotency key was used for a different request")
-	ErrRequestInFlight  = errors.New("a concurrent request completed; retry with the same idempotency key")
+	ErrIdempotencyKey   = store.ErrIdempotencyKey
+	ErrIdempotencyReuse = store.ErrIdempotencyReuse
+	ErrRequestInFlight  = store.ErrRequestInFlight
 )
 
 type NewUser struct {
@@ -133,20 +133,21 @@ func (s *Service) CreateUser(ctx context.Context, current Session, input NewUser
 		return User{}, err
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	if replay, found, err := request.replay(ctx, tx, now); found || err != nil {
+	var replay User
+	if found, err := request.Replay(ctx, tx, now, &replay); found || err != nil {
 		return replay, err
 	}
 	if err := availableUsername(ctx, tx, username, ""); err != nil {
 		return User{}, err
 	}
 	user.ID, user.ScopeID, user.Version = store.NewID(), token(), 1
-	if _, err := tx.ExecContext(ctx, `INSERT INTO users(id,username,password_hash,role,active,created_at,updated_at,scope_id,version,download_original) VALUES(?,?,?,?,?,?,?,?,1,?)`, user.ID, user.Username, request.passwordHash, user.Role, user.Active, now.UnixMilli(), now.UnixMilli(), user.ScopeID, user.DownloadOriginal); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO users(id,username,password_hash,role,active,created_at,updated_at,scope_id,version,download_original) VALUES(?,?,?,?,?,?,?,?,1,?)`, user.ID, user.Username, request.PasswordHash, user.Role, user.Active, now.UnixMilli(), now.UnixMilli(), user.ScopeID, user.DownloadOriginal); err != nil {
 		return User{}, err
 	}
 	if err := userEvent(ctx, tx, current.User.ID, "user_created", user, now); err != nil {
 		return User{}, err
 	}
-	if err := request.save(ctx, tx, user, now); err != nil {
+	if err := request.Save(ctx, tx, user, now); err != nil {
 		return User{}, err
 	}
 	return user, tx.Commit()
@@ -288,7 +289,8 @@ func (s *Service) ResetPassword(ctx context.Context, current Session, id string,
 		return User{}, err
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	if replay, found, err := request.replay(ctx, tx, now); found || err != nil {
+	var replay User
+	if found, err := request.Replay(ctx, tx, now, &replay); found || err != nil {
 		return replay, err
 	}
 	user, err := versionedUser(ctx, tx, id, version)
@@ -298,13 +300,13 @@ func (s *Service) ResetPassword(ctx context.Context, current Session, id string,
 	if err := invalidateUser(ctx, tx, &user, now); err != nil {
 		return User{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash=? WHERE id=?`, request.passwordHash, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash=? WHERE id=?`, request.PasswordHash, id); err != nil {
 		return User{}, err
 	}
 	if err := userEvent(ctx, tx, current.User.ID, "password_reset", user, now); err != nil {
 		return User{}, err
 	}
-	if err := request.save(ctx, tx, user, now); err != nil {
+	if err := request.Save(ctx, tx, user, now); err != nil {
 		return User{}, err
 	}
 	return user, tx.Commit()

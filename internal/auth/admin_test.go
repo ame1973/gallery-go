@@ -137,7 +137,7 @@ func TestAdminPostIdempotencyAndPasswordReset(t *testing.T) {
 	_, err = s.ResetPassword(t.Context(), admin, user.ID, changed.Version, newPassword, key)
 	assertError(t, err, ErrIdempotencyReuse)
 	var hash, metadata, result string
-	if err := s.db.QueryRow(`SELECT password_hash,request_json,result_json FROM admin_user_requests WHERE request_key=?`, resetKey).Scan(&hash, &metadata, &result); err != nil {
+	if err := s.db.QueryRow(`SELECT password_hash,request_json,result_json FROM mutation_receipts WHERE request_key=?`, resetKey).Scan(&hash, &metadata, &result); err != nil {
 		t.Fatal(err)
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(newPassword)) != nil || strings.Contains(metadata+result, newPassword) || strings.Contains(metadata+result, hash) {
@@ -256,13 +256,13 @@ func TestAdminAtomicEventsAndFailureRollback(t *testing.T) {
 	counts := func() [4]int {
 		t.Helper()
 		var values [4]int
-		if err := s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM change_log),(SELECT COUNT(*) FROM audit_events),(SELECT COUNT(*) FROM admin_user_requests)`).Scan(&values[0], &values[1], &values[2], &values[3]); err != nil {
+		if err := s.db.QueryRow(`SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM change_log),(SELECT COUNT(*) FROM audit_events),(SELECT COUNT(*) FROM mutation_receipts)`).Scan(&values[0], &values[1], &values[2], &values[3]); err != nil {
 			t.Fatal(err)
 		}
 		return values
 	}
 	before := counts()
-	for _, table := range []string{"outbox_events", "audit_events", "admin_user_requests"} {
+	for _, table := range []string{"outbox_events", "audit_events", "mutation_receipts"} {
 		if _, err := s.db.Exec(`CREATE TRIGGER injected_failure BEFORE INSERT ON ` + table + ` BEGIN SELECT RAISE(ABORT,'injected failure'); END`); err != nil {
 			t.Fatal(err)
 		}
@@ -274,7 +274,7 @@ func TestAdminAtomicEventsAndFailureRollback(t *testing.T) {
 		if err == nil {
 			t.Fatal("reset committed without", table)
 		}
-		if table != "admin_user_requests" {
+		if table != "mutation_receipts" {
 			_, err = s.UpdateUser(t.Context(), admin, user.ID, 1, UserPatch{Active: pointer(false)})
 			if err == nil {
 				t.Fatal("update committed without", table)
@@ -445,7 +445,7 @@ func TestAdminConcurrentIdempotencyAndRetention(t *testing.T) {
 		t.Fatalf("expired result reused: %+v %v", created, err)
 	}
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM admin_user_requests`).Scan(&count); err != nil || count != 1 {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM mutation_receipts`).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("expired request retention: %d %v", count, err)
 	}
 }
