@@ -103,6 +103,7 @@ type Job struct {
 	Dedupe     string          `json:"-"`
 	leaseOwner string
 	leaseUntil int64
+	creationTx *sql.Tx
 }
 
 func (job Job) String() string { return fmt.Sprintf("job %s (%s, %s)", job.ID, job.Kind, job.Status) }

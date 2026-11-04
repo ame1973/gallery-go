@@ -13,6 +13,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Durable private job-resource dependencies with creation-transaction-only binding,
+  primary-resource backfill, and atomic source-change cancellation of multi-source
+  parents while retaining history. This does not yet expose scan enqueue or workers.
+
 - An internal healthy-inventory publisher with fresh full-manifest revalidation,
   frozen unique rename matching, owned immutable media revisions, retained album/
   person overrides and interactions, source/path-bound people, scoped reconciliation,

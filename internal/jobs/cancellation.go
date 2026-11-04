@@ -31,7 +31,7 @@ func (q *Queue) CancelResourceTx(ctx context.Context, tx *sql.Tx, resourceKey, a
 	}
 	now, after, total := q.clock(), "", 0
 	for {
-		rows, err := tx.QueryContext(ctx, jobSelect+` WHERE resource_key=? AND id>? AND status IN ('queued','running') AND cancel_requested=0 ORDER BY id LIMIT 100`, resourceKey, after)
+		rows, err := tx.QueryContext(ctx, jobSelect+` WHERE (resource_key=? OR id IN (SELECT job_id FROM job_resources WHERE resource_key=?)) AND id>? AND status IN ('queued','running') AND cancel_requested=0 ORDER BY id LIMIT 100`, resourceKey, resourceKey, after)
 		if err != nil {
 			return 0, err
 		}

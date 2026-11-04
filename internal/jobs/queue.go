@@ -54,8 +54,11 @@ func (q *Queue) EnqueueTx(ctx context.Context, tx *sql.Tx, input Input) (Job, bo
 		return Job{}, false, err
 	}
 	now := q.clock()
-	job := Job{ID: store.NewID(), Kind: input.Kind, ResourceKey: input.ResourceKey, Status: "queued", Priority: input.Priority, MaxAttempts: q.policy.MaxAttempts, NextRunAt: now, Version: 1, CreatedAt: now, UpdatedAt: now, Payload: input.Payload, Dedupe: input.Dedupe}
+	job := Job{ID: store.NewID(), Kind: input.Kind, ResourceKey: input.ResourceKey, Status: "queued", Priority: input.Priority, MaxAttempts: q.policy.MaxAttempts, NextRunAt: now, Version: 1, CreatedAt: now, UpdatedAt: now, Payload: input.Payload, Dedupe: input.Dedupe, creationTx: tx}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO jobs(id,kind,resource_key,dedupe_key,dedupe_token,payload_json,status,priority,max_attempts,next_run_at,created_at,updated_at,version,created_by_user_id) VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?,1,?)`, job.ID, job.Kind, job.ResourceKey, job.Dedupe, job.Dedupe, string(job.Payload), job.Priority, job.MaxAttempts, now.UnixMilli(), now.UnixMilli(), now.UnixMilli(), nullableString(input.ActorID)); err != nil {
+		return Job{}, false, err
+	}
+	if err := q.BindResourceTx(ctx, tx, job, job.ResourceKey); err != nil {
 		return Job{}, false, err
 	}
 	if err := store.Change(ctx, tx, "system", "job", job.ID, "upsert", job.Version, job, now); err != nil {

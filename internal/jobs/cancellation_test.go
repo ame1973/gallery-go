@@ -14,9 +14,16 @@ func TestConfigurationCancellationIsBatchedScopedAndAtomic(t *testing.T) {
 	}
 	defer tx.Rollback()
 	for index := range 110 {
-		_, created, err := q.EnqueueTx(t.Context(), tx, Input{Kind: "scan", ResourceKey: "source:changed", Dedupe: fmt.Sprintf("scan:changed:%03d", index), Payload: json.RawMessage(`{}`)})
+		primary := "source:changed"
+		if index%2 == 1 {
+			primary = "scan:all"
+		}
+		job, created, err := q.EnqueueTx(t.Context(), tx, Input{Kind: "scan", ResourceKey: primary, Dedupe: fmt.Sprintf("scan:changed:%03d", index), Payload: json.RawMessage(`{}`)})
 		if err != nil || !created {
 			t.Fatal(created, err)
+		}
+		if err := q.BindResourceTx(t.Context(), tx, job, "source:changed"); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -28,7 +35,7 @@ func TestConfigurationCancellationIsBatchedScopedAndAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	var lastID string
-	if err := q.db.QueryRow(`SELECT MAX(id) FROM jobs WHERE resource_key='source:changed'`).Scan(&lastID); err != nil {
+	if err := q.db.QueryRow(`SELECT MAX(job_id) FROM job_resources WHERE resource_key='source:changed'`).Scan(&lastID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := q.db.Exec(fmt.Sprintf(`CREATE TRIGGER fail_last_cancellation BEFORE INSERT ON outbox_events WHEN (SELECT resource_id FROM change_log WHERE seq=NEW.change_seq)='%s' BEGIN SELECT RAISE(ABORT,'injected second-batch failure'); END`, lastID)); err != nil {

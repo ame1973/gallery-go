@@ -35,6 +35,13 @@ and UTC timestamps. A job that has never started has `started_at: null`; unfinis
 jobs have `finished_at: null`. Private payloads, lease tokens, worker capabilities,
 deduplication tokens, filesystem roots, and raw subprocess stderr are not returned.
 
+A job can internally depend on several sources. Those durable dependency keys are
+private, are bound only in the job's creation transaction, and cannot be added to
+an existing/coalesced intent. A source configuration edit or empty-source deletion
+atomically requests cancellation of every related queued/running parent job, not
+only jobs whose primary resource key names that source. Deletion retains the job's
+dependency and attempt history. Unrelated source jobs remain untouched.
+
 ## Interpret progress correctly
 
 - `total` is the cumulative number of discovered **work units across attempts**,
