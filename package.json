@@ -1,0 +1,31 @@
+{
+  "name": "gallerygo",
+  "version": "2.0.0-dev.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": "24.14.1",
+    "pnpm": "11.25.0"
+  },
+  "scripts": {
+    "dev": "pnpm --dir web dev",
+    "typecheck": "pnpm --dir web typecheck",
+    "lint": "pnpm --dir web lint",
+    "test": "pnpm --dir web test",
+    "build": "pnpm --dir web build",
+    "api:lint": "redocly lint contracts/openapi.yaml",
+    "api:generate": "openapi-typescript contracts/openapi.yaml -o web/src/lib/api/schema.d.ts",
+    "api:check": "pnpm api:lint && pnpm api:generate && git diff --exit-code -- web/src/lib/api/schema.d.ts",
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@redocly/cli": "2.72.1",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.10"
+  }
+}

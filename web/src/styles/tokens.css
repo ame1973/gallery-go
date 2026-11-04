@@ -1,0 +1,26 @@
+:root {
+  color-scheme: light dark;
+  --background: #f3f6f8;
+  --surface: #ffffff;
+  --foreground: #182f3c;
+  --muted: #4f6572;
+  --accent: #1b5267;
+  --on-accent: #ffffff;
+  --border: #d7e1e7;
+  --danger: #a42b37;
+  --radius: 0.75rem;
+  --font-sans: 'Manrope Variable', 'Noto Sans TC', 'Noto Sans SC', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #16242f;
+    --surface: #20333f;
+    --foreground: #edf4f6;
+    --muted: #bdcdd7;
+    --accent: #a8d6e6;
+    --on-accent: #182f3c;
+    --border: #435965;
+    --danger: #ffb3b9;
+  }
+}

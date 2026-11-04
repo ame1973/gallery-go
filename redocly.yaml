@@ -1,0 +1,7 @@
+extends:
+  - recommended
+rules:
+  no-server-example.com: off
+  no-server-trailing-slash: error
+  operation-4xx-response: off
+  info-license-strict: error

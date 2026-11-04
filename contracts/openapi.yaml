@@ -23,8 +23,8 @@ paths:
           description: The HTTP process is alive; this is not a dependency check.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/Health'}
-        default: {$ref: '#/components/responses/Problem'}
+              schema: { $ref: '#/components/schemas/Health' }
+        default: { $ref: '#/components/responses/Problem' }
   /health/ready:
     get:
       operationId: ready
@@ -36,9 +36,9 @@ paths:
           description: The metadata database is reachable.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/Health'}
-        '503': {$ref: '#/components/responses/Problem'}
-        default: {$ref: '#/components/responses/Problem'}
+              schema: { $ref: '#/components/schemas/Health' }
+        '503': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
   /public/config:
     get:
       operationId: publicConfig
@@ -49,37 +49,37 @@ paths:
           description: Public build information without local paths or secrets.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/PublicConfig'}
-        default: {$ref: '#/components/responses/Problem'}
+              schema: { $ref: '#/components/schemas/PublicConfig' }
+        default: { $ref: '#/components/responses/Problem' }
 components:
   responses:
     Problem:
       description: A request failed. Internal paths, SQL, and secrets are not disclosed.
       content:
         application/problem+json:
-          schema: {$ref: '#/components/schemas/Problem'}
+          schema: { $ref: '#/components/schemas/Problem' }
   schemas:
     Health:
       type: object
       additionalProperties: false
       required: [status]
       properties:
-        status: {type: string, enum: [ok]}
+        status: { type: string, enum: [ok] }
     PublicConfig:
       type: object
       additionalProperties: false
       required: [version, offline_enabled]
       properties:
-        version: {type: string}
-        offline_enabled: {type: boolean}
+        version: { type: string }
+        offline_enabled: { type: boolean }
     Problem:
       type: object
       additionalProperties: false
       required: [type, title, status, code, request_id]
       properties:
-        type: {type: string, format: uri}
-        title: {type: string}
-        status: {type: integer, minimum: 400, maximum: 599}
-        code: {type: string}
-        detail: {type: string}
-        request_id: {type: string}
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        code: { type: string }
+        detail: { type: string }
+        request_id: { type: string }
