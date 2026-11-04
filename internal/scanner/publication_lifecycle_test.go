@@ -186,10 +186,16 @@ func TestPublicationTargetDefersCrossScopeRenameAndMissingChanges(t *testing.T) 
 	if err := os.Rename(a, filepath.Join(root.Path, "C", "a.png")); err != nil {
 		t.Fatal(err)
 	}
-	generation := f.publish(t, "incremental", "C")
-	var deferred, count int
-	if err := f.db.QueryRow(`SELECT (SELECT COUNT(*) FROM inventory_issues WHERE generation_id=? AND error_code='TARGET_RENAME_OUTSIDE_SCOPE'),(SELECT COUNT(*) FROM source_entries WHERE relative_path='C/a.png')`, generation.ID).Scan(&deferred, &count); err != nil || deferred != 1 || count != 0 {
-		t.Fatal("target guessed a cross-scope identity", deferred, count, err)
+	for _, scope := range []string{"A", "C"} {
+		generation := f.publish(t, "incremental", scope)
+		var deferred, count int
+		if err := f.db.QueryRow(`SELECT (SELECT COUNT(*) FROM inventory_issues WHERE generation_id=? AND error_code='TARGET_RENAME_OUTSIDE_SCOPE'),(SELECT COUNT(*) FROM source_entries WHERE relative_path='C/a.png')`, generation.ID).Scan(&deferred, &count); err != nil || deferred != 1 || count != 0 {
+			t.Fatal("target failed to defer an incoming or outgoing cross-scope identity", scope, deferred, count, err)
+		}
+		job, err := f.queue.Get(t.Context(), generation.JobID)
+		if err != nil || job.Status != "failed" || job.Failed != 1 {
+			t.Fatal("cross-scope target falsely reported success", scope, job, err)
+		}
 	}
 	f.publish(t, "full", ".")
 	var currentMedia string

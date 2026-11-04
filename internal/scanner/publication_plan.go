@@ -79,7 +79,7 @@ func (s *Inventory) publicationPlan(ctx context.Context, tx *sql.Tx, lease jobs.
 			if !p.entry.Valid {
 				if added == 1 && missing == 1 && candidate.Valid {
 					p.entry = candidate
-					if p.selected && !inScope(generation.scope, oldPath.String) {
+					if p.selected != inScope(generation.scope, oldPath.String) {
 						p.selected = false
 						p.outside = true
 					}

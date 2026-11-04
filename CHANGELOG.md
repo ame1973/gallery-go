@@ -6,6 +6,9 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Report target renames crossing either direction of a selected scope as deferred
+  failed work, rather than silently succeeding when files move out of the target.
+
 - Retry actual SQLite busy/locked contention in worker polling and heartbeats
   without cancelling a live transaction-bound publisher. Readiness still uses
   committed timestamps; genuine database, cancellation, and lease failures remain
