@@ -1,0 +1,7 @@
+# Container paths are absolute and intentionally non-overlapping.
+listen: 0.0.0.0:8080
+base_url: https://localhost:8443
+database: /data/gallerygo.db
+cache_root: /cache
+web_root: /app/web
+sources: []
