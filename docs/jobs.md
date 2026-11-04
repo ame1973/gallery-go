@@ -53,7 +53,12 @@ response to receive its historical accepted result, even if the job was later
 cancelled or a source registration removed. GET the job for its current state.
 Reusing the key for a changed command returns `409 IDEMPOTENCY_CONFLICT`.
 
-There is currently no executable scan consumer. Queued acceptance, including for an
+The internal queue handler executes bounded inventory, native metadata, and indexed
+publication for versioned intents. It rejects unpinned or malformed stored targets,
+waits for a live source owner without inventing work, and continues healthy sources
+when another source fails. Failure diagnostics, generation state, and progress commit
+atomically; retryable source failures use the queue's bounded backoff/dead-letter policy.
+There is still no process/CLI scan consumer. Queued acceptance, including for an
 unavailable/unconfigured registered source, is not evidence that bytes are reachable,
 indexed, or decoded. Runtime workers/readiness/scheduling and full ingestion/restart
 acceptance remain under development.

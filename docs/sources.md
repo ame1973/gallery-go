@@ -155,6 +155,13 @@ latest state. Reusing a key for a different command returns
 `409 IDEMPOTENCY_CONFLICT`. Source/job changes, scope revokes, event/outbox, audit,
 and successful POST receipts commit atomically. See [job controls](jobs.md).
 
+Inventory failures can also record `state: error` with a safe `last_error_code`:
+`SOURCE_CHANGED`, `IO_ERROR`, `MINIMUM_FILES`, `SCAN_LIMIT`, `UNSAFE_ENTRY`, or
+`SYMLINK_CYCLE`. A missing/unconfigured root uses `state: unavailable`. Failure
+records retain the last healthy/full-scan timestamps, published generation, indexed
+rows, and interactions. Failure state, generation issue, job progress, and audit
+share one fenced transaction; no raw source path or system error enters these DTOs.
+
 ## Inventory processing boundaries
 
 The backend can stage a complete, bounded, root-confined filesystem manifest and
@@ -165,8 +172,10 @@ paths stay in the manifest and count as skipped metadata work; invalid or unsupp
 media count as failed work, not successful decoding. Metadata, issues, generation
 counters, and job progress/events commit together in bounded batches.
 
-These are internal services, not a public scan operation. Staging alone publishes
-no indexed resources or READY variants. The internal indexed publisher first
+The internal scan handler connects these services to the durable queue, using only
+versioned payloads and immutable selected targets. Process/CLI wiring is not yet
+available. Staging alone publishes no indexed resources or READY variants. The
+internal indexed publisher first
 re-walks and rehashes the complete manifest, then rechecks metadata completion,
 source configuration, exact live lease/attempt, cancellation, and generation version
 inside one writer transaction. Source entries, logical media, owned revisions,

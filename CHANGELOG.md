@@ -16,6 +16,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A versioned-intent scan handler connecting durable execution to read-only inventory,
+  native metadata, and indexed publication. Multi-source failures retain healthy
+  results, diagnostics and progress commit atomically, live source owners are not
+  stolen, and cancellation/configuration/lease fences remain mandatory. App/CLI
+  consumer wiring, scheduling, and indexed process-crash acceptance are still pending.
+
 - Administrator-only scan enqueue for full/incremental source, album-target, and
   all-source intents; bounded immutable configuration snapshots, distinct dedupe
   purposes, historical receipts, atomic dependency/audit events, explicitly nullable

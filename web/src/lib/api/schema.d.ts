@@ -949,7 +949,7 @@ export interface components {
             last_healthy_at: string | null;
             /** Format: date-time */
             last_full_scan_at: string | null;
-            /** @description Safe SOURCE_UNAVAILABLE or SOURCE_NOT_CONFIGURED code. */
+            /** @description Safe source diagnostic; SOURCE_UNAVAILABLE or SOURCE_NOT_CONFIGURED for reachability and SOURCE_CHANGED/IO_ERROR/MINIMUM_FILES/SCAN_LIMIT/UNSAFE_ENTRY/SYMLINK_CYCLE for inventory failure. */
             last_error_code: string | null;
             /** Format: date-time */
             created_at: string;

@@ -1417,7 +1417,7 @@ components:
         last_error_code:
           {
             type: [string, 'null'],
-            description: Safe SOURCE_UNAVAILABLE or SOURCE_NOT_CONFIGURED code.,
+            description: Safe source diagnostic; SOURCE_UNAVAILABLE or SOURCE_NOT_CONFIGURED for reachability and SOURCE_CHANGED/IO_ERROR/MINIMUM_FILES/SCAN_LIMIT/UNSAFE_ENTRY/SYMLINK_CYCLE for inventory failure.,
           }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }

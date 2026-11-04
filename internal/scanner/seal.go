@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"database/sql"
 	"math"
 
 	"gallerygo/internal/jobs"
@@ -118,14 +119,23 @@ var inventoryFailureCodes = map[string]bool{
 // It cannot resurrect a cancelled, expired, superseded, or configuration-stale
 // attempt; the next authorized generation reclaims that abandoned staging state.
 func (s *Inventory) Abort(ctx context.Context, lease jobs.Lease, id, code, relative string) error {
-	if !inventoryFailureCodes[code] || (relative != "." && !validRelative(relative)) {
-		return ErrGeneration
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := s.AbortTx(ctx, tx, lease, id, code, relative); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// AbortTx lets a handler journal source health/failure/progress in one writer.
+// It never writes indexed media and retains all live lease/config fences.
+func (s *Inventory) AbortTx(ctx context.Context, tx *sql.Tx, lease jobs.Lease, id, code, relative string) error {
+	if !inventoryFailureCodes[code] || (relative != "." && !validRelative(relative)) {
+		return ErrGeneration
+	}
 	generation, _, _, err := s.require(ctx, tx, lease, id)
 	if err != nil {
 		return err
@@ -152,8 +162,5 @@ func (s *Inventory) Abort(ctx context.Context, lease jobs.Lease, id, code, relat
 	if _, err := s.queue.ProgressTx(ctx, tx, lease, counts, false); err != nil {
 		return err
 	}
-	if err := store.Audit(ctx, tx, "", "inventory_failed", "inventory", id, map[string]any{"source_id": generation.SourceID, "error_code": code}, now); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return store.Audit(ctx, tx, "", "inventory_failed", "inventory", id, map[string]any{"source_id": generation.SourceID, "error_code": code}, now)
 }
