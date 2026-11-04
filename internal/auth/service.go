@@ -231,7 +231,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 		return Session{}, err
 	}
 	if now.After(session.LastSeenAt) {
-		result, err := s.db.ExecContext(ctx, `UPDATE sessions SET last_seen_at=? WHERE id_hash=? AND revoked_at IS NULL AND expires_at>? AND last_seen_at>? AND EXISTS(SELECT 1 FROM users WHERE users.id=sessions.user_id AND active=1)`, now.UnixMilli(), digest(token), now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli())
+		result, err := s.db.ExecContext(ctx, `UPDATE sessions SET last_seen_at=max(last_seen_at,?) WHERE id_hash=? AND revoked_at IS NULL AND expires_at>? AND last_seen_at>? AND EXISTS(SELECT 1 FROM users WHERE users.id=sessions.user_id AND active=1)`, now.UnixMilli(), digest(token), now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli())
 		if err != nil {
 			return Session{}, err
 		}
