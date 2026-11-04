@@ -158,6 +158,7 @@ var failureMessages = map[string]string{
 	"INVALID_MEDIA":      "The input media could not be validated.",
 	"PROCESSING_FAILED":  "Media processing did not complete successfully.",
 	"JOB_TIMEOUT":        "The operation exceeded its time limit.",
+	"WORKER_STOPPED":     "The worker stopped before this attempt completed.",
 	"UNSUPPORTED_JOB":    "No compatible handler is available for this job.",
 	"INTERNAL_ERROR":     "The operation could not be completed.",
 }

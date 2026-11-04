@@ -10,7 +10,9 @@ All notable public changes are recorded here. This project uses Conventional Com
   cancellation, restart reclamation, and transaction-fenced completion.
 - Versioned administrative job services, atomic replay receipts and event/outbox
   updates, and cumulative/per-attempt success, failure, skipped, and cancelled counts.
-  Worker execution, source scanning, and HTTP job controls are not yet wired.
+- Bounded worker execution with independent job/process heartbeats, cancellation
+  propagation, safe handler diagnostics, and graceful retry/dead-letter settlement.
+  App/CLI worker wiring, source scanning, and HTTP job controls are not yet available.
 
 - Session-protected media metadata, current-ready variant URLs, original-download
   policy, GET/HEAD/single-Range, strong ETag/conditional handling, and private errors.
