@@ -6,6 +6,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded root-confined inventory walking with streamed hashes, read-only regular
+  inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
+  Complete generation publication and runnable scan workers are not available yet.
+
 - Registry-selected source configuration services with independent policy epochs,
   configurable album/person folder depths, safe reachability checks, atomic scope
   revocation, and transaction-bound cancellation of stale resource jobs.
