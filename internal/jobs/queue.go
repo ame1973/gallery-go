@@ -152,15 +152,22 @@ func (q *Queue) Heartbeat(ctx context.Context, lease Lease) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := q.HeartbeatTx(ctx, tx, lease); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// HeartbeatTx refreshes a still-live owned lease during a long DB-only publish.
+// It never revives expiry or waits for another connection while holding a writer.
+func (q *Queue) HeartbeatTx(ctx context.Context, tx *sql.Tx, lease Lease) error {
 	job, err := q.RequireLeaseTx(ctx, tx, lease)
 	if err != nil {
 		return err
 	}
 	now := q.clock()
-	if _, err := tx.ExecContext(ctx, `UPDATE jobs SET heartbeat_at=max(COALESCE(heartbeat_at,0),?),lease_expires_at=max(lease_expires_at,?) WHERE id=?`, now.UnixMilli(), now.Add(q.policy.Lease).UnixMilli(), job.ID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err = tx.ExecContext(ctx, `UPDATE jobs SET heartbeat_at=max(COALESCE(heartbeat_at,0),?),lease_expires_at=max(lease_expires_at,?) WHERE id=?`, now.UnixMilli(), now.Add(q.policy.Lease).UnixMilli(), job.ID)
+	return err
 }
 
 func (q *Queue) Progress(ctx context.Context, lease Lease, counts Counts, totalKnown bool) (Job, error) {
