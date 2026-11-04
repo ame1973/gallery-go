@@ -1,0 +1,14 @@
+# Copy to config.yaml. Relative paths resolve from that file's directory.
+# Terminate TLS at a local reverse proxy; the browser origin must use HTTPS.
+listen: 127.0.0.1:8080
+base_url: https://localhost:8443
+database: data/gallerygo.db
+cache_root: cache
+web_root: web/dist
+# Source roots are never created or written by GalleryGo.
+# Provision the marker yourself on the mounted NAS before configuring a source.
+sources: []
+# sources:
+#   - name: Family
+#     root: /mnt/nas/photos
+#     marker: .gallerygo-mount

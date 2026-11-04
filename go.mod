@@ -2,7 +2,10 @@ module gallerygo
 
 go 1.26.2
 
-require modernc.org/sqlite v1.61.1
+require (
+	go.yaml.in/yaml/v3 v3.0.6
+	modernc.org/sqlite v1.61.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.1.0 // indirect

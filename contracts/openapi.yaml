@@ -1,0 +1,85 @@
+openapi: 3.1.0
+info:
+  title: GalleryGo API
+  version: 2.0.0-dev.0
+  description: Implemented API operations for the GalleryGo foundation. Private gallery features are under development.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /api/v2
+security: []
+tags:
+  - name: System
+    description: Non-sensitive health and client configuration.
+paths:
+  /health/live:
+    get:
+      operationId: live
+      summary: Check HTTP process liveness
+      tags: [System]
+      responses:
+        '200':
+          description: The HTTP process is alive; this is not a dependency check.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+        default: {$ref: '#/components/responses/Problem'}
+  /health/ready:
+    get:
+      operationId: ready
+      summary: Check metadata database readiness
+      description: Checks the local database. Source and worker readiness will be added when those services are implemented.
+      tags: [System]
+      responses:
+        '200':
+          description: The metadata database is reachable.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+        '503': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /public/config:
+    get:
+      operationId: publicConfig
+      summary: Read non-sensitive client capabilities
+      tags: [System]
+      responses:
+        '200':
+          description: Public build information without local paths or secrets.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicConfig'}
+        default: {$ref: '#/components/responses/Problem'}
+components:
+  responses:
+    Problem:
+      description: A request failed. Internal paths, SQL, and secrets are not disclosed.
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, enum: [ok]}
+    PublicConfig:
+      type: object
+      additionalProperties: false
+      required: [version, offline_enabled]
+      properties:
+        version: {type: string}
+        offline_enabled: {type: boolean}
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, request_id]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer, minimum: 400, maximum: 599}
+        code: {type: string}
+        detail: {type: string}
+        request_id: {type: string}
