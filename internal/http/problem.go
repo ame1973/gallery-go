@@ -14,6 +14,7 @@ import (
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
+	"gallerygo/internal/scanner"
 )
 
 type Problem struct {
@@ -65,6 +66,10 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "SOURCE_CONFIGURATION_CHANGED", "Reload the source configuration before starting new work.")
 	case errors.Is(err, library.ErrUnknownRoot), errors.Is(err, library.ErrSourceSettings):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
+	case errors.Is(err, scanner.ErrScanSelection):
+		problem(w, 422, "VALIDATION_FAILED", "Use full or incremental mode with an active source or source-backed album; any source constraint must match the album.")
+	case errors.Is(err, scanner.ErrNoSources):
+		problem(w, 409, "SCAN_NO_SOURCES", "Register or activate a source before requesting an all-source scan.")
 	case errors.Is(err, jobs.ErrState):
 		problem(w, 409, "JOB_STATE_CONFLICT", "Refresh the job; this action is not available in its current state.")
 	case errors.Is(err, jobs.ErrResourceBusy):

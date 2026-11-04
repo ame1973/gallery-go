@@ -159,7 +159,7 @@ try {
       );
     fixtureDB
       .prepare(
-        'INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?)',
+        "INSERT INTO albums(id,library_id,source_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,? ,'.',?,?)",
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
     for (const suffix of ['media', 'other-media']) {

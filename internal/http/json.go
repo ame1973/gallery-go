@@ -46,7 +46,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 		return false
 	}
 	if !exactJSONFields(data, reflect.TypeOf(destination).Elem()) {
-		problem(w, 400, "INVALID_JSON", "Use exact known field names and non-null values, including in nested objects.")
+		problem(w, 400, "INVALID_JSON", "Use exact known field names; only explicitly nullable fields may be null.")
 		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -58,10 +58,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 	return true
 }
 
-// All current request fields are non-nullable. encoding/json otherwise silently
-// accepts null for scalar/struct fields and case-folds nested names. Validate the
-// declared shape recursively before decoding; future nullable fields need an
-// intentional contract/decoder extension, not a global null-to-zero fallback.
+// encoding/json silently accepts null for scalar/struct fields and case-folds
+// nested names. Validate declared shapes recursively. Only an explicitly tagged
+// nullable pointer field accepts null; all other null-to-zero fallbacks stay denied.
 func exactJSONFields(data []byte, kind reflect.Type) bool {
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
 		return false
@@ -75,17 +74,23 @@ func exactJSONFields(data []byte, kind reflect.Type) bool {
 		if json.Unmarshal(data, &fields) != nil || fields == nil {
 			return false
 		}
-		known := make(map[string]reflect.Type, kind.NumField())
+		known := make(map[string]reflect.StructField, kind.NumField())
 		for index := 0; index < kind.NumField(); index++ {
 			field := kind.Field(index)
 			name := strings.Split(field.Tag.Get("json"), ",")[0]
 			if field.PkgPath == "" && name != "" && name != "-" {
-				known[name] = field.Type
+				known[name] = field
 			}
 		}
 		for name, value := range fields {
 			field, ok := known[name]
-			if !ok || !exactJSONFields(value, field) {
+			if !ok {
+				return false
+			}
+			if field.Type.Kind() == reflect.Pointer && field.Tag.Get("nullable") == "true" && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				continue
+			}
+			if !exactJSONFields(value, field.Type) {
 				return false
 			}
 		}

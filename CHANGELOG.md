@@ -16,15 +16,21 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Administrator-only scan enqueue for full/incremental source, album-target, and
+  all-source intents; bounded immutable configuration snapshots, distinct dedupe
+  purposes, historical receipts, atomic dependency/audit events, explicitly nullable
+  selection fields, generated contracts/types, and real HTTPS regressions. Accepted
+  jobs remain queued until executable workers and scheduling are wired.
+
 - Durable private job-resource dependencies with creation-transaction-only binding,
   primary-resource backfill, and atomic source-change cancellation of multi-source
-  parents while retaining history. This does not yet expose scan enqueue or workers.
+  parents while retaining history. Dependency binding alone does not execute jobs.
 
 - An internal healthy-inventory publisher with fresh full-manifest revalidation,
   frozen unique rename matching, owned immutable media revisions, retained album/
   person overrides and interactions, source/path-bound people, scoped reconciliation,
   conservative missing/quarantine evidence, and atomic source/job/event completion.
-  Scan enqueue APIs, executable worker wiring, scheduling, and real process-level
+  Executable worker wiring, scheduling, and real process-level
   indexed-ingestion recovery acceptance are still pending.
 
 - Immutable per-path metadata staging with inspector-policy pins, streamed hash
@@ -39,7 +45,7 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 - Bounded root-confined inventory walking with streamed hashes, read-only regular
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
-  Runnable scan workers and enqueue APIs are not available yet.
+  Runnable scan workers are not available yet.
 
 - Fenced durable inventory generations, bounded immutable staging, co-committed
   job progress, safe issue history, and complete double-pass/minimum-file sealing.

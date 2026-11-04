@@ -1,17 +1,62 @@
 # Administrative job controls
 
-Job history and online-only controls are available through the HTTPS API. There
-is not yet a source-scanning enqueue API, runnable `worker` command, or job UI.
-A fresh installation therefore has no jobs. The internal durable queue and worker
-executor are implemented and tested separately; synthetic test jobs do not imply
-that source ingestion or codec processing is available. Source registration,
-folder mapping, and separate reachability checks are in [sources.md](sources.md).
+Durable scan enqueue, history, and online-only controls are available through the
+HTTPS API. Executable scan workers, scheduling, the standalone `worker` command,
+and job UI are **not available yet**. Accepted jobs remain queued; a `202` response
+is not successful ingestion or codec processing. Source registration, folder
+mapping, and separate reachability checks are in [sources.md](sources.md).
 
 All paths below are relative to `/api/v2`. Sign in as an active administrator as
 explained in [authentication.md](authentication.md). Responses use
 `Cache-Control: private, no-store`. Ordinary users receive `403 ADMIN_REQUIRED`;
 missing, revoked, expired, or disabled sessions receive `401 UNAUTHENTICATED`.
 The service rechecks the current account and session inside its transaction.
+
+## Enqueue a scan intent
+
+`POST /admin/scans` requires Origin, session-bound CSRF, and a new
+`Idempotency-Key`. Its strict JSON body accepts only:
+
+| Field       | Meaning                                                                               |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `mode`      | Required, exactly `full` or `incremental`.                                            |
+| `source_id` | Optional active registered source ID, or a matching constraint on the selected album. |
+| `album_id`  | Optional source-backed indexed album ID defining the target scope.                    |
+
+Omit or explicitly null both IDs to select all currently active registered sources:
+
+```json
+{ "mode": "full", "source_id": null, "album_id": null }
+```
+
+For one source use `{ "mode": "incremental", "source_id": "<source-id>" }`;
+for a target use `{ "mode": "full", "album_id": "<album-id>" }`. If both IDs are
+provided, the source must own the album. Empty IDs are invalid, never all-source
+shortcuts. IDs are opaque references, not filesystem paths. Inactive/unmapped
+album selections return `422 VALIDATION_FAILED`; unknown IDs return 404; an all-source
+selection with no active registrations returns `409 SCAN_NO_SOURCES`.
+
+A successful request returns `202`, job metadata, `Location`, and a strong job
+`ETag`. Source/configuration/target snapshots and dependencies are frozen in private
+rows with the job, event/outbox, audit, and receipt. Large all-source sets do not
+inflate private job JSON. Enqueue never probes files, creates missing mount markers,
+advances inventory generations, or bypasses worker health/minimum/config/lease gates.
+
+Identical active mode/selection/target/configuration intents coalesce. Full versus
+incremental, source versus all-source versus album, and changed source epochs remain
+separate; scan never consumes a reprocess intent. Coalescing cannot expand an old
+job's target set. Explicit null and omitted IDs have identical selection semantics;
+other request fields remain non-null unless their own contract explicitly opts in.
+
+Receipts are actor-scoped for 24 hours. Repeat the original body/key after a lost
+response to receive its historical accepted result, even if the job was later
+cancelled or a source registration removed. GET the job for its current state.
+Reusing the key for a changed command returns `409 IDEMPOTENCY_CONFLICT`.
+
+There is currently no executable scan consumer. Queued acceptance, including for an
+unavailable/unconfigured registered source, is not evidence that bytes are reachable,
+indexed, or decoded. Runtime workers/readiness/scheduling and full ingestion/restart
+acceptance remain under development.
 
 ## Inspect history
 

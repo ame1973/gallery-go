@@ -463,6 +463,34 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Source' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/scans:
+    post:
+      operationId: enqueueScan
+      summary: Enqueue a durable read-only inventory intent
+      description: Administrator only. Select an active source, a source-backed album, or all active registered sources by omitting or nulling both IDs. A supplied source constraint must match the album. Canonical mode/selection/configuration snapshots deduplicate identical active intents; scan and reprocess never coalesce. Targets and source dependencies are private durable rows, not filesystem paths or unbounded JSON. This operation performs no filesystem I/O. A 202 response means accepted/queued, not ingested; executable scan workers and scheduling are not wired yet. No active sources returns SCAN_NO_SOURCES. Retry the same key/body for the historical accepted result.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScanRequest' }
+      responses:
+        '202':
+          description: Durable job accepted or identical active intent coalesced; execution may not have started.
+          headers:
+            ETag: { $ref: '#/components/headers/ResourceETag' }
+            Location:
+              description: Session-protected job metadata URL.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/jobs:
     get:
       operationId: listJobs
@@ -1401,6 +1429,24 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/Source' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
+    ScanRequest:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [incremental, full]
+        source_id:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 64
+          description: Active registered source ID, or an optional constraint on the selected album. Omit/null for album-derived or all-source selection.
+        album_id:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 64
+          description: Source-backed album ID defining a canonical target scope; never an arbitrary path. Omit/null for source/all-source selection.
     JobStatus:
       type: string
       enum: [queued, running, succeeded, failed, cancelled, dead]

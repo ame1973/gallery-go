@@ -19,6 +19,7 @@ import (
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
+	"gallerygo/internal/scanner"
 )
 
 // Operation is also checked against OpenAPI to prevent undocumented API routes.
@@ -54,6 +55,7 @@ var Operations = []Operation{
 	{Method: "PATCH", Path: "/admin/sources/{source_id}", ID: "updateSource"},
 	{Method: "DELETE", Path: "/admin/sources/{source_id}", ID: "deleteSource"},
 	{Method: "POST", Path: "/admin/sources/{source_id}/check", ID: "checkSource"},
+	{Method: "POST", Path: "/admin/scans", ID: "enqueueScan"},
 	{Method: "GET", Path: "/admin/jobs", ID: "listJobs"},
 	{Method: "GET", Path: "/admin/jobs/{job_id}", ID: "getJob"},
 	{Method: "GET", Path: "/admin/jobs/{job_id}/attempts", ID: "listJobAttempts"},
@@ -99,13 +101,14 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources, scanService *scanner.Scans) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	authorization := authorization{service: access.New(db, service)}
 	content := mediaHandler{service: mediaService}
 	work := jobHandler{service: jobService}
 	sources := sourceHandler{service: sourceService}
+	scans := scanHandler{service: scanService}
 	handlers := map[string]http.HandlerFunc{
 		"login":              authentication.login,
 		"logout":             authentication.logout,
@@ -130,6 +133,7 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		"updateSource":       sources.update,
 		"deleteSource":       sources.remove,
 		"checkSource":        sources.check,
+		"enqueueScan":        scans.enqueue,
 		"listJobs":           work.list,
 		"getJob":             work.get,
 		"listJobAttempts":    work.attempts,

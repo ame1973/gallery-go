@@ -8,8 +8,8 @@ media separately.
 Database migrations, health checks, one-time administrator bootstrap, secure login,
 password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
-configuration/reachability, protected media GET/HEAD/Range, and durable job
-history/cancel/retry APIs are available. Management/browsing screens, source
+configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
+and job history/cancel/retry APIs are available. Management/browsing screens, executable source
 inventory, media processing, playback, and offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 
@@ -72,9 +72,10 @@ rate-limit, and password contracts. Administrators can manage accounts, reset
 passwords, revoke sessions, and inspect audit events through the versioned API;
 see [docs/administration.md](docs/administration.md). New regular accounts have no
 library grants, and the last active administrator cannot be removed or disabled.
-[Job controls](docs/jobs.md) describe durable history, truthful attempt counts,
-versioned cancellation, and safe retries. Source enqueue APIs and the runnable
-worker command are not available yet; a fresh installation has no jobs.
+[Job controls](docs/jobs.md) describe administrator-only source/all-source/album
+scan enqueue, durable history, truthful attempt counts, versioned cancellation, and
+safe retries. Enqueue returns durable queued acceptance, not ingestion. Executable
+scan consumers and the standalone worker command are not available yet.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another
 terminal. Vite serves `http://127.0.0.1:5173` and proxies `/api` to port 8080.
@@ -175,6 +176,11 @@ Only implemented endpoints are advertised:
   `/admin/albums/{album_id}/access`: fail-closed grants and additive restrictions.
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
   SQL-authorized metadata, counts, and covers. See [docs/access.md](docs/access.md).
+- `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
+  all-source, or album-target scan intent into a durable queued job. No files are
+  probed by enqueue, and runtime scan execution is not available yet.
+- `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
+  and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
 - `GET /api/v2/albums/{album_id}/media`, `/media/{media_id}`, and
   `/media/{media_id}/variants`: visible media and latest ready current-revision presets.
 - `GET/HEAD /api/v2/media/{media_id}/variants/{variant_id}/content` and

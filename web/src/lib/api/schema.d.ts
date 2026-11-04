@@ -383,6 +383,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enqueue a durable read-only inventory intent
+         * @description Administrator only. Select an active source, a source-backed album, or all active registered sources by omitting or nulling both IDs. A supplied source constraint must match the album. Canonical mode/selection/configuration snapshots deduplicate identical active intents; scan and reprocess never coalesce. Targets and source dependencies are private durable rows, not filesystem paths or unbounded JSON. This operation performs no filesystem I/O. A 202 response means accepted/queued, not ingested; executable scan workers and scheduling are not wired yet. No active sources returns SCAN_NO_SOURCES. Retry the same key/body for the historical accepted result.
+         */
+        post: operations["enqueueScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/jobs": {
         parameters: {
             query?: never;
@@ -940,6 +960,14 @@ export interface components {
             items: components["schemas"]["Source"][];
             next_cursor: string | null;
             has_more: boolean;
+        };
+        ScanRequest: {
+            /** @enum {string} */
+            mode: "incremental" | "full";
+            /** @description Active registered source ID, or an optional constraint on the selected album. Omit/null for album-derived or all-source selection. */
+            source_id?: string | null;
+            /** @description Source-backed album ID defining a canonical target scope; never an arbitrary path. Omit/null for source/all-source selection. */
+            album_id?: string | null;
         };
         /** @enum {string} */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead";
@@ -2123,6 +2151,40 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Source"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    enqueueScan: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable job accepted or identical active intent coalesced; execution may not have started. */
+            202: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    /** @description Session-protected job metadata URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

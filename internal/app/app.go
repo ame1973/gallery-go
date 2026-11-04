@@ -14,6 +14,7 @@ import (
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
+	"gallerygo/internal/scanner"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 )
@@ -59,7 +60,7 @@ func Serve(ctx context.Context, c Config, version string) error {
 		return err
 	}
 	server := &http.Server{
-		Handler:           httpapi.New(db, assets.FS(), version, authentication, c.BaseURL, content, work, sources),
+		Handler:           httpapi.New(db, assets.FS(), version, authentication, c.BaseURL, content, work, sources, scanner.NewScans(db, authentication, queue)),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 32 << 10,
 		BaseContext:    func(net.Listener) context.Context { return ctx },

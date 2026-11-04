@@ -1,10 +1,11 @@
 # Read-only source configuration
 
 Administrators can register declared source roots, configure folder mapping and
-safety policies, and inspect root reachability through the HTTPS API. Source
-management screens, inventory enqueue/processing, automatic polling, and the
-standalone `worker` command are **not available yet**. Registering or checking a
-source does not ingest files. A fresh installation still has no indexed media.
+safety policies, and inspect root reachability through the HTTPS API. They can
+also [enqueue durable scan intents](jobs.md), but management screens, executable
+inventory consumers, automatic polling, and the standalone `worker` command are
+**not available yet**. Registration, checks, and queued acceptance do not ingest
+files. A fresh installation still has no indexed media.
 
 All paths below are relative to `/api/v2`. Use an active administrator's session,
 configured `Origin`, and session-bound `X-CSRF-Token` as described in
@@ -192,9 +193,10 @@ selected scope; a cross-scope rename is deferred with a diagnostic until a full
 publication can resolve it safely. Ownership/library changes revoke historical and
 destination authorization projections without revoking valid login sessions.
 
-No scan enqueue API, scheduler, embedded scan handler, or runnable worker is
-available yet, so a fresh installation still cannot ingest through a command or
-API. Header inspection does not prove complete pixel/frame decoding. External
+The [scan enqueue API](jobs.md) accepts these private durable intents, but no
+scheduler, embedded scan consumer, or runnable worker is available yet. Queued
+acceptance cannot ingest files on a fresh installation by itself. Header inspection
+does not prove complete pixel/frame decoding. External
 codecs, EXIF, animation timing, variant generation, and real process-level indexed
 ingestion/restart acceptance remain pending. These services do not complete the
 source-processing phase or authorize index purge.
