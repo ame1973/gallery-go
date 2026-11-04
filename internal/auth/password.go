@@ -37,9 +37,16 @@ func NormalizeUsername(username string) (string, error) {
 	return username, nil
 }
 
-func HashPassword(password string) (string, error) {
+func validatePassword(password string) error {
 	if !utf8.ValidString(password) || utf8.RuneCountInString(password) < 15 || len(password) > 72 {
-		return "", ErrWeakPassword
+		return ErrWeakPassword
+	}
+	return nil
+}
+
+func HashPassword(password string) (string, error) {
+	if err := validatePassword(password); err != nil {
+		return "", err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), passwordCost)
 	return string(hash), err

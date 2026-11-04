@@ -288,10 +288,16 @@ func (s *Service) Sessions(ctx context.Context, current Session, after string, l
 		return nil, errors.New("invalid session page limit")
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	rows, err := s.db.QueryContext(ctx, `SELECT id,created_at,last_seen_at,expires_at,user_agent,ip_address FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>? AND last_seen_at>? AND id>? ORDER BY id LIMIT ?`, current.User.ID, now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli(), after, limit)
+	rows, err := s.db.QueryContext(ctx, sessionList, current.User.ID, now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli(), after, limit)
 	if err != nil {
 		return nil, err
 	}
+	return scanSessions(rows, current.ID)
+}
+
+const sessionList = `SELECT id,created_at,last_seen_at,expires_at,user_agent,ip_address FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>? AND last_seen_at>? AND id>? ORDER BY id LIMIT ?`
+
+func scanSessions(rows *sql.Rows, currentID string) ([]Session, error) {
 	defer rows.Close()
 	items := make([]Session, 0)
 	for rows.Next() {
@@ -303,7 +309,7 @@ func (s *Service) Sessions(ctx context.Context, current Session, after string, l
 		item.CreatedAt = time.UnixMilli(created).UTC()
 		item.LastSeenAt = time.UnixMilli(last).UTC()
 		item.ExpiresAt = time.UnixMilli(expires).UTC()
-		item.Current = item.ID == current.ID
+		item.Current = item.ID == currentID
 		items = append(items, item)
 	}
 	return items, rows.Err()
