@@ -247,7 +247,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	return session, nil
 }
 
-func (s *Service) currentInTx(ctx context.Context, tx *sql.Tx, current Session) (Session, error) {
+// SessionInTx validates the actual session and current account within the same
+// snapshot as a resource query or mutation. It never trusts the supplied user DTO.
+func (s *Service) SessionInTx(ctx context.Context, tx *sql.Tx, current Session) (Session, error) {
 	now := s.now().UTC().Truncate(time.Millisecond)
 	return scanSession(tx.QueryRowContext(ctx, sessionSelect, digest(current.Token), now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli()), current.Token)
 }
@@ -258,7 +260,7 @@ func (s *Service) Revoke(ctx context.Context, current Session, id string) error 
 		return err
 	}
 	defer tx.Rollback()
-	current, err = s.currentInTx(ctx, tx, current)
+	current, err = s.SessionInTx(ctx, tx, current)
 	if err != nil {
 		return err
 	}
@@ -345,7 +347,7 @@ func (s *Service) ChangePassword(ctx context.Context, current Session, oldPasswo
 		return Session{}, err
 	}
 	defer tx.Rollback()
-	current, err = s.currentInTx(ctx, tx, current)
+	current, err = s.SessionInTx(ctx, tx, current)
 	if err != nil {
 		return Session{}, err
 	}

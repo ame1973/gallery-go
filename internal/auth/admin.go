@@ -45,7 +45,7 @@ func scanUser(row interface{ Scan(...any) error }) (User, error) {
 // RequireAdmin rechecks the actual session and account inside the caller's write
 // transaction. A previously authenticated DTO is not an authorization capability.
 func (s *Service) RequireAdmin(ctx context.Context, tx *sql.Tx, current Session) (Session, error) {
-	current, err := s.currentInTx(ctx, tx, current)
+	current, err := s.SessionInTx(ctx, tx, current)
 	if err != nil {
 		return Session{}, err
 	}
