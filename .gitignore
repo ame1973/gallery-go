@@ -1,0 +1,44 @@
+# Private specification and development records
+/dev/
+/.local/
+/.claude/
+**/[Cc][Ll][Aa][Uu][Dd][Ee]*.md
+**/AGENTS.md
+/docs/adr/
+/plans/
+
+# Secrets and local runtime configuration
+.env
+.env.*
+!.env.example
+config.yaml
+config.local.*
+*.pem
+*.key
+*.p12
+
+# Dependencies and generated build/test output
+node_modules/
+dist/
+/bin/
+coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Private application data
+/data/
+/cache/
+/media/
+/backups/
+/logs/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.log
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
