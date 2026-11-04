@@ -6,6 +6,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Durable SQLite job leases, heartbeats, bounded retries/dead letters, cooperative
+  cancellation, restart reclamation, and transaction-fenced completion.
+- Versioned administrative job services, atomic replay receipts and event/outbox
+  updates, and cumulative/per-attempt success, failure, skipped, and cancelled counts.
+  Worker execution, source scanning, and HTTP job controls are not yet wired.
+
 - Session-protected media metadata, current-ready variant URLs, original-download
   policy, GET/HEAD/single-Range, strong ETag/conditional handling, and private errors.
 - Root-confined read-only files, configured source/mount-marker checks, immutable
