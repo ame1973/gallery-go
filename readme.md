@@ -7,10 +7,11 @@ media separately.
 **Development status:** this is not yet a production-ready private gallery.
 Database migrations, health checks, one-time administrator bootstrap, secure login,
 password changes, session management, and three-language account pages work.
-Administrative account/session/audit, group grants, authorized metadata, and
-protected media GET/HEAD/Range APIs are available. Management/browsing screens,
-source inventory, media processing, playback, and offline downloads are still being
-built. Do not expose this build to the Internet or connect sensitive media yet.
+Administrative account/session/audit, group grants, authorized metadata,
+protected media GET/HEAD/Range, and durable job history/cancel/retry APIs are
+available. Management/browsing screens, source inventory, media processing,
+playback, and offline downloads are still being built. Do not expose this build
+to the Internet or connect sensitive media yet.
 
 ## Requirements
 
@@ -71,6 +72,9 @@ rate-limit, and password contracts. Administrators can manage accounts, reset
 passwords, revoke sessions, and inspect audit events through the versioned API;
 see [docs/administration.md](docs/administration.md). New regular accounts have no
 library grants, and the last active administrator cannot be removed or disabled.
+[Job controls](docs/jobs.md) describe durable history, truthful attempt counts,
+versioned cancellation, and safe retries. Source enqueue APIs and the runnable
+worker command are not available yet; a fresh installation has no jobs.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another
 terminal. Vite serves `http://127.0.0.1:5173` and proxies `/api` to port 8080.

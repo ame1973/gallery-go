@@ -11,6 +11,7 @@ import (
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/jobs"
 	"gallerygo/internal/media"
 )
 
@@ -55,6 +56,12 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "GROUP_NAME_TAKEN", "Choose a different permission group name.")
 	case errors.Is(err, access.ErrLibraryNotEmpty):
 		problem(w, 409, "LIBRARY_NOT_EMPTY", "Deactivate the library instead; its sources and albums must be preserved.")
+	case errors.Is(err, jobs.ErrState):
+		problem(w, 409, "JOB_STATE_CONFLICT", "Refresh the job; this action is not available in its current state.")
+	case errors.Is(err, jobs.ErrResourceBusy):
+		problem(w, 409, "RESOURCE_BUSY", "Another active job owns this resource. Wait for it or cancel it first.")
+	case errors.Is(err, jobs.ErrInvalidJob):
+		problem(w, 422, "VALIDATION_FAILED", "Use a valid job state, resource, or bounded list request.")
 	case errors.Is(err, auth.ErrIdempotencyReuse):
 		problem(w, 409, "IDEMPOTENCY_CONFLICT", "Use the original request body with this key, or a new key for a new request.")
 	case errors.Is(err, auth.ErrRequestInFlight):

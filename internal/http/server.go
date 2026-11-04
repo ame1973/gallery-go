@@ -16,6 +16,7 @@ import (
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/jobs"
 	"gallerygo/internal/media"
 )
 
@@ -45,6 +46,11 @@ var Operations = []Operation{
 	{Method: "GET", Path: "/admin/users/{user_id}/sessions", ID: "listUserSessions"},
 	{Method: "DELETE", Path: "/admin/users/{user_id}/sessions/{session_id}", ID: "revokeUserSession"},
 	{Method: "GET", Path: "/admin/audit", ID: "listAudit"},
+	{Method: "GET", Path: "/admin/jobs", ID: "listJobs"},
+	{Method: "GET", Path: "/admin/jobs/{job_id}", ID: "getJob"},
+	{Method: "GET", Path: "/admin/jobs/{job_id}/attempts", ID: "listJobAttempts"},
+	{Method: "POST", Path: "/admin/jobs/{job_id}/cancel", ID: "cancelJob"},
+	{Method: "POST", Path: "/admin/jobs/{job_id}/retry", ID: "retryJob"},
 	{Method: "GET", Path: "/admin/groups", ID: "listGroups"},
 	{Method: "POST", Path: "/admin/groups", ID: "createGroup"},
 	{Method: "GET", Path: "/admin/groups/{group_id}", ID: "getGroup"},
@@ -85,11 +91,12 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	authorization := authorization{service: access.New(db, service)}
 	content := mediaHandler{service: mediaService}
+	work := jobHandler{service: jobService}
 	handlers := map[string]http.HandlerFunc{
 		"login":              authentication.login,
 		"logout":             authentication.logout,
@@ -107,6 +114,11 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		"listUserSessions":   authentication.userSessions,
 		"revokeUserSession":  authentication.revokeUserSession,
 		"listAudit":          authentication.audit,
+		"listJobs":           work.list,
+		"getJob":             work.get,
+		"listJobAttempts":    work.attempts,
+		"cancelJob":          work.cancel,
+		"retryJob":           work.retry,
 		"listGroups":         authorization.groups,
 		"createGroup":        authorization.createGroup,
 		"getGroup":           authorization.group,

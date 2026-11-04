@@ -1,8 +1,11 @@
 package httpapi
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +21,7 @@ type pageCursor struct {
 type pagination struct {
 	limit  int
 	cursor pageCursor
+	query  url.Values
 }
 
 type listPage[T any] struct {
@@ -33,6 +37,16 @@ func readPage(w http.ResponseWriter, r *http.Request) (pagination, bool) {
 	if err != nil || len(query["limit"]) > 1 || len(query["cursor"]) > 1 {
 		problem(w, 400, "INVALID_PAGINATION", "Use one limit and one cursor with valid query encoding.")
 		return page, false
+	}
+	page.query = query
+	filters := maps.Clone(query)
+	delete(filters, "limit")
+	delete(filters, "cursor")
+	if len(filters) != 0 {
+		// Bind every filter/sort parameter without putting arbitrarily long search
+		// text into the bounded opaque cursor. Query ordering is canonicalized.
+		digest := sha256.Sum256([]byte(filters.Encode()))
+		page.cursor.Collection += "?" + hex.EncodeToString(digest[:])
 	}
 	if query.Has("limit") {
 		page.limit, err = strconv.Atoi(query.Get("limit"))

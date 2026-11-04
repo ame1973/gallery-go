@@ -20,6 +20,8 @@ tags:
     description: Versioned group membership and fail-closed library and album grants.
   - name: Library
     description: Session-protected metadata filtered by the shared SQL authorization predicate.
+  - name: Jobs
+    description: Versioned administrative job history and online-only cancellation/retry controls.
   - name: Media
     description: Current-revision metadata and private read-only content with per-request authorization and single-byte-range support.
 paths:
@@ -339,6 +341,93 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuditPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/jobs:
+    get:
+      operationId: listJobs
+      summary: List durable jobs in stable ID order
+      description: Administrator only. Counters are cumulative work units across all attempts, not unique media counts. The cursor binds the status filter as well as account scope and collection.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - name: status
+          in: query
+          description: Optional single state filter. Omit it or use an empty value for all states.
+          schema:
+            anyOf:
+              - { $ref: '#/components/schemas/JobStatus' }
+              - { type: string, const: '' }
+      responses:
+        '200':
+          description: Bounded job metadata without payloads or worker lease capabilities.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/jobs/{job_id}:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    get:
+      operationId: getJob
+      summary: Read a job and its current version tag
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Job' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/jobs/{job_id}/attempts:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    get:
+      operationId: listJobAttempts
+      summary: Read per-attempt progress and safe diagnostics
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded attempt history in ascending attempt order; counters are local to each attempt.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAttemptPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/jobs/{job_id}/cancel:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    post:
+      operationId: cancelJob
+      summary: Cancel queued work or request cooperative cancellation
+      description: Accepts no request body. Running work remains running with cancel_requested until its worker acknowledges or its lease expires. Publication rechecks cancellation in the business transaction. A retry of the same command returns the original result without cancelling a newer attempt.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { $ref: '#/components/responses/Job' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/jobs/{job_id}/retry:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    post:
+      operationId: retryJob
+      summary: Requeue failed, dead, or cancelled work without erasing history
+      description: Accepts no request body. Extends the bounded attempt budget while preserving all counters and history. An active job with the same deduplication key returns RESOURCE_BUSY. After 100 attempts a new explicit job is required. Reusing the same request key replays the original queued result rather than starting another attempt.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '202': { $ref: '#/components/responses/Job' }
         default: { $ref: '#/components/responses/Problem' }
   /admin/groups:
     get:
@@ -803,6 +892,11 @@ components:
       description: Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match.
       schema: { type: string }
   parameters:
+    JobID:
+      name: job_id
+      in: path
+      required: true
+      schema: { type: string }
     MediaID:
       name: media_id
       in: path
@@ -842,7 +936,7 @@ components:
       name: If-Match
       in: header
       required: true
-      description: Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album.
+      description: Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job.
       schema: { type: string }
     UserID:
       name: user_id
@@ -868,7 +962,7 @@ components:
     Cursor:
       name: cursor
       in: query
-      description: Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors.
+      description: Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors.
       schema: { type: string, maxLength: 512 }
     Origin:
       name: Origin
@@ -882,6 +976,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    Job:
+      description: Job metadata and its strong job version tag. Idempotent commands return their original result; use GET to refresh the current state.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Job' }
     MediaContent:
       description: Complete authorized bytes with validated media MIME. Originals use attachment disposition; safe ready variants use inline. No source path is disclosed.
       headers:
@@ -982,6 +1083,138 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    JobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled, dead]
+    Job:
+      type: object
+      additionalProperties: false
+      description: Durable metadata only. Payloads, filesystem roots, lease owners, and deduplication tokens are never returned. The status describes the current or latest attempt, while counters retain all earlier work.
+      required:
+        [
+          id,
+          kind,
+          resource_key,
+          status,
+          priority,
+          cancel_requested,
+          attempts,
+          max_attempts,
+          next_run_at,
+          total,
+          done,
+          succeeded,
+          failed,
+          skipped,
+          cancelled,
+          total_known,
+          error_code,
+          last_error,
+          version,
+          created_at,
+          updated_at,
+          started_at,
+          finished_at,
+        ]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        resource_key:
+          { type: string, description: Opaque resource identity; never a filesystem path. }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        priority: { type: integer, minimum: -100, maximum: 100 }
+        cancel_requested: { type: boolean }
+        attempts: { type: integer, minimum: 0, maximum: 100 }
+        max_attempts: { type: integer, minimum: 1, maximum: 100 }
+        next_run_at: { type: string, format: date-time }
+        total:
+          {
+            type: integer,
+            format: int64,
+            minimum: 0,
+            description: Cumulative discovered work units including prior attempts.,
+          }
+        done:
+          {
+            type: integer,
+            format: int64,
+            minimum: 0,
+            description: Sum of succeeded plus failed plus skipped plus cancelled; never a success count.,
+          }
+        succeeded: { type: integer, format: int64, minimum: 0 }
+        failed: { type: integer, format: int64, minimum: 0 }
+        skipped: { type: integer, format: int64, minimum: 0 }
+        cancelled:
+          {
+            type: integer,
+            format: int64,
+            minimum: 0,
+            description: Includes unfinished units closed when an attempt is interrupted.,
+          }
+        total_known:
+          { type: boolean, description: False while this attempt is still discovering its work. }
+        error_code:
+          {
+            type: [string, 'null'],
+            description: Stable diagnostic code without private error text.,
+          }
+        last_error:
+          {
+            type: [string, 'null'],
+            description: Safe fixed diagnostic message; not raw subprocess output.,
+          }
+        version: { type: integer, format: int64, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        started_at: { type: [string, 'null'], format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+    JobPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Job' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    JobAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          attempt,
+          status,
+          started_at,
+          finished_at,
+          error_code,
+          message,
+          total,
+          done,
+          succeeded,
+          failed,
+          skipped,
+          cancelled,
+        ]
+      properties:
+        attempt: { type: integer, minimum: 1, maximum: 100 }
+        status: { type: string, enum: [running, succeeded, failed, cancelled] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+        error_code: { type: [string, 'null'] }
+        message: { type: [string, 'null'], description: Safe fixed diagnostic message. }
+        total: { type: integer, format: int64, minimum: 0 }
+        done: { type: integer, format: int64, minimum: 0 }
+        succeeded: { type: integer, format: int64, minimum: 0 }
+        failed: { type: integer, format: int64, minimum: 0 }
+        skipped: { type: integer, format: int64, minimum: 0 }
+        cancelled: { type: integer, format: int64, minimum: 0 }
+    JobAttemptPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/JobAttempt' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     Media:
       type: object
       additionalProperties: false

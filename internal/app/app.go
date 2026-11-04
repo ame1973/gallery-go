@@ -11,6 +11,7 @@ import (
 
 	"gallerygo/internal/auth"
 	httpapi "gallerygo/internal/http"
+	"gallerygo/internal/jobs"
 	"gallerygo/internal/media"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
@@ -46,12 +47,17 @@ func Serve(ctx context.Context, c Config, version string) error {
 		roots[source.Name] = media.SourceRoot{Path: source.Root, Marker: source.Marker}
 	}
 	content := media.New(db, authentication, c.CacheRoot, roots)
+	queue, err := jobs.New(db, jobs.DefaultPolicy())
+	if err != nil {
+		return err
+	}
+	work := jobs.NewAdmin(queue, authentication)
 	listener, err := net.Listen("tcp", c.Listen)
 	if err != nil {
 		return err
 	}
 	server := &http.Server{
-		Handler:           httpapi.New(db, assets.FS(), version, authentication, c.BaseURL, content),
+		Handler:           httpapi.New(db, assets.FS(), version, authentication, c.BaseURL, content, work),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 32 << 10,
 		BaseContext:    func(net.Listener) context.Context { return ctx },

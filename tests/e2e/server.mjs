@@ -78,6 +78,26 @@ try {
   fixtureDB = new DatabaseSync(join(directory, 'data/gallerygo.db'));
   fixtureDB.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
   for (const project of ['chromium', 'mobile-chromium']) {
+    // Synthetic queued jobs exercise HTTPS controls only; no scanner or worker
+    // execution is implied by these fresh, project-isolated setup records.
+    for (const suffix of ['queued', 'stable']) {
+      const id = `jobs-${project}-${suffix}`;
+      const now = Date.now();
+      fixtureDB
+        .prepare(
+          "INSERT INTO jobs(id,kind,resource_key,dedupe_key,dedupe_token,payload_json,status,max_attempts,next_run_at,created_at,updated_at) VALUES(?,'scan',?,?,?,?,'queued',3,?,?,?)",
+        )
+        .run(
+          id,
+          `source:${id}`,
+          `scan:${id}`,
+          `scan:${id}`,
+          JSON.stringify({ private_path: directory }),
+          now,
+          now,
+          now,
+        );
+    }
     const library = `acl-${project}-library`;
     fixtureDB
       .prepare('INSERT INTO libraries(id,name,created_at,updated_at) VALUES(?,?,?,?)')

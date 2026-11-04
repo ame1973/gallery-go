@@ -296,6 +296,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List durable jobs in stable ID order
+         * @description Administrator only. Counters are cumulative work units across all attempts, not unique media counts. The cursor binds the status filter as well as account scope and collection.
+         */
+        get: operations["listJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        /** Read a job and its current version tag */
+        get: operations["getJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/jobs/{job_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        /** Read per-attempt progress and safe diagnostics */
+        get: operations["listJobAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel queued work or request cooperative cancellation
+         * @description Accepts no request body. Running work remains running with cancel_requested until its worker acknowledges or its lease expires. Publication rechecks cancellation in the business transaction. A retry of the same command returns the original result without cancelling a newer attempt.
+         */
+        post: operations["cancelJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Requeue failed, dead, or cancelled work without erasing history
+         * @description Accepts no request body. Extends the bounded attempt budget while preserving all counters and history. An active job with the same deduplication key returns RESOURCE_BUSY. After 100 attempts a new explicit job is required. Reusing the same request key replays the original queued result rather than starting another attempt.
+         */
+        post: operations["retryJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/groups": {
         parameters: {
             query?: never;
@@ -637,6 +739,93 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead";
+        /** @description Durable metadata only. Payloads, filesystem roots, lease owners, and deduplication tokens are never returned. The status describes the current or latest attempt, while counters retain all earlier work. */
+        Job: {
+            id: string;
+            kind: string;
+            /** @description Opaque resource identity; never a filesystem path. */
+            resource_key: string;
+            status: components["schemas"]["JobStatus"];
+            priority: number;
+            cancel_requested: boolean;
+            attempts: number;
+            max_attempts: number;
+            /** Format: date-time */
+            next_run_at: string;
+            /**
+             * Format: int64
+             * @description Cumulative discovered work units including prior attempts.
+             */
+            total: number;
+            /**
+             * Format: int64
+             * @description Sum of succeeded plus failed plus skipped plus cancelled; never a success count.
+             */
+            done: number;
+            /** Format: int64 */
+            succeeded: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            skipped: number;
+            /**
+             * Format: int64
+             * @description Includes unfinished units closed when an attempt is interrupted.
+             */
+            cancelled: number;
+            /** @description False while this attempt is still discovering its work. */
+            total_known: boolean;
+            /** @description Stable diagnostic code without private error text. */
+            error_code: string | null;
+            /** @description Safe fixed diagnostic message; not raw subprocess output. */
+            last_error: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        JobPage: {
+            items: components["schemas"]["Job"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        JobAttempt: {
+            attempt: number;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "failed" | "cancelled";
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+            error_code: string | null;
+            /** @description Safe fixed diagnostic message. */
+            message: string | null;
+            /** Format: int64 */
+            total: number;
+            /** Format: int64 */
+            done: number;
+            /** Format: int64 */
+            succeeded: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            skipped: number;
+            /** Format: int64 */
+            cancelled: number;
+        };
+        JobAttemptPage: {
+            items: components["schemas"]["JobAttempt"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         Media: {
             id: string;
             album_id: string;
@@ -867,6 +1056,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Job metadata and its strong job version tag. Idempotent commands return their original result; use GET to refresh the current state. */
+        Job: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Job"];
+            };
+        };
         /** @description Complete authorized bytes with validated media MIME. Originals use attachment disposition; safe ready variants use inline. No source path is disclosed. */
         MediaContent: {
             headers: {
@@ -1010,6 +1209,7 @@ export interface components {
         };
     };
     parameters: {
+        JobID: string;
         MediaID: string;
         /** @description A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies. */
         Range: string;
@@ -1021,7 +1221,7 @@ export interface components {
         ContentIfMatch: string;
         LibraryID: string;
         AlbumID: string;
-        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
         ResourceIfMatch: string;
         UserID: string;
         /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
@@ -1029,7 +1229,7 @@ export interface components {
         /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
         IdempotencyKey: string;
         Limit: number;
-        /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+        /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
         Cursor: string;
         /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
         Origin: string;
@@ -1306,7 +1506,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1466,7 +1666,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1519,7 +1719,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1540,11 +1740,126 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listJobs: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Optional single state filter. Omit it or use an empty value for all states. */
+                status?: components["schemas"]["JobStatus"] | "";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded job metadata without payloads or worker lease capabilities. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Job"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listJobAttempts: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded attempt history in ascending attempt order; counters are local to each attempt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAttemptPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    cancelJob: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Job"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    retryJob: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["Job"];
+            default: components["responses"]["Problem"];
+        };
+    };
     listGroups: {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1620,7 +1935,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1647,7 +1962,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1709,7 +2024,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1785,7 +2100,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1812,7 +2127,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1852,7 +2167,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1892,7 +2207,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1914,7 +2229,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1954,7 +2269,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -1994,7 +2309,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
@@ -2044,7 +2359,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
             };
             header?: never;

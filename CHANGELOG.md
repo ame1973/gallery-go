@@ -12,7 +12,9 @@ All notable public changes are recorded here. This project uses Conventional Com
   updates, and cumulative/per-attempt success, failure, skipped, and cancelled counts.
 - Bounded worker execution with independent job/process heartbeats, cancellation
   propagation, safe handler diagnostics, and graceful retry/dead-letter settlement.
-  App/CLI worker wiring, source scanning, and HTTP job controls are not yet available.
+- Administrator-only job/attempt history and versioned cancel/retry HTTPS APIs,
+  filter/sort-bound cursors, generated types, and replay/rollback/authorization tests.
+  App/CLI worker wiring and source scanning are not yet available.
 
 - Session-protected media metadata, current-ready variant URLs, original-download
   policy, GET/HEAD/single-Range, strong ETag/conditional handling, and private errors.
