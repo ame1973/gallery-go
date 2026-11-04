@@ -103,9 +103,14 @@ A source outage returns `503 SOURCE_UNAVAILABLE` for originals while preserving
 indexed metadata and authorized ready cached previews. Missing/inconsistent ready
 cache files return `503 VARIANT_UNAVAILABLE`. Neither condition deletes source
 files or reconciles away the index. Source configuration is a strict allowlist:
-its name and canonical root must match the indexed source, and its root-relative
-mount marker must be readable at request time. GalleryGo never creates source
-roots or markers for you.
+its name and canonical root must match the indexed source, its private path/marker
+configuration pin must match the running process, and its root-relative mount
+marker must be readable at request time. Original entries must also belong to the
+current source configuration epoch; checking root reachability alone cannot bless
+an older inventory after a configuration change. GalleryGo never creates source
+roots or markers for you. Deactivating a source hides its metadata and content
+from every account, including administrators; an outage alone preserves authorized
+cached previews.
 
 Content streams do not inherit the 10-second metadata timeout. Writes have a
 30-second refreshed idle deadline, and reads/seeks check cancellation and file

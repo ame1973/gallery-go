@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"gallerygo/internal/auth"
+	"gallerygo/internal/library"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -101,11 +103,11 @@ func (c *Config) validate(base string) error {
 	for i := range c.Sources {
 		s := &c.Sources[i]
 		s.Name = strings.TrimSpace(s.Name)
-		if s.Name == "" || names[s.Name] {
-			return errors.New("source names must be nonempty and unique")
+		if !library.ValidRootName(s.Name) || names[s.Name] {
+			return errors.New("source names must be unique non-control labels of 1 to 64 UTF-8 bytes")
 		}
 		names[s.Name] = true
-		if !filepath.IsLocal(s.Marker) || s.Marker == "." {
+		if !fs.ValidPath(s.Marker) || s.Marker == "." || strings.ContainsAny(s.Marker, "\\\x00") {
 			return errors.New("each source requires a root-relative mount marker")
 		}
 		s.Root, err = canonicalPath(base, s.Root)

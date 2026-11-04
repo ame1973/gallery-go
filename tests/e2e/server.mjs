@@ -134,9 +134,18 @@ try {
       .run(library, 'Isolated media fixture', Date.now(), Date.now());
     fixtureDB
       .prepare(
-        "INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES(?,?,?,?,'{}','healthy',?)",
+        "INSERT INTO sources(id,library_id,name,root_path,root_config_sha256,mapping_json,state,created_at) VALUES(?,?,?,?,?,'{}','healthy',?)",
       )
-      .run(`${prefix}-source`, library, source.name, source.root, Date.now());
+      .run(
+        `${prefix}-source`,
+        library,
+        source.name,
+        source.root,
+        createHash('sha256')
+          .update(JSON.stringify([source.root, source.marker]))
+          .digest('hex'),
+        Date.now(),
+      );
     fixtureDB
       .prepare(
         'INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?)',
@@ -144,7 +153,7 @@ try {
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
     fixtureDB
       .prepare(
-        "INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,updated_at) VALUES(?,?,'fixture.png',?,?,?,?)",
+        "INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,source_config_version,updated_at) VALUES(?,?,'fixture.png',?,?,?,1,?)",
       )
       .run(entry, `${prefix}-source`, stat.size, stat.mtimeNs, hash, Date.now());
     for (const suffix of ['media', 'other-media']) {

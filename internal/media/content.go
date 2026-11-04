@@ -120,7 +120,9 @@ func (content *Content) Seek(offset int64, whence int) (int64, error) {
 func (content *Content) Close() error { return content.file.Close() }
 func (content *Content) Err() error   { return content.err }
 
-func openRootFile(root *os.Root, name string) (*os.File, fs.FileInfo, error) {
+// OpenReadOnlyFile confines a regular input to root and never opens for write.
+// Scanner and source-health adapters reuse the same FIFO/symlink boundary.
+func OpenReadOnlyFile(root *os.Root, name string) (*os.File, fs.FileInfo, error) {
 	if !localPath(name) {
 		return nil, nil, errors.New("invalid root-relative media path")
 	}
@@ -169,7 +171,7 @@ func (s *Service) OpenVariant(ctx context.Context, current auth.Session, mediaID
 		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
 	}
 	defer root.Close()
-	file, info, err := openRootFile(root, storage)
+	file, info, err := OpenReadOnlyFile(root, storage)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
 	}
@@ -193,15 +195,15 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 	if !viewer.DownloadOriginal {
 		return nil, sql.ErrNoRows
 	}
-	var sourceName, sourcePath, state, availability, relative, hash, entryHash, contentType, name string
-	var size, mtime, entrySize, entryMtime int64
-	err = tx.QueryRowContext(ctx, `SELECT src.name,src.root_path,src.state,e.availability,e.relative_path,r.source_sha256,COALESCE(e.sha256,''),
+	var sourceName, sourcePath, rootSignature, state, availability, relative, hash, entryHash, contentType, name string
+	var size, mtime, entrySize, entryMtime, sourceConfig, entryConfig int64
+	err = tx.QueryRowContext(ctx, `SELECT src.name,src.root_path,src.root_config_sha256,src.config_version,e.source_config_version,src.state,e.availability,e.relative_path,r.source_sha256,COALESCE(e.sha256,''),
 	 r.source_size,r.source_mtime_ns,e.size_bytes,e.mtime_ns,COALESCE(m.mime,''),m.file_name
 	 FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
 	 JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id
 	 JOIN source_entries e ON e.id=m.source_entry_id AND e.source_id=a.source_id
 	 JOIN sources src ON src.id=e.source_id AND src.library_id=l.id
-	 WHERE `+access.MediaVisible+` AND m.id=?`, viewer.ID, mediaID).Scan(&sourceName, &sourcePath, &state, &availability, &relative, &hash, &entryHash, &size, &mtime, &entrySize, &entryMtime, &contentType, &name)
+	 WHERE `+access.MediaVisible+` AND m.id=?`, viewer.ID, mediaID).Scan(&sourceName, &sourcePath, &rootSignature, &sourceConfig, &entryConfig, &state, &availability, &relative, &hash, &entryHash, &size, &mtime, &entrySize, &entryMtime, &contentType, &name)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +211,7 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 		return nil, err
 	}
 	configured, ok := s.sources[sourceName]
-	if !ok || configured.Path != sourcePath || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(relative) || state != "healthy" || availability != "present" || size < 1 || size != entrySize || mtime != entryMtime || !validHash(hash) || hash != entryHash {
+	if !ok || configured.Path != sourcePath || rootSignature != configured.Signature() || sourceConfig != entryConfig || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(relative) || state != "healthy" || availability != "present" || size < 1 || size != entrySize || mtime != entryMtime || !validHash(hash) || hash != entryHash {
 		return nil, ErrSourceUnavailable
 	}
 	root, err := os.OpenRoot(configured.Path)
@@ -217,7 +219,7 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
 	defer root.Close()
-	marker, _, err := openRootFile(root, configured.Marker)
+	marker, _, err := OpenReadOnlyFile(root, configured.Marker)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
@@ -226,7 +228,7 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
-	file, info, err := openRootFile(root, relative)
+	file, info, err := OpenReadOnlyFile(root, relative)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}

@@ -6,6 +6,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Registry-selected source configuration services with independent policy epochs,
+  configurable album/person folder depths, safe reachability checks, atomic scope
+  revocation, and transaction-bound cancellation of stale resource jobs.
+- Source activation guards and mandatory root/marker plus inventory-epoch pins for
+  original bytes. Administrative source APIs and inventory workers are not yet wired.
+
 - Durable SQLite job leases, heartbeats, bounded retries/dead letters, cooperative
   cancellation, restart reclamation, and transaction-fenced completion.
 - Versioned administrative job services, atomic replay receipts and event/outbox

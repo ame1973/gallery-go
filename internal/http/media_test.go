@@ -90,11 +90,11 @@ func protectedMedia(t *testing.T) protectedFixture {
 	}{
 		{`INSERT INTO permission_groups(id,name,created_at) VALUES('media-group','Media fixture',0)`, nil},
 		{`INSERT INTO libraries(id,name,created_at) VALUES('media-library','Media fixture',0)`, nil},
-		{`INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES('media-source','media-library','fixture',?,'{}','healthy',0)`, []any{source}},
+		{`INSERT INTO sources(id,library_id,name,root_path,root_config_sha256,mapping_json,state,created_at) VALUES('media-source','media-library','fixture',?,?,'{}','healthy',0)`, []any{source, (media.SourceRoot{Path: source, Marker: ".marker"}).Signature()}},
 		{`INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES('media-album','media-library','media-source','Portrait',0,0)`, nil},
 		{`INSERT INTO user_groups(user_id,group_id) VALUES(?,'media-group')`, []any{user.ID}},
 		{`INSERT INTO library_access(library_id,group_id) VALUES('media-library','media-group')`, nil},
-		{`INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,updated_at) VALUES('media-entry','media-source','portrait.png',?,?,?,0)`, []any{len(data), info.ModTime().UnixNano(), hash}},
+		{`INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,source_config_version,updated_at) VALUES('media-entry','media-source','portrait.png',?,?,?,1,0)`, []any{len(data), info.ModTime().UnixNano(), hash}},
 		{`INSERT INTO media(id,album_id,source_entry_id,kind,file_name,mime,width,height,current_revision_id,created_at,updated_at) VALUES('protected','media-album','media-entry','image','Portrait 中文.png','image/png',256,128,'revision',0,0)`, nil},
 		{`INSERT INTO media_revisions(id,media_id,source_sha256,source_size,source_mtime_ns,version,created_at) VALUES('revision','protected',?,?,?,1,0)`, []any{hash, len(data), info.ModTime().UnixNano()}},
 		{`INSERT INTO media_variants(id,revision_id,preset_key,preset_version,storage_path,mime,size_bytes,sha256,width,height,status,created_at) VALUES('protected-variant','revision','fixture_png',1,?,'image/png',?,?,256,128,'ready',0)`, []any{storage, len(data), hash}},

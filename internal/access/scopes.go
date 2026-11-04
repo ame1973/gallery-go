@@ -52,6 +52,17 @@ func scanGroupIDs(rows *sql.Rows) ([]string, error) {
 	return ids, rows.Err()
 }
 
+// RevokeSourceScopesTx invalidates old and destination library projections during
+// an authorized source configuration change. Existing albums stay fail-closed if
+// their library differs until a healthy inventory publication reassigns them.
+// The caller must authorize and commit its source/job/events in this transaction.
+func RevokeSourceScopesTx(ctx context.Context, tx *sql.Tx, previousLibrary, nextLibrary string, now time.Time) error {
+	_, err := revokeScopes(ctx, tx, `u.role='admin' OR u.id IN (
+	 SELECT ug.user_id FROM user_groups ug JOIN library_access la ON la.group_id=ug.group_id
+	 WHERE la.library_id IN (?,?))`, []any{previousLibrary, nextLibrary}, now)
+	return err
+}
+
 // revokeScopes uses bounded-memory SQL for any number of affected accounts. The
 // selection is static SQL from this package, never request text. It runs before
 // changing grant edges, so both revoked users and new grantees can be selected.

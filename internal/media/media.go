@@ -4,7 +4,10 @@ package media
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"maps"
 	"net/url"
@@ -24,6 +27,14 @@ var (
 type SourceRoot struct {
 	Path   string `json:"-"`
 	Marker string `json:"-"`
+}
+
+// Signature binds worker configuration to the canonical path and mount marker.
+// The digest is stored privately; neither it nor its inputs are public DTO fields.
+func (root SourceRoot) Signature() string {
+	data, _ := json.Marshal([2]string{root.Path, root.Marker})
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }
 
 type Service struct {

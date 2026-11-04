@@ -18,7 +18,7 @@ const LibraryVisible = `l.is_active=1 AND EXISTS (
  AND (viewer.role='admin' OR ` + libraryGrant + `))`
 
 const AlbumVisible = `l.is_active=1
- AND (a.source_id IS NULL OR EXISTS (SELECT 1 FROM sources src WHERE src.id=a.source_id AND src.library_id=l.id))
+ AND (a.source_id IS NULL OR EXISTS (SELECT 1 FROM sources src WHERE src.id=a.source_id AND src.library_id=l.id AND src.is_active=1))
  AND EXISTS (SELECT 1 FROM users viewer WHERE viewer.id=? AND viewer.active=1
  AND (viewer.role='admin' OR (` + libraryGrant + ` AND (
  a.access_restricted=0 OR EXISTS (

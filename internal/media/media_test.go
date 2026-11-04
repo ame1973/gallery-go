@@ -120,11 +120,11 @@ func fixture(t *testing.T) mediaFixture {
 	}{
 		{`INSERT INTO permission_groups(id,name,created_at) VALUES('group','Fixture',0)`, nil},
 		{`INSERT INTO libraries(id,name,created_at) VALUES('library','Fixture',0)`, nil},
-		{`INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES('source','library','fixture',?,'{}','healthy',0)`, []any{source}},
+		{`INSERT INTO sources(id,library_id,name,root_path,root_config_sha256,mapping_json,state,created_at) VALUES('source','library','fixture',?,?,'{}','healthy',0)`, []any{source, (SourceRoot{Path: source, Marker: ".mount-marker"}).Signature()}},
 		{`INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES('album','library','source','Fixture',0,0)`, nil},
 		{`INSERT INTO user_groups(user_id,group_id) VALUES(?,'group')`, []any{user.ID}},
 		{`INSERT INTO library_access(library_id,group_id) VALUES('library','group')`, nil},
-		{`INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,updated_at) VALUES('entry','source','images/fixture.png',?,?,?,0)`, []any{len(data), info.ModTime().UnixNano(), hash}},
+		{`INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,source_config_version,updated_at) VALUES('entry','source','images/fixture.png',?,?,?,1,0)`, []any{len(data), info.ModTime().UnixNano(), hash}},
 		{`INSERT INTO media(id,album_id,source_entry_id,kind,file_name,mime,width,height,current_revision_id,created_at,updated_at) VALUES('media','album','entry','image','fixture.png','image/png',8,8,'revision',0,0)`, nil},
 		{`INSERT INTO media_revisions(id,media_id,source_sha256,source_size,source_mtime_ns,version,created_at) VALUES('revision','media',?,?,?,1,0)`, []any{hash, len(data), info.ModTime().UnixNano()}},
 		{`INSERT INTO media_variants(id,revision_id,preset_key,preset_version,storage_path,mime,size_bytes,sha256,width,height,status,created_at) VALUES('variant','revision','fixture_png',1,?,'image/png',?,?,8,8,'ready',0)`, []any{storage, len(data), hash}},

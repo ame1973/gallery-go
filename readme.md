@@ -116,7 +116,9 @@ startup. Relative paths resolve from the configuration file's directory.
 maximum, and must be at least the idle timeout. Sessions never outlive either limit.
 
 Database storage, cache, web assets, and source roots must not overlap, including
-through symlinks. GalleryGo does not create source roots or mount markers.
+through symlinks. Source names are unique labels of 1..64 UTF-8 bytes without
+control characters; mount markers are normalized root-relative paths. GalleryGo
+does not create source roots or mount markers.
 Source configuration is validated now; inventory scanning is not implemented yet.
 `.env.example` contains only a Compose port setting. The application reads YAML,
 not arbitrary environment variables.
