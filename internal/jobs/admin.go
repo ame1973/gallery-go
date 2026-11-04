@@ -165,17 +165,8 @@ func (a *Admin) mutate(ctx context.Context, current auth.Session, id string, ver
 		job.MaxAttempts = min(100, job.Attempts+a.queue.policy.MaxAttempts)
 		job.Status, job.CancelRequested, job.NextRunAt, job.FinishedAt = "queued", false, now, nil
 		clearLease(&job)
-	} else {
-		if job.Status != "queued" && job.Status != "running" {
-			return Job{}, ErrState
-		}
-		job.CancelRequested = true
-		if job.Status == "queued" {
-			job.Status = "cancelled"
-			job.FinishedAt = &now
-			finishInterrupted(&job)
-			clearLease(&job)
-		}
+	} else if err := requestCancel(&job, now); err != nil {
+		return Job{}, err
 	}
 	if err := a.queue.save(ctx, tx, &job, now); err != nil {
 		return Job{}, err
