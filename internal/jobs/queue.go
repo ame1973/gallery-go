@@ -169,6 +169,16 @@ func (q *Queue) Progress(ctx context.Context, lease Lease, counts Counts, totalK
 		return Job{}, err
 	}
 	defer tx.Rollback()
+	job, err := q.ProgressTx(ctx, tx, lease, counts, totalKnown)
+	if err != nil {
+		return Job{}, err
+	}
+	return job, tx.Commit()
+}
+
+// ProgressTx commits staged business work and its truthful progress together.
+// The caller owns the transaction; filesystem work must finish before entering it.
+func (q *Queue) ProgressTx(ctx context.Context, tx *sql.Tx, lease Lease, counts Counts, totalKnown bool) (Job, error) {
 	job, err := q.RequireLeaseTx(ctx, tx, lease)
 	if err != nil {
 		return Job{}, err
@@ -187,7 +197,7 @@ func (q *Queue) Progress(ctx context.Context, lease Lease, counts Counts, totalK
 	if err := q.save(ctx, tx, &job, now); err != nil {
 		return Job{}, err
 	}
-	return job, tx.Commit()
+	return job, nil
 }
 
 func (q *Queue) attemptCounts(ctx context.Context, tx *sql.Tx, job Job) error {
