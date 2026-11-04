@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded native JPEG/PNG/GIF header metadata with magic-based MIME, dimension/pixel
+  guards, explicit invalid/unsupported diagnostics, and container-header fuzz tests.
+  External codecs, EXIF, and animation timing remain unimplemented; no metadata
+  inspection result is a READY variant or a full decode claim.
+
 - Bounded root-confined inventory walking with streamed hashes, read-only regular
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
   Complete generation publication and runnable scan workers are not available yet.
