@@ -177,10 +177,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List accounts in stable ID order */
+        get: operations["listUsers"];
+        put?: never;
+        /**
+         * Create an account without library grants
+         * @description Requires an administrator. An identical idempotent retry returns the original result for 24 hours; concurrent first attempts can return IDEMPOTENCY_IN_PROGRESS and should retry the same request.
+         */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        /** Read one account and its current ETag */
+        get: operations["getUser"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an account and its private application metadata
+         * @description The last active administrator cannot be deleted. Sessions, memberships, favorites, ratings, playlists, progress, and sync-operation receipts are removed; audit history, shared gallery metadata, and source media are preserved.
+         */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        /**
+         * Update account policy and revoke its sessions
+         * @description A real change rotates the account scope and revokes all sessions, including the caller's own session when editing themselves. A no-op preserves the version and sessions. Disabling or demoting the last active administrator returns LAST_ACTIVE_ADMIN.
+         */
+        patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/admin/users/{user_id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset a password and revoke all account sessions
+         * @description The account remains active or disabled as before. All sessions are revoked, including the caller's session for a self-reset. Replays use the original If-Match value and do not revoke newly created sessions again.
+         */
+        post: operations["resetUserPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect an account's active sessions */
+        get: operations["listUserSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{user_id}/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a session belonging to the specified account */
+        delete: operations["revokeUserSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read security audit events, newest first */
+        get: operations["listAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateUserRequest: {
+            /** @description Case-insensitive ASCII letters, digits, dots, underscores, and hyphens; begins with a letter or digit. Surrounding whitespace is trimmed. */
+            username: string;
+            /** @description At least 15 Unicode characters and at most 72 UTF-8 bytes. Never trimmed. */
+            password: string;
+            /**
+             * @default user
+             * @enum {string}
+             */
+            role: "admin" | "user";
+            /** @default true */
+            active: boolean;
+            /**
+             * @description Explicit original-download policy, also enforced for administrators when content serving is enabled.
+             * @default false
+             */
+            download_original: boolean;
+        };
+        UpdateUserRequest: {
+            username?: string;
+            /** @enum {string} */
+            role?: "admin" | "user";
+            active?: boolean;
+            download_original?: boolean;
+        };
+        ResetPasswordRequest: {
+            /** @description At least 15 Unicode characters and at most 72 UTF-8 bytes. Never trimmed. */
+            new_password: string;
+        };
+        UserPage: {
+            items: components["schemas"]["User"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        AuditEvent: {
+            id: string;
+            actor_user_id: string | null;
+            event_type: string;
+            resource_type: string | null;
+            resource_id: string | null;
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        AuditPage: {
+            items: components["schemas"]["AuditEvent"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         LoginRequest: {
             username: string;
             /** @description At most 72 UTF-8 bytes. Passwords are never trimmed. */
@@ -237,6 +407,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Account metadata and its strong version tag, without password material. */
+        AdminUser: {
+            headers: {
+                ETag: components["headers"]["UserETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["User"];
+            };
+        };
         /** @description A request failed. Internal paths, SQL, and secrets are not disclosed. */
         Problem: {
             headers: {
@@ -248,12 +428,23 @@ export interface components {
         };
     };
     parameters: {
+        UserID: string;
+        /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
+        UserIfMatch: string;
+        /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+        IdempotencyKey: string;
+        Limit: number;
+        /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+        Cursor: string;
         /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
         Origin: string;
         Csrf: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match. */
+        UserETag: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -496,6 +687,244 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account metadata without credentials or session capabilities. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created, or the original creation result replayed. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["UserETag"];
+                    /** @description Relative URL of the created account. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminUser"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+            };
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+            };
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AdminUser"];
+            409: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
+                "If-Match": components["parameters"]["UserIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AdminUser"];
+            409: components["responses"]["Problem"];
+            428: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listUserSessions: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                user_id: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active sessions; current is true only for the calling session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeUserSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                user_id: components["parameters"]["UserID"];
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked and audited. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAudit: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A bounded keyset page without passwords or session capabilities. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
             };
             default: components["responses"]["Problem"];
         };

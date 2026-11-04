@@ -3,13 +3,10 @@ package httpapi
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -36,11 +33,7 @@ type passwordRequest struct {
 type csrfResponse struct {
 	Token string `json:"token"`
 }
-type sessionPage struct {
-	Items      []auth.Session `json:"items"`
-	NextCursor *string        `json:"next_cursor"`
-	HasMore    bool           `json:"has_more"`
-}
+type sessionPage = listPage[auth.Session]
 
 func (a authentication) protect(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -164,52 +157,16 @@ func (a authentication) password(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a authentication) sessions(w http.ResponseWriter, r *http.Request) {
-	current := currentSession(r)
-	limit := 30
-	if value := r.URL.Query().Get("limit"); value != "" {
-		var err error
-		limit, err = strconv.Atoi(value)
-		if err != nil || limit < 1 || limit > 100 {
-			problem(w, 400, "INVALID_PAGINATION", "Limit must be between 1 and 100.")
-			return
-		}
+	page, ok := readPage(w, r)
+	if !ok {
+		return
 	}
-	var cursor struct {
-		Scope string `json:"scope"`
-		User  string `json:"user"`
-		After string `json:"after"`
-	}
-	if encoded := r.URL.Query().Get("cursor"); encoded != "" {
-		if len(encoded) > 512 {
-			problem(w, 400, "INVALID_CURSOR", "The page cursor is invalid.")
-			return
-		}
-		data, err := base64.RawURLEncoding.DecodeString(encoded)
-		if err != nil || json.Unmarshal(data, &cursor) != nil || cursor.Scope != current.User.ScopeID || cursor.User != current.User.ID || len(cursor.After) > 64 {
-			problem(w, 400, "INVALID_CURSOR", "The page cursor is invalid for this account.")
-			return
-		}
-	}
-	items, err := a.service.Sessions(r.Context(), current, cursor.After, limit+1)
+	items, err := a.service.Sessions(r.Context(), currentSession(r), page.cursor.After, page.limit+1)
 	if err != nil {
 		authError(w, err)
 		return
 	}
-	page := sessionPage{Items: items, HasMore: len(items) > limit}
-	if page.HasMore {
-		page.Items = items[:limit]
-		cursor.Scope = current.User.ScopeID
-		cursor.User = current.User.ID
-		cursor.After = page.Items[limit-1].ID
-		data, err := json.Marshal(cursor)
-		if err != nil {
-			authError(w, err)
-			return
-		}
-		next := base64.RawURLEncoding.EncodeToString(data)
-		page.NextCursor = &next
-	}
-	writeJSON(w, 200, page)
+	writePage(w, page, items, func(session auth.Session) string { return session.ID })
 }
 
 func (a authentication) revoke(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +188,18 @@ func authError(w http.ResponseWriter, err error) {
 		problem(w, 401, "INVALID_CREDENTIALS", "The username or password is incorrect.")
 	case errors.Is(err, auth.ErrUnauthenticated):
 		problem(w, 401, "UNAUTHENTICATED", "Sign in to continue.")
-	case errors.Is(err, auth.ErrWeakPassword), errors.Is(err, auth.ErrUsername):
+	case errors.Is(err, auth.ErrForbidden):
+		problem(w, 403, "ADMIN_REQUIRED", "Administrator access is required.")
+	case errors.Is(err, auth.ErrLastAdmin):
+		problem(w, 409, "LAST_ACTIVE_ADMIN", "Keep at least one active administrator before making this change.")
+	case errors.Is(err, auth.ErrUsernameTaken):
+		problem(w, 409, "USERNAME_TAKEN", "Choose a different username.")
+	case errors.Is(err, auth.ErrIdempotencyReuse):
+		problem(w, 409, "IDEMPOTENCY_CONFLICT", "Use the original request body with this key, or a new key for a new request.")
+	case errors.Is(err, auth.ErrRequestInFlight):
+		w.Header().Set("Retry-After", "1")
+		problem(w, 409, "IDEMPOTENCY_IN_PROGRESS", "Retry the same request with the same idempotency key.")
+	case errors.Is(err, auth.ErrWeakPassword), errors.Is(err, auth.ErrUsername), errors.Is(err, auth.ErrInvalidUser), errors.Is(err, auth.ErrIdempotencyKey):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, auth.ErrRateLimited):
 		w.Header().Set("Retry-After", "900")

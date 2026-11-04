@@ -6,11 +6,10 @@ process.env.GALLERYGO_TEST_PASSWORD ??= randomBytes(24).toString('base64url');
 
 export default defineConfig({
   testDir: './tests/e2e',
-  // ponytail: one bootstrap account; use per-test accounts when admin creation lands.
-  fullyParallel: false,
+  fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: 1,
+  workers: 2,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'https://127.0.0.1:4318',

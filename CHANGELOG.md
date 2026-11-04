@@ -6,6 +6,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Administrative user CRUD, password reset, cross-account session control, and
+  bounded audit APIs with strong account ETags and scope-bound pagination.
+- Transactional last-active-administrator protection, immediate session/scope
+  revocation, safe private-metadata deletion, and 24-hour idempotent POST receipts.
+- Per-test accounts provisioned through the real API, enabling parallel HTTPS
+  browser tests without sharing mutable credentials.
+
 - Authenticated login/logout/me/CSRF/password/session APIs with strict bounded JSON,
   exact Origin checks, persistent abuse limits, and session-bound CSRF tokens.
 - Three-language HTTPS login/account-security pages, Radix confirmation/focus

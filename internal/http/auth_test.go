@@ -170,6 +170,8 @@ func TestAuthHTTPStrictInput(t *testing.T) {
 	}{
 		{`{}`, 422}, {`null`, 400}, {`[]`, 400}, {`{"username":true,"password":"x"}`, 400},
 		{`{"Username":"owner","password":"x"}`, 400},
+		{`{"username":"owner","password":null}`, 400},
+		{"{\"username\":\"own\xffer\",\"password\":\"x\"}", 400},
 		{`{"username":"owner","password":"x","role":"admin"}`, 400},
 		{`{"username":"owner","username":"other","password":"x"}`, 400},
 		{`{"username":"owner","password":"x"} {}`, 400},

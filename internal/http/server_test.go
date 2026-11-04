@@ -173,10 +173,8 @@ func TestAssetRootRejectsSymlinkEscape(t *testing.T) {
 
 func TestOpenAPIRegisteredOperationsAndResponses(t *testing.T) {
 	var spec struct {
-		OpenAPI string `yaml:"openapi"`
-		Paths   map[string]map[string]struct {
-			OperationID string `yaml:"operationId"`
-		} `yaml:"paths"`
+		OpenAPI    string                          `yaml:"openapi"`
+		Paths      map[string]map[string]yaml.Node `yaml:"paths"`
 		Components struct {
 			Schemas map[string]struct {
 				Required   []string       `yaml:"required"`
@@ -193,13 +191,25 @@ func TestOpenAPIRegisteredOperationsAndResponses(t *testing.T) {
 	_, h := newTestServer(t)
 	count := 0
 	for _, methods := range spec.Paths {
-		count += len(methods)
+		for method := range methods {
+			switch method {
+			case "get", "head", "post", "put", "patch", "delete", "options", "trace":
+				count++
+			}
+		}
 	}
 	if count != len(Operations) {
 		t.Fatalf("spec operations=%d registered=%d", count, len(Operations))
 	}
 	for _, op := range Operations {
-		if spec.Paths[op.Path][strings.ToLower(op.Method)].OperationID != op.ID {
+		var operation struct {
+			OperationID string `yaml:"operationId"`
+		}
+		node := spec.Paths[op.Path][strings.ToLower(op.Method)]
+		if err := node.Decode(&operation); err != nil {
+			t.Fatal(err)
+		}
+		if operation.OperationID != op.ID {
 			t.Errorf("operation missing from contract: %+v", op)
 		}
 		w := httptest.NewRecorder()

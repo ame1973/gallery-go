@@ -33,6 +33,15 @@ var Operations = []Operation{
 	{"POST", "/auth/password", "changePassword", false},
 	{"GET", "/auth/sessions", "listSessions", false},
 	{"DELETE", "/auth/sessions/{session_id}", "revokeSession", false},
+	{"GET", "/admin/users", "listUsers", false},
+	{"POST", "/admin/users", "createUser", false},
+	{"GET", "/admin/users/{user_id}", "getUser", false},
+	{"PATCH", "/admin/users/{user_id}", "updateUser", false},
+	{"DELETE", "/admin/users/{user_id}", "deleteUser", false},
+	{"POST", "/admin/users/{user_id}/reset-password", "resetUserPassword", false},
+	{"GET", "/admin/users/{user_id}/sessions", "listUserSessions", false},
+	{"DELETE", "/admin/users/{user_id}/sessions/{session_id}", "revokeUserSession", false},
+	{"GET", "/admin/audit", "listAudit", false},
 }
 
 type Health struct {
@@ -50,14 +59,23 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	handlers := map[string]http.HandlerFunc{
-		"login":          authentication.login,
-		"logout":         authentication.logout,
-		"me":             authentication.me,
-		"getCsrf":        authentication.csrf,
-		"changePassword": authentication.password,
-		"listSessions":   authentication.sessions,
-		"revokeSession":  authentication.revoke,
-		"live":           func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
+		"login":             authentication.login,
+		"logout":            authentication.logout,
+		"me":                authentication.me,
+		"getCsrf":           authentication.csrf,
+		"changePassword":    authentication.password,
+		"listSessions":      authentication.sessions,
+		"revokeSession":     authentication.revoke,
+		"listUsers":         authentication.users,
+		"createUser":        authentication.createUser,
+		"getUser":           authentication.user,
+		"updateUser":        authentication.updateUser,
+		"deleteUser":        authentication.deleteUser,
+		"resetUserPassword": authentication.resetPassword,
+		"listUserSessions":  authentication.userSessions,
+		"revokeUserSession": authentication.revokeUserSession,
+		"listAudit":         authentication.audit,
+		"live":              func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
 		"ready": func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
@@ -72,28 +90,31 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 			writeJSON(w, http.StatusOK, PublicConfig{Version: version, OfflineEnabled: false})
 		},
 	}
+	allowed := make(map[string][]string)
 	for _, op := range Operations {
 		handler := handlers[op.ID]
+		if strings.HasPrefix(op.Path, "/admin/") {
+			handler = authentication.admin(handler)
+		}
 		if !op.Public {
 			handler = authentication.protect(handler)
 		}
 		mux.HandleFunc(op.Method+" /api/v2"+op.Path, metadataTimeout(handler))
+		allowed[op.Path] = append(allowed[op.Path], op.Method)
+		if op.Method == "GET" {
+			allowed[op.Path] = append(allowed[op.Path], "HEAD")
+		}
+	}
+	for route, methods := range allowed {
+		mux.HandleFunc("/api/v2"+route, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Allow", strings.Join(methods, ", "))
+			problem(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The HTTP method is not supported.")
+		})
 	}
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusNotFound, "NOT_FOUND", "The API endpoint does not exist.")
 	})
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		for _, op := range Operations {
-			if r.URL.Path == "/api/v2"+op.Path {
-				allow := op.Method
-				if op.Method == "GET" {
-					allow += ", HEAD"
-				}
-				w.Header().Set("Allow", allow)
-				problem(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The HTTP method is not supported.")
-				return
-			}
-		}
 		problem(w, http.StatusNotFound, "NOT_FOUND", "The API endpoint does not exist.")
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { serveAsset(assets, w, r) })

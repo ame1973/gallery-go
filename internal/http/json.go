@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 )
 
 // decodeJSON rejects oversized, ambiguous, unknown-field, and non-object inputs.
@@ -31,6 +32,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 		}
 		return false
 	}
+	if !utf8.Valid(data) {
+		problem(w, 400, "INVALID_JSON", "The JSON body must contain valid UTF-8.")
+		return false
+	}
 	if err := unambiguousJSON(data); err != nil {
 		problem(w, 400, "INVALID_JSON", "Send one JSON object without duplicate keys or excessive nesting.")
 		return false
@@ -45,9 +50,15 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 	for i := 0; i < typeOf.NumField(); i++ {
 		known[strings.Split(typeOf.Field(i).Tag.Get("json"), ",")[0]] = true
 	}
-	for field := range fields {
+	for field, value := range fields {
 		if !known[field] {
 			problem(w, 400, "INVALID_JSON", "The JSON object contains an unknown field.")
+			return false
+		}
+		// Implemented input contracts have no nullable fields. Omit an optional
+		// field instead; null must not silently become false or an absent patch.
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			problem(w, 400, "INVALID_JSON", "The JSON fields must not be null.")
 			return false
 		}
 	}

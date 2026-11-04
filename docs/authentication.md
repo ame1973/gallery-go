@@ -48,8 +48,8 @@ Administrators may shorten them with `auth.session_idle_timeout` and
   nonexistent sessions return 404; revoking the current session expires its cookie.
 
 All JSON request bodies are bounded to 16 KiB and reject unknown fields, duplicate
-keys, incorrect field casing, trailing JSON, and excessive nesting. API responses
-are private and no-store. No CORS origins are enabled.
+keys, incorrect field casing, explicit null fields, trailing JSON, and excessive
+nesting. API responses are private and no-store. No CORS origins are enabled.
 
 ## Abuse controls and audit
 
@@ -67,5 +67,9 @@ Bootstrap, login, logout/session revocation, and password changes have transacti
 audit records. Business changes and durable outbox records share the same SQLite
 transaction. Passwords, raw cookies, and CSRF values are not audit payloads.
 
-Administrative user/group/ACL management and protected media routes are separate
-Phase 1 work; this document does not claim those endpoints already exist.
+Active administrators can create, inspect, update, disable, delete, and reset
+accounts, inspect and revoke another account's sessions, and read the audit API.
+See [administration.md](administration.md) for version preconditions, idempotent
+POSTs, last-active-administrator protection, and immediate online session revocation.
+Dedicated administrative screens, group/resource ACLs, and protected media routes
+are not implemented yet.

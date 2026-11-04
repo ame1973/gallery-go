@@ -7,9 +7,10 @@ media separately.
 **Development status:** this is not yet a production-ready private gallery.
 Database migrations, health checks, one-time administrator bootstrap, secure login,
 password changes, session management, and three-language account pages work.
-Administrative account/ACL management, scanning, media processing, browsing,
-playback, and offline downloads are still being implemented. Do not expose this
-build to the Internet or connect sensitive media yet.
+Administrative account/session/audit APIs are available; their management screens,
+group/resource ACLs, scanning, media processing, browsing, playback, and offline
+downloads are still being implemented. Do not expose this build to the Internet
+or connect sensitive media yet.
 
 ## Requirements
 
@@ -66,7 +67,10 @@ are case-insensitive. Automation may supply a single password line through stdin
 with `--password-stdin`; never put passwords in command arguments, shell history,
 or environment files. Bootstrap cannot be repeated on an initialized installation.
 See [docs/authentication.md](docs/authentication.md) for the cookie, CSRF, session,
-rate-limit, and password contracts.
+rate-limit, and password contracts. Administrators can manage accounts, reset
+passwords, revoke sessions, and inspect audit events through the versioned API;
+see [docs/administration.md](docs/administration.md). New regular accounts have no
+library grants, and the last active administrator cannot be removed or disabled.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another
 terminal. Vite serves `http://127.0.0.1:5173` and proxies `/api` to port 8080.
@@ -144,6 +148,13 @@ Only implemented endpoints are advertised:
 - `GET /api/v2/auth/me`, `/auth/csrf`, `/auth/sessions`: current account, CSRF token,
   and paginated owned active sessions.
 - `DELETE /api/v2/auth/sessions/{session_id}`: revoke an owned session.
+- `GET/POST /api/v2/admin/users` and `GET/PATCH/DELETE /admin/users/{user_id}`:
+  bounded account listing and versioned administrative account management.
+- `POST /api/v2/admin/users/{user_id}/reset-password`: reset a password and revoke
+  all target sessions. Creation and reset require an `Idempotency-Key`.
+- `GET /api/v2/admin/users/{user_id}/sessions` and
+  `DELETE /admin/users/{user_id}/sessions/{session_id}`: inspect/revoke target sessions.
+- `GET /api/v2/admin/audit`: private, newest-first security audit pages.
 
 HEAD is supported for these GET endpoints. API responses use
 `Cache-Control: private, no-store`. Errors use `application/problem+json` with a
@@ -175,7 +186,9 @@ E2E starts an isolated HTTPS proxy on `127.0.0.1:4318` and a Go server on
 generates a temporary TLS certificate and random bootstrap password, builds a
 temporary binary/database, and runs real desktop and mobile-sized Chromium. Only
 the test browser ignores the self-signed certificate; Secure cookies and Origin
-checks remain enabled. Tests run serially while they share one bootstrap account.
+checks remain enabled. Authentication tests provision an isolated account per test
+through the real administrative API and run with two parallel workers. Each worker
+has its own administrator session; tests never mutate the bootstrap credentials.
 Screenshots/traces live in ignored test-output directories. Tests never use private
 source media or an existing user database.
 
@@ -184,10 +197,12 @@ migration, per-connection pragmas, FTS5, foreign keys, config/path rejection,
 HTTP errors/security headers, symlink escape, production assets, language
 persistence, network failure/retry, graceful shutdown, bootstrap races, session
 hashing/expiry/revocation, password rotation, CSRF, login rate limits, strict JSON,
-transactional security audit/outbox, and CSP nonce matching. Real HTTPS E2E covers
-login, session confirmation/focus, password changes, cookie flags, and logout.
-Container smoke tests
-use only ephemeral tmpfs storage and remove only their own container.
+transactional security audit/outbox, CSP nonce matching, last-active-administrator
+races, safe account deletion, ETag conflicts, scope-bound pagination, and idempotent
+administrative POSTs. Real HTTPS E2E covers login, session confirmation/focus,
+password changes, cookie flags, logout, administrative deactivation/reactivation,
+reset/deletion, cross-account session revocation, and audit privacy. Container smoke
+tests use only ephemeral tmpfs storage and remove only their own container.
 
 The included GitHub Actions workflow runs these checks and dependency auditing.
 A checked-in workflow is not evidence that a remote CI run has passed.

@@ -14,6 +14,8 @@ tags:
     description: Non-sensitive health and client configuration.
   - name: Authentication
     description: HTTPS cookie sessions, session-bound CSRF, and account security.
+  - name: Administration
+    description: Active administrators only. Account changes revoke sessions and rotate authorization scopes.
 paths:
   /health/live:
     get:
@@ -172,10 +174,200 @@ paths:
         '204':
           { description: Session revoked; revoking the current session also expires its cookie. }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/users:
+    get:
+      operationId: listUsers
+      summary: List accounts in stable ID order
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Account metadata without credentials or session capabilities.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPage' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createUser
+      summary: Create an account without library grants
+      description: Requires an administrator. An identical idempotent retry returns the original result for 24 hours; concurrent first attempts can return IDEMPOTENCY_IN_PROGRESS and should retry the same request.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+      responses:
+        '201':
+          description: Account created, or the original creation result replayed.
+          headers:
+            ETag: { $ref: '#/components/headers/UserETag' }
+            Location:
+              description: Relative URL of the created account.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/users/{user_id}:
+    parameters:
+      - { $ref: '#/components/parameters/UserID' }
+    get:
+      operationId: getUser
+      summary: Read one account and its current ETag
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AdminUser' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      operationId: updateUser
+      summary: Update account policy and revoke its sessions
+      description: A real change rotates the account scope and revokes all sessions, including the caller's own session when editing themselves. A no-op preserves the version and sessions. Disabling or demoting the last active administrator returns LAST_ACTIVE_ADMIN.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/UserIfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminUser' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '428': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteUser
+      summary: Delete an account and its private application metadata
+      description: The last active administrator cannot be deleted. Sessions, memberships, favorites, ratings, playlists, progress, and sync-operation receipts are removed; audit history, shared gallery metadata, and source media are preserved.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/UserIfMatch' }
+      responses:
+        '204': { description: Account deleted. }
+        '409': { $ref: '#/components/responses/Problem' }
+        '428': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/users/{user_id}/reset-password:
+    post:
+      operationId: resetUserPassword
+      summary: Reset a password and revoke all account sessions
+      description: The account remains active or disabled as before. All sessions are revoked, including the caller's session for a self-reset. Replays use the original If-Match value and do not revoke newly created sessions again.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/UserID' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/UserIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminUser' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '428': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/users/{user_id}/sessions:
+    get:
+      operationId: listUserSessions
+      summary: Inspect an account's active sessions
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/UserID' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Active sessions; current is true only for the calling session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/users/{user_id}/sessions/{session_id}:
+    delete:
+      operationId: revokeUserSession
+      summary: Revoke a session belonging to the specified account
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/UserID' }
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      responses:
+        '204': { description: Session revoked and audited. }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/audit:
+    get:
+      operationId: listAudit
+      summary: Read security audit events, newest first
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: A bounded keyset page without passwords or session capabilities.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditPage' }
+        default: { $ref: '#/components/responses/Problem' }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: __Host-gallerygo_session }
+  headers:
+    UserETag:
+      description: Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match.
+      schema: { type: string }
   parameters:
+    UserID:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string }
+    UserIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT.
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys.
+      schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9_-]{16,128}$' }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors.
+      schema: { type: string, maxLength: 512 }
     Origin:
       name: Origin
       in: header
@@ -188,12 +380,87 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    AdminUser:
+      description: Account metadata and its strong version tag, without password material.
+      headers:
+        ETag: { $ref: '#/components/headers/UserETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/User' }
     Problem:
       description: A request failed. Internal paths, SQL, and secrets are not disclosed.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          description: Case-insensitive ASCII letters, digits, dots, underscores, and hyphens; begins with a letter or digit. Surrounding whitespace is trimmed.
+        password:
+          type: string
+          minLength: 15
+          maxLength: 72
+          description: At least 15 Unicode characters and at most 72 UTF-8 bytes. Never trimmed.
+        role: { type: string, enum: [admin, user], default: user }
+        active: { type: boolean, default: true }
+        download_original:
+          type: boolean
+          default: false
+          description: Explicit original-download policy, also enforced for administrators when content serving is enabled.
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        role: { type: string, enum: [admin, user] }
+        active: { type: boolean }
+        download_original: { type: boolean }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [new_password]
+      properties:
+        new_password:
+          type: string
+          minLength: 15
+          maxLength: 72
+          description: At least 15 Unicode characters and at most 72 UTF-8 bytes. Never trimmed.
+    UserPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/User' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, actor_user_id, event_type, resource_type, resource_id, detail, created_at]
+      properties:
+        id: { type: string }
+        actor_user_id: { type: [string, 'null'] }
+        event_type: { type: string }
+        resource_type: { type: [string, 'null'] }
+        resource_id: { type: [string, 'null'] }
+        detail: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    AuditPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     LoginRequest:
       type: object
       additionalProperties: false
