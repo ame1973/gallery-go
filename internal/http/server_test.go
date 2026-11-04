@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 
 	"gallerygo/contracts"
+	"gallerygo/internal/auth"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 
@@ -35,7 +36,11 @@ func newTestServer(t *testing.T) (*sql.DB, http.Handler) {
 		"icons/logo.svg":    {Data: []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"/>")},
 		".env":              {Data: []byte("SECRET_VALUE")},
 	}
-	return db, New(db, assets, "test-version")
+	service, err := auth.New(db, auth.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, New(db, assets, "test-version", service, "https://gallery.test")
 }
 
 func TestHealthAndHeaders(t *testing.T) {
@@ -156,7 +161,11 @@ func TestAssetRootRejectsSymlinkEscape(t *testing.T) {
 	}
 	defer root.Close()
 	w := httptest.NewRecorder()
-	New(db, root.FS(), "test").ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
+	service, err := auth.New(db, auth.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	New(db, root.FS(), "test", service, "https://gallery.test").ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
 	if w.Code != 404 || strings.Contains(w.Body.String(), "PRIVATE") {
 		t.Fatalf("escape: %d %s", w.Code, w.Body.String())
 	}
@@ -195,6 +204,17 @@ func TestOpenAPIRegisteredOperationsAndResponses(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(op.Method, "/api/v2"+op.Path, nil))
+		if !op.Public || op.ID == "login" {
+			want := http.StatusUnauthorized
+			if op.ID == "login" {
+				want = http.StatusForbidden
+			}
+			if w.Code != want {
+				t.Errorf("unauthenticated %s status=%d", op.ID, w.Code)
+			}
+			assertProblem(t, w, want)
+			continue
+		}
 		var body map[string]any
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatal(err)

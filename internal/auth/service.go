@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"gallerygo/internal/store"
@@ -62,12 +63,14 @@ type Service struct {
 	passwordSlots chan struct{}
 }
 
+var dummyPasswordHash = sync.OnceValues(func() (string, error) { return HashPassword(token()) })
+
 func New(db *sql.DB, policy Policy) (*Service, error) {
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
 	// Missing users must do the same password work as existing users.
-	dummy, err := HashPassword(token())
+	dummy, err := dummyPasswordHash()
 	if err != nil {
 		return nil, err
 	}

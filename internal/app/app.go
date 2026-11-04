@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"gallerygo/internal/auth"
 	httpapi "gallerygo/internal/http"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
@@ -35,12 +36,16 @@ func Serve(ctx context.Context, c Config, version string) error {
 	} else {
 		f.Close()
 	}
+	authentication, err := auth.New(db, c.Auth)
+	if err != nil {
+		return err
+	}
 	listener, err := net.Listen("tcp", c.Listen)
 	if err != nil {
 		return err
 	}
 	server := &http.Server{
-		Handler:           httpapi.New(db, assets.FS(), version),
+		Handler:           httpapi.New(db, assets.FS(), version, authentication, c.BaseURL),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 32 << 10,
 		BaseContext:    func(net.Listener) context.Context { return ctx },

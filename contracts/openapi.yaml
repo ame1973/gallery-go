@@ -12,6 +12,8 @@ security: []
 tags:
   - name: System
     description: Non-sensitive health and client configuration.
+  - name: Authentication
+    description: HTTPS cookie sessions, session-bound CSRF, and account security.
 paths:
   /health/live:
     get:
@@ -51,7 +53,140 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PublicConfig' }
         default: { $ref: '#/components/responses/Problem' }
+  /auth/login:
+    post:
+      operationId: login
+      summary: Sign in and rotate the current browser session
+      tags: [Authentication]
+      parameters: [{ $ref: '#/components/parameters/Origin' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in with a Secure HttpOnly SameSite=Lax host-only cookie.
+          headers:
+            Set-Cookie: { schema: { type: string }, description: A new opaque session cookie. }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current session and expire its cookie
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        [{ $ref: '#/components/parameters/Origin' }, { $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: The current session is revoked. }
+        default: { $ref: '#/components/responses/Problem' }
+  /auth/me:
+    get:
+      operationId: me
+      summary: Read the current account from a valid server-side session
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current account state, checked on this request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Problem' }
+  /auth/csrf:
+    get:
+      operationId: getCsrf
+      summary: Obtain the current session's CSRF token
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: A session-bound token for authenticated unsafe requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [token]
+                properties:
+                  token: { type: string, minLength: 43, maxLength: 43 }
+        default: { $ref: '#/components/responses/Problem' }
+  /auth/password:
+    post:
+      operationId: changePassword
+      summary: Change the password, rotate this session, and revoke other sessions
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        [{ $ref: '#/components/parameters/Origin' }, { $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordRequest' }
+      responses:
+        '200':
+          description: Password changed; the session cookie and account scope have rotated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Problem' }
+  /auth/sessions:
+    get:
+      operationId: listSessions
+      summary: List this account's active sessions in stable ID order
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 30 },
+          }
+        - { name: cursor, in: query, schema: { type: string, maxLength: 512 } }
+      responses:
+        '200':
+          description: Active sessions owned by the current account, never raw tokens or hashes.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /auth/sessions/{session_id}:
+    delete:
+      operationId: revokeSession
+      summary: Revoke one session owned by this account
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      responses:
+        '204':
+          { description: Session revoked; revoking the current session also expires its cookie. }
+        default: { $ref: '#/components/responses/Problem' }
 components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: __Host-gallerygo_session }
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Must exactly match the configured HTTPS origin; browsers supply this automatically.
+      schema: { type: string, format: uri }
+    Csrf:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
     Problem:
       description: A request failed. Internal paths, SQL, and secrets are not disclosed.
@@ -59,6 +194,60 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 64 }
+        password:
+          type: string
+          minLength: 1
+          maxLength: 72
+          description: At most 72 UTF-8 bytes. Passwords are never trimmed.
+    PasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [old_password, new_password]
+      properties:
+        old_password: { type: string, minLength: 1, maxLength: 72 }
+        new_password:
+          type: string
+          minLength: 15
+          maxLength: 72
+          description: At least 15 Unicode characters and no more than 72 UTF-8 bytes.
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, role, active, scope_id, version, download_original]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string, enum: [admin, user] }
+        active: { type: boolean }
+        scope_id: { type: string }
+        version: { type: integer, minimum: 1 }
+        download_original: { type: boolean }
+    Session:
+      type: object
+      additionalProperties: false
+      required: [id, created_at, last_seen_at, expires_at, user_agent, ip_address, current]
+      properties:
+        id: { type: string }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        user_agent: { type: string }
+        ip_address: { type: string }
+        current: { type: boolean }
+    SessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Session' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     Health:
       type: object
       additionalProperties: false

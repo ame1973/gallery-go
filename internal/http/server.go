@@ -11,15 +11,27 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"gallerygo/internal/auth"
 )
 
 // Operation is also checked against OpenAPI to prevent undocumented API routes.
-type Operation struct{ Method, Path, ID string }
+type Operation struct {
+	Method, Path, ID string
+	Public           bool
+}
 
 var Operations = []Operation{
-	{"GET", "/health/live", "live"},
-	{"GET", "/health/ready", "ready"},
-	{"GET", "/public/config", "publicConfig"},
+	{"GET", "/health/live", "live", true},
+	{"GET", "/health/ready", "ready", true},
+	{"GET", "/public/config", "publicConfig", true},
+	{"POST", "/auth/login", "login", true},
+	{"POST", "/auth/logout", "logout", false},
+	{"GET", "/auth/me", "me", false},
+	{"GET", "/auth/csrf", "getCsrf", false},
+	{"POST", "/auth/password", "changePassword", false},
+	{"GET", "/auth/sessions", "listSessions", false},
+	{"DELETE", "/auth/sessions/{session_id}", "revokeSession", false},
 }
 
 type Health struct {
@@ -33,10 +45,18 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string) http.Handler {
 	mux := http.NewServeMux()
+	authentication := authentication{service: service, origin: origin}
 	handlers := map[string]http.HandlerFunc{
-		"live": func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
+		"login":          authentication.login,
+		"logout":         authentication.logout,
+		"me":             authentication.me,
+		"getCsrf":        authentication.csrf,
+		"changePassword": authentication.password,
+		"listSessions":   authentication.sessions,
+		"revokeSession":  authentication.revoke,
+		"live":           func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
 		"ready": func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
@@ -52,7 +72,11 @@ func New(db *sql.DB, assets fs.FS, version string) http.Handler {
 		},
 	}
 	for _, op := range Operations {
-		mux.HandleFunc(op.Method+" /api/v2"+op.Path, handlers[op.ID])
+		handler := handlers[op.ID]
+		if !op.Public {
+			handler = authentication.protect(handler)
+		}
+		mux.HandleFunc(op.Method+" /api/v2"+op.Path, metadataTimeout(handler))
 	}
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusNotFound, "NOT_FOUND", "The API endpoint does not exist.")
@@ -60,7 +84,11 @@ func New(db *sql.DB, assets fs.FS, version string) http.Handler {
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		for _, op := range Operations {
 			if r.URL.Path == "/api/v2"+op.Path {
-				w.Header().Set("Allow", op.Method+", HEAD")
+				allow := op.Method
+				if op.Method == "GET" {
+					allow += ", HEAD"
+				}
+				w.Header().Set("Allow", allow)
 				problem(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The HTTP method is not supported.")
 				return
 			}
@@ -69,6 +97,14 @@ func New(db *sql.DB, assets fs.FS, version string) http.Handler {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { serveAsset(assets, w, r) })
 	return securityHeaders(mux)
+}
+
+func metadataTimeout(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		next(w, r.WithContext(ctx))
+	}
 }
 
 func securityHeaders(next http.Handler) http.Handler {
