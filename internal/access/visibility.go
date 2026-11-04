@@ -28,7 +28,7 @@ const AlbumVisible = `l.is_active=1
 // A source reassignment must not expose old albums or media through the previous
 // library's grants. Availability is separate: ready cached variants can remain
 // readable during a source outage, but inconsistent source relationships deny all.
-const MediaVisible = AlbumVisible + ` AND (m.source_entry_id IS NULL OR EXISTS (
+const MediaVisible = AlbumVisible + ` AND m.availability!='archived' AND (m.source_entry_id IS NULL OR EXISTS (
  SELECT 1 FROM source_entries entry WHERE entry.id=m.source_entry_id AND entry.source_id=a.source_id))`
 
 func (s *Service) Libraries(ctx context.Context, current auth.Session, after string, limit int) ([]Library, error) {

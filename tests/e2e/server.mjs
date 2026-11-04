@@ -134,14 +134,12 @@ try {
     const prefix = source.name;
     const library = `${prefix}-library`;
     const album = `${prefix}-album`;
-    const entry = `${prefix}-entry`;
     mkdirSync(source.root, { recursive: true, mode: 0o700 });
     if (!prefix.startsWith('outage-')) {
       writeFileSync(join(source.root, source.marker), 'isolated test mount', { mode: 0o400 });
     }
     const original = join(source.root, 'fixture.png');
     writeFileSync(original, png, { mode: 0o400 });
-    const stat = statSync(original, { bigint: true });
     fixtureDB
       .prepare('INSERT INTO libraries(id,name,created_at,updated_at) VALUES(?,?,?,?)')
       .run(library, 'Isolated media fixture', Date.now(), Date.now());
@@ -164,19 +162,27 @@ try {
         'INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?)',
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
-    fixtureDB
-      .prepare(
-        "INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,source_config_version,updated_at) VALUES(?,?,'fixture.png',?,?,?,1,?)",
-      )
-      .run(entry, `${prefix}-source`, stat.size, stat.mtimeNs, hash, Date.now());
     for (const suffix of ['media', 'other-media']) {
+      // Equal bytes at distinct paths remain distinct logical media, not two
+      // objects sharing one indexed entry. Each original has its own stat epoch.
+      const filename = suffix === 'media' ? 'fixture.png' : 'other.png';
+      if (suffix !== 'media') {
+        writeFileSync(join(source.root, filename), png, { mode: 0o400 });
+      }
+      const stat = statSync(join(source.root, filename), { bigint: true });
+      const entry = suffix === 'media' ? `${prefix}-entry` : `${prefix}-other-entry`;
+      fixtureDB
+        .prepare(
+          'INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,source_config_version,updated_at) VALUES(?,?,?,?,?,?,1,?)',
+        )
+        .run(entry, `${prefix}-source`, filename, stat.size, stat.mtimeNs, hash, Date.now());
       const id = `${prefix}-${suffix}`;
       const revision = `${prefix}-${suffix}-revision`;
       fixtureDB
         .prepare(
-          "INSERT INTO media(id,album_id,source_entry_id,kind,file_name,mime,width,height,current_revision_id,created_at,updated_at) VALUES(?,?,?,'image','fixture.png','image/png',1,1,?,?,?)",
+          "INSERT INTO media(id,album_id,source_entry_id,kind,file_name,mime,width,height,current_revision_id,created_at,updated_at) VALUES(?,?,?,'image',?,'image/png',1,1,?,?,?)",
         )
-        .run(id, album, entry, revision, Date.now(), Date.now());
+        .run(id, album, entry, filename, revision, Date.now(), Date.now());
       for (const version of [1, 2]) {
         const revisionID = version === 2 ? revision : `${revision}-old`;
         const variantID =

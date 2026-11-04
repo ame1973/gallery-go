@@ -63,6 +63,16 @@ func RevokeSourceScopesTx(ctx context.Context, tx *sql.Tx, previousLibrary, next
 	return err
 }
 
+// RevokeInventoryScopesTx precedes indexed ownership changes. It selects both
+// historical album libraries and the configured destination without materializing
+// accounts in Go; old-scope revoke events survive the subsequent visibility move.
+func RevokeInventoryScopesTx(ctx context.Context, tx *sql.Tx, sourceID string, now time.Time) error {
+	_, err := revokeScopes(ctx, tx, `u.role='admin' OR u.id IN (
+	 SELECT ug.user_id FROM user_groups ug JOIN library_access la ON la.group_id=ug.group_id
+	 WHERE la.library_id IN (SELECT library_id FROM sources WHERE id=? UNION SELECT library_id FROM albums WHERE source_id=?))`, []any{sourceID, sourceID}, now)
+	return err
+}
+
 // revokeScopes uses bounded-memory SQL for any number of affected accounts. The
 // selection is static SQL from this package, never request text. It runs before
 // changing grant edges, so both revoked users and new grantees can be selected.

@@ -111,12 +111,12 @@ func TestMappingSupportsArbitraryFolderDepthAndRootFiles(t *testing.T) {
 		relative string
 		want     Location
 	}{
-		{Mapping{2, 1}, "Alice/Trip/deeper/photo.png", Location{"Alice/Trip", "Trip", "Alice"}},
-		{Mapping{3, 2}, "Region/Alice/Trip/photo.png", Location{"Region/Alice/Trip", "Trip", "Alice"}},
-		{Mapping{0, 0}, "Alice/Trip/photo.png", Location{".", "Photos", ""}},
-		{Mapping{3, 1}, "Alice/photo.png", Location{"Alice", "Alice", "Alice"}},
-		{Mapping{2, 1}, "photo.png", Location{".", "Photos", ""}},
-		{Mapping{2, 1}, "人物/旅行/photo.png", Location{"人物/旅行", "旅行", "人物"}},
+		{Mapping{2, 1}, "Alice/Trip/deeper/photo.png", Location{"Alice/Trip", "Trip", "Alice", "Alice"}},
+		{Mapping{3, 2}, "Region/Alice/Trip/photo.png", Location{"Region/Alice/Trip", "Trip", "Alice", "Region/Alice"}},
+		{Mapping{0, 0}, "Alice/Trip/photo.png", Location{".", "Photos", "", ""}},
+		{Mapping{3, 1}, "Alice/photo.png", Location{"Alice", "Alice", "Alice", "Alice"}},
+		{Mapping{2, 1}, "photo.png", Location{".", "Photos", "", ""}},
+		{Mapping{2, 1}, "人物/旅行/photo.png", Location{"人物/旅行", "旅行", "人物", "人物"}},
 	} {
 		got, err := test.mapping.Locate(test.relative, "Photos")
 		if err != nil || got != test.want {

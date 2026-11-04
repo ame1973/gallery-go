@@ -13,10 +13,17 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An internal healthy-inventory publisher with fresh full-manifest revalidation,
+  frozen unique rename matching, owned immutable media revisions, retained album/
+  person overrides and interactions, source/path-bound people, scoped reconciliation,
+  conservative missing/quarantine evidence, and atomic source/job/event completion.
+  Scan enqueue APIs, executable worker wiring, scheduling, and real process-level
+  indexed-ingestion recovery acceptance are still pending.
+
 - Immutable per-path metadata staging with inspector-policy pins, streamed hash
   revalidation, explicit skipped/failed outcomes, atomic progress/issue events, and
-  live metadata-ready publication fences. This does not yet publish indexed media
-  or provide a runnable scan command.
+  live metadata-ready publication fences. Staging alone does not publish indexed
+  media or provide a runnable scan command.
 
 - Bounded native JPEG/PNG/GIF header metadata with magic-based MIME, dimension/pixel
   guards, explicit invalid/unsupported diagnostics, and container-header fuzz tests.
@@ -25,11 +32,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 - Bounded root-confined inventory walking with streamed hashes, read-only regular
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
-  Complete generation publication and runnable scan workers are not available yet.
+  Runnable scan workers and enqueue APIs are not available yet.
 
 - Fenced durable inventory generations, bounded immutable staging, co-committed
   job progress, safe issue history, and complete double-pass/minimum-file sealing.
-  Indexed media reconciliation and runnable scan workers are not yet wired.
+  Integrated scan handlers and runnable scan workers are not yet wired.
 
 - Registry-selected source configuration services with independent policy epochs,
   configurable album/person folder depths, safe reachability checks, atomic scope

@@ -195,15 +195,15 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 	if !viewer.DownloadOriginal {
 		return nil, sql.ErrNoRows
 	}
-	var sourceName, sourcePath, rootSignature, state, availability, relative, hash, entryHash, contentType, name string
+	var sourceName, sourcePath, rootSignature, state, availability, mediaAvailability, relative, hash, entryHash, contentType, name string
 	var size, mtime, entrySize, entryMtime, sourceConfig, entryConfig int64
 	err = tx.QueryRowContext(ctx, `SELECT src.name,src.root_path,src.root_config_sha256,src.config_version,e.source_config_version,src.state,e.availability,e.relative_path,r.source_sha256,COALESCE(e.sha256,''),
-	 r.source_size,r.source_mtime_ns,e.size_bytes,e.mtime_ns,COALESCE(m.mime,''),m.file_name
+	 r.source_size,r.source_mtime_ns,e.size_bytes,e.mtime_ns,COALESCE(m.mime,''),m.file_name,m.availability
 	 FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
 	 JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id
 	 JOIN source_entries e ON e.id=m.source_entry_id AND e.source_id=a.source_id
 	 JOIN sources src ON src.id=e.source_id AND src.library_id=l.id
-	 WHERE `+access.MediaVisible+` AND m.id=?`, viewer.ID, mediaID).Scan(&sourceName, &sourcePath, &rootSignature, &sourceConfig, &entryConfig, &state, &availability, &relative, &hash, &entryHash, &size, &mtime, &entrySize, &entryMtime, &contentType, &name)
+	 WHERE `+access.MediaVisible+` AND m.id=?`, viewer.ID, mediaID).Scan(&sourceName, &sourcePath, &rootSignature, &sourceConfig, &entryConfig, &state, &availability, &relative, &hash, &entryHash, &size, &mtime, &entrySize, &entryMtime, &contentType, &name, &mediaAvailability)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 		return nil, err
 	}
 	configured, ok := s.sources[sourceName]
-	if !ok || configured.Path != sourcePath || rootSignature != configured.Signature() || sourceConfig != entryConfig || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(relative) || state != "healthy" || availability != "present" || size < 1 || size != entrySize || mtime != entryMtime || !validHash(hash) || hash != entryHash {
+	if !ok || configured.Path != sourcePath || rootSignature != configured.Signature() || sourceConfig != entryConfig || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(relative) || state != "healthy" || availability != "present" || mediaAvailability != "available" || size < 1 || size != entrySize || mtime != entryMtime || !validHash(hash) || hash != entryHash {
 		return nil, ErrSourceUnavailable
 	}
 	root, err := os.OpenRoot(configured.Path)

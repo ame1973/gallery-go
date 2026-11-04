@@ -164,10 +164,37 @@ paths stay in the manifest and count as skipped metadata work; invalid or unsupp
 media count as failed work, not successful decoding. Metadata, issues, generation
 counters, and job progress/events commit together in bounded batches.
 
-These are internal processing foundations, not a public scan operation. No source
-entries, albums, media revisions, or READY variants are published by staging, and
-no scan enqueue API, scheduler, or runnable worker is available yet. Header
-inspection does not prove complete pixel/frame decoding. External codecs, EXIF,
-and animation timing remain unavailable. Later indexed publication must perform
-fresh root/file validation and recheck the source configuration and live job lease;
-a completed staging snapshot alone cannot authorize publication or purge.
+These are internal services, not a public scan operation. Staging alone publishes
+no indexed resources or READY variants. The internal indexed publisher first
+re-walks and rehashes the complete manifest, then rechecks metadata completion,
+source configuration, exact live lease/attempt, cancellation, and generation version
+inside one writer transaction. Source entries, logical media, owned revisions,
+albums/people, events/outbox, source generation, and job progress commit atomically;
+the final source also commits terminal job completion. Intermediate source parts
+keep a multi-source job running with an unknown total, never report all-source
+success after one source. Filesystem and codec work never run inside that transaction.
+
+Matching gives an existing exact path priority. A missing old path and unmatched
+new path can retain an entry/media identity only when their full SHA-256 and size
+candidates are uniquely paired in a frozen pre-mutation plan. Duplicates and mixed
+folder moves are diagnosed, never guessed. A provable whole-folder transition can
+retain album/person IDs, display overrides, restrictions, tags, favorites, ratings,
+and cover preferences. Equal person labels at different source-relative paths are
+not merged. Same-path changed source signatures create a new owned immutable
+revision; older variants do not become current merely because their rows remain.
+
+A missing path becomes unavailable without deleting its entry, revisions, variants,
+or interactions. Quarantine requires at least two healthy full-source publications
+and 24 hours of absence; failed scans and target/incremental scans do not manufacture
+full-scan evidence. Reappearing files retain their logical identities. There is no
+automatic purge. Target jobs validate the whole source but reconcile only their
+selected scope; a cross-scope rename is deferred with a diagnostic until a full
+publication can resolve it safely. Ownership/library changes revoke historical and
+destination authorization projections without revoking valid login sessions.
+
+No scan enqueue API, scheduler, embedded scan handler, or runnable worker is
+available yet, so a fresh installation still cannot ingest through a command or
+API. Header inspection does not prove complete pixel/frame decoding. External
+codecs, EXIF, animation timing, variant generation, and real process-level indexed
+ingestion/restart acceptance remain pending. These services do not complete the
+source-processing phase or authorize index purge.

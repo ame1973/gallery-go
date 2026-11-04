@@ -110,7 +110,10 @@ current source configuration epoch; checking root reachability alone cannot bles
 an older inventory after a configuration change. GalleryGo never creates source
 roots or markers for you. Deactivating a source hides its metadata and content
 from every account, including administrators; an outage alone preserves authorized
-cached previews.
+cached previews. Archived media are excluded by the shared visibility predicate,
+including metadata, covers, counts, originals, and variants. Originals additionally
+require both a present source entry and an available logical media object; a file
+that becomes non-media cannot retain its former original-content eligibility.
 
 Content streams do not inherit the 10-second metadata timeout. Writes have a
 30-second refreshed idle deadline, and reads/seeks check cancellation and file

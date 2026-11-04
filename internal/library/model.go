@@ -39,7 +39,7 @@ func (mapping Mapping) Validate() error {
 	return nil
 }
 
-type Location struct{ AlbumPath, AlbumName, PersonName string }
+type Location struct{ AlbumPath, AlbumName, PersonName, PersonPath string }
 
 func (mapping Mapping) Locate(relative, rootName string) (Location, error) {
 	if mapping.Validate() != nil || relative == "." || !fs.ValidPath(relative) || strings.ContainsAny(relative, "\\\x00") {
@@ -55,6 +55,7 @@ func (mapping Mapping) Locate(relative, rootName string) (Location, error) {
 	}
 	if mapping.PersonDepth > 0 && mapping.PersonDepth <= len(directories) {
 		location.PersonName = directories[mapping.PersonDepth-1]
+		location.PersonPath = strings.Join(directories[:mapping.PersonDepth], "/")
 	}
 	return location, nil
 }

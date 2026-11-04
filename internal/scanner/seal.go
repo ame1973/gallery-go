@@ -2,8 +2,6 @@ package scanner
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"math"
 
 	"gallerygo/internal/jobs"
@@ -30,27 +28,8 @@ func (s *Inventory) Seal(ctx context.Context, lease jobs.Lease, id string) (Gene
 	if err := tx.Rollback(); err != nil {
 		return Generation{}, err
 	}
-	summary, err := Walk(ctx, root, s.policy, func(file File) error {
-		expected, err := readFile(s.db.QueryRowContext(ctx, fileSelect+` WHERE generation_id=? AND relative_path=?`, id, file.RelativePath))
-		if errors.Is(err, sql.ErrNoRows) {
-			return &PathError{file.RelativePath, ErrChanged}
-		}
-		if err != nil {
-			return err
-		}
-		if expected != file {
-			return &PathError{file.RelativePath, ErrChanged}
-		}
-		return nil
-	})
-	if err != nil {
+	if err := s.verifyManifest(ctx, generation, source, root); err != nil {
 		return Generation{}, err
-	}
-	if summary.Files != generation.FileCount || summary.Bytes != generation.SizeBytes {
-		return Generation{}, ErrChanged
-	}
-	if summary.Files < source.MinimumFiles {
-		return Generation{}, ErrMinimumFiles
 	}
 	tx, err = s.db.BeginTx(ctx, nil)
 	if err != nil {

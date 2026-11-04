@@ -121,8 +121,9 @@ control characters; mount markers are normalized root-relative paths. GalleryGo
 does not create source roots or mount markers.
 Declare roots in YAML, then use the [source API](docs/sources.md) to register a
 library/mapping, inspect reachability, or deactivate a source. These operations do
-not scan or purge files. Inventory scanning and automatic scheduling are not
-implemented yet.
+not scan or purge files. The backend has internal staged-inventory and atomic
+indexed-publication services, but runnable inventory processing and automatic
+scheduling are not available yet.
 `.env.example` contains only a Compose port setting. The application reads YAML,
 not arbitrary environment variables.
 
