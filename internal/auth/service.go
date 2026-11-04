@@ -351,6 +351,7 @@ func (s *Service) ChangePassword(ctx context.Context, current Session, oldPasswo
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
 	oldToken := current.Token
+	oldScope := current.User.ScopeID
 	current.Token = token()
 	current.csrfHash = digest(current.CSRFToken())
 	current.User.Version++
@@ -374,6 +375,9 @@ func (s *Service) ChangePassword(ctx context.Context, current Session, oldPasswo
 		return Session{}, err
 	}
 	if err := s.successfulLogin(ctx, tx, current.User.Username, current.IPAddress, now); err != nil {
+		return Session{}, err
+	}
+	if err := store.Change(ctx, tx, oldScope, "scope", current.User.ID, "revoke", current.User.Version, map[string]string{"reason": "password_changed"}, now); err != nil {
 		return Session{}, err
 	}
 	if err := store.Change(ctx, tx, current.User.ScopeID, "user", current.User.ID, "upsert", current.User.Version, current.User, now); err != nil {

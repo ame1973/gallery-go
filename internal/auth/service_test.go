@@ -249,6 +249,10 @@ func TestPasswordChangeRevokesOthersAndRotatesCurrent(t *testing.T) {
 	if changed.ValidCSRF(first.CSRFToken()) {
 		t.Fatal("old CSRF still valid")
 	}
+	var revokedScope string
+	if err := s.db.QueryRow(`SELECT actor_scope FROM change_log WHERE kind='scope' AND operation='revoke' AND resource_id=?`, first.User.ID).Scan(&revokedScope); err != nil || revokedScope != first.User.ScopeID {
+		t.Fatalf("missing old-scope revoke: %q %v", revokedScope, err)
+	}
 	_, err = s.Login(t.Context(), "owner", strongPassword, "127.0.0.1", "test", "")
 	assertError(t, err, ErrCredentials)
 	if _, err := s.Login(t.Context(), "owner", "the replacement private gallery phrase", "127.0.0.1", "test", ""); err != nil {
