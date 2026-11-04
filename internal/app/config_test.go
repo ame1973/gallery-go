@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gallerygo/internal/auth"
 )
 
 func writeConfig(t *testing.T, text string) string {
@@ -60,6 +62,7 @@ func TestConfigSymlinkOverlap(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := Config{Listen: ":8080", BaseURL: "https://localhost", Database: "data/db", CacheRoot: "alias/cache", WebRoot: "web", Sources: []Source{{Name: "A", Root: "photos", Marker: ".mounted"}}}
+	c.Auth = auth.DefaultPolicy()
 	if err := c.validate(dir); err == nil {
 		t.Fatal("symlink overlap accepted")
 	}

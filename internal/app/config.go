@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gallerygo/internal/auth"
+
 	"go.yaml.in/yaml/v3"
 )
 
@@ -22,18 +24,19 @@ type Source struct {
 }
 
 type Config struct {
-	Listen    string   `yaml:"listen"`
-	BaseURL   string   `yaml:"base_url"`
-	Database  string   `yaml:"database"`
-	CacheRoot string   `yaml:"cache_root"`
-	WebRoot   string   `yaml:"web_root"`
-	Sources   []Source `yaml:"sources"`
+	Listen    string      `yaml:"listen"`
+	BaseURL   string      `yaml:"base_url"`
+	Database  string      `yaml:"database"`
+	CacheRoot string      `yaml:"cache_root"`
+	WebRoot   string      `yaml:"web_root"`
+	Sources   []Source    `yaml:"sources"`
+	Auth      auth.Policy `yaml:"auth"`
 }
 
 // LoadConfig resolves relative paths against the config file, not the invocation
 // directory. Missing explicit configuration is an error, never a silent fallback.
 func LoadConfig(path string) (Config, error) {
-	c := Config{Listen: "127.0.0.1:8080", BaseURL: "https://localhost:8443", Database: "data/gallerygo.db", CacheRoot: "cache", WebRoot: "web/dist"}
+	c := Config{Listen: "127.0.0.1:8080", BaseURL: "https://localhost:8443", Database: "data/gallerygo.db", CacheRoot: "cache", WebRoot: "web/dist", Auth: auth.DefaultPolicy()}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return c, err
@@ -63,6 +66,9 @@ func LoadConfig(path string) (Config, error) {
 }
 
 func (c *Config) validate(base string) error {
+	if err := c.Auth.Validate(); err != nil {
+		return err
+	}
 	host, port, err := net.SplitHostPort(c.Listen)
 	if err != nil {
 		return errors.New("listen must be a host:port address")

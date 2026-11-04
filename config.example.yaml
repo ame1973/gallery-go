@@ -5,6 +5,9 @@ base_url: https://localhost:8443
 database: data/gallerygo.db
 cache_root: cache
 web_root: web/dist
+auth:
+  session_idle_timeout: 24h
+  session_absolute_timeout: 720h
 # Source roots are never created or written by GalleryGo.
 # Provision the marker yourself on the mounted NAS before configuring a source.
 sources: []

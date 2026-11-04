@@ -44,8 +44,19 @@ retries the checks, including after a network failure.
 
 The intended browser origin is HTTPS (`base_url`). When authenticated features
 arrive, use a TLS reverse proxy rather than weakening Secure-cookie requirements.
-No default administrator or password exists. An administrator bootstrap command
-will be introduced with authentication; it is not available in this build.
+No default administrator or password exists. After migration, create the first
+administrator once, using a terminal with hidden password entry:
+
+```sh
+./bin/gallerygo bootstrap-admin --config config.yaml --username owner
+```
+
+Use a unique passphrase of at least 15 characters and at most 72 UTF-8 bytes.
+Usernames contain 3..64 ASCII letters, digits, dots, underscores, or hyphens and
+are case-insensitive. Automation may supply a single password line through stdin
+with `--password-stdin`; never put passwords in command arguments, shell history,
+or environment files. Bootstrap cannot be repeated on an initialized installation.
+The authentication HTTP/UI integration is still in progress.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another
 terminal. Vite serves `http://127.0.0.1:5173` and proxies `/api` to port 8080.
@@ -78,6 +89,10 @@ startup. Relative paths resolve from the configuration file's directory.
 | `cache_root` | Separate writable location for generated media.                            |
 | `web_root`   | Production Vite output containing `index.html`.                            |
 | `sources`    | Source names, filesystem roots, and root-relative mount-marker filenames.  |
+
+`auth.session_idle_timeout` defaults to `24h` and can be shortened to at least
+`1m`. `auth.session_absolute_timeout` defaults to `720h`, must not exceed that
+maximum, and must be at least the idle timeout. Sessions never outlive either limit.
 
 Database storage, cache, web assets, and source roots must not overlap, including
 through symlinks. GalleryGo does not create source roots or mount markers.

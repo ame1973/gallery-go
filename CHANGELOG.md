@@ -6,6 +6,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- One-time administrator bootstrap with hidden terminal or explicit stdin password
+  input, bcrypt cost 12, hashed 256-bit sessions, persistent authentication rate
+  limits, atomic security events, and bounded session lifetimes.
+
 - Local SQLite WAL/FTS5 storage and atomic, ordered, checksummed migrations.
 - Strict YAML configuration with separate source, database, cache, and web roots.
 - Go CLI for migration, serving, database diagnosis, health checks, and version output.

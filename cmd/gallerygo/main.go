@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"gallerygo/internal/app"
+	"gallerygo/internal/auth"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 )
@@ -34,8 +35,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
+	return runWithInput(ctx, args, os.Stdin, out)
+}
+
+func runWithInput(ctx context.Context, args []string, input io.Reader, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: gallerygo <serve|migrate|doctor|healthcheck|version> [--config config.yaml]")
+		return errors.New("usage: gallerygo <serve|migrate|bootstrap-admin|doctor|healthcheck|version> [--config config.yaml]")
 	}
 	if args[0] == "version" {
 		if len(args) != 1 {
@@ -44,12 +49,18 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		_, err := fmt.Fprintln(out, version)
 		return err
 	}
-	if args[0] != "serve" && args[0] != "migrate" && args[0] != "doctor" && args[0] != "healthcheck" {
+	if args[0] != "serve" && args[0] != "migrate" && args[0] != "doctor" && args[0] != "healthcheck" && args[0] != "bootstrap-admin" {
 		return fmt.Errorf("unknown command %q", args[0])
 	}
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(out)
 	configPath := flags.String("config", "config.yaml", "Path to the YAML configuration")
+	var username string
+	var passwordStdin bool
+	if args[0] == "bootstrap-admin" {
+		flags.StringVar(&username, "username", "", "Initial administrator username")
+		flags.BoolVar(&passwordStdin, "password-stdin", false, "Read one password line from standard input instead of the terminal")
+	}
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -100,6 +111,25 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	if err := store.VerifySchema(ctx, db, migrations.Files); err != nil {
+		return err
+	}
+	if args[0] == "bootstrap-admin" {
+		if _, err := auth.NormalizeUsername(username); err != nil {
+			return err
+		}
+		password, err := readPassword(input, out, passwordStdin)
+		if err != nil {
+			return err
+		}
+		service, err := auth.New(db, c.Auth)
+		if err != nil {
+			return err
+		}
+		user, err := service.Bootstrap(ctx, username, password)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(out, "Administrator %s created (%s).\n", user.Username, user.ID)
 		return err
 	}
 	var integrity string

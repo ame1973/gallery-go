@@ -37,7 +37,11 @@ func TestMigrateFreshAndRepeat(t *testing.T) {
 		}
 	}
 	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != 1 {
+	all, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil || count != len(all) {
 		t.Fatalf("ledger=%d err=%v", count, err)
 	}
 	if _, err := db.Exec(`INSERT INTO album_search(album_id,title) VALUES ('test','mountain sunrise')`); err != nil {
