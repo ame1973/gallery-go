@@ -132,6 +132,9 @@ func TestRunnerBoundedConcurrencyLiveHeartbeatsAndCompletion(t *testing.T) {
 
 func TestRunnerCancellationStopsHandlerAndClosesOnlyUnfinishedWork(t *testing.T) {
 	q := runtimeFixture(t)
+	// Cancellation, not lease timing, is under test. Allow writer contention on
+	// loaded test hosts without weakening the separate exact-expiry regressions.
+	q.policy.Lease = 10 * time.Second
 	admin, owner := adminFixture(t, q)
 	job := enqueued(t, q, "cancel-live", 0)
 	started := make(chan struct{})
@@ -161,7 +164,12 @@ func TestRunnerCancellationStopsHandlerAndClosesOnlyUnfinishedWork(t *testing.T)
 	}
 	select {
 	case cause := <-observed:
-		requireError(t, cause, ErrCancelled)
+		// Recovery can settle a cancelled expired lease before this handler's
+		// heartbeat sees the flag. Both causes revoke authority; the durable
+		// cancelled status and exact unfinished counts below are mandatory.
+		if !errors.Is(cause, ErrCancelled) && !errors.Is(cause, ErrLeaseLost) {
+			t.Fatalf("handler did not observe cancellation or lost authority: %v", cause)
+		}
 	case <-time.After(8 * time.Second):
 		t.Fatal("cancel did not interrupt handler")
 	}

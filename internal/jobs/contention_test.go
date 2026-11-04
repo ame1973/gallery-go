@@ -88,6 +88,26 @@ func TestRunnerRetriesWriterContentionDuringTransactionBoundHeartbeats(t *testin
 	}
 }
 
+func TestCancellationRecoveryMayRevokeTheLeaseBeforeHeartbeatObservesTheFlag(t *testing.T) {
+	q, clock := fixture(t)
+	job := enqueued(t, q, "cancel-before-recovery", 0)
+	lease := claimed(t, q)
+	if _, err := q.Progress(t.Context(), lease, Counts{Total: 4, Done: 1, Succeeded: 1}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.db.Exec(`UPDATE jobs SET cancel_requested=1 WHERE id=?`, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	*clock = clock.Add(q.policy.Lease + time.Millisecond)
+	_, err := q.Claim(t.Context(), "cancel-recovery", []string{"scan"})
+	requireError(t, err, ErrNoWork)
+	requireError(t, q.Heartbeat(t.Context(), lease), ErrLeaseLost)
+	current, err := q.Get(t.Context(), job.ID)
+	if err != nil || current.Status != "cancelled" || current.Done != 4 || current.Succeeded != 1 || current.Cancelled != 3 {
+		t.Fatal("recovery invented success or lost cancellation", current, err)
+	}
+}
+
 func TestRunnerDoesNotRetryOtherDatabaseOrAuthorityFailuresAsBusy(t *testing.T) {
 	q := runtimeFixture(t)
 	_, sqlError := q.db.Exec(`NOT VALID SQL`)
