@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"io"
 	"net/http"
 	"strconv"
 
@@ -73,12 +72,8 @@ func (h jobHandler) mutate(w http.ResponseWriter, r *http.Request, retry bool) {
 	}
 	// These commands have no options. Reject even a small JSON body rather than
 	// silently accepting misspelled fields or private worker capabilities.
-	if r.Body != nil {
-		data, err := io.ReadAll(io.LimitReader(r.Body, 1))
-		if err != nil || len(data) != 0 {
-			problem(w, 400, "INVALID_BODY", "This job command does not accept a request body.")
-			return
-		}
+	if !requireEmptyBody(w, r) {
+		return
 	}
 	var job jobs.Job
 	var err error

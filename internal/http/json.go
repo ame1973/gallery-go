@@ -13,7 +13,7 @@ import (
 )
 
 // decodeJSON rejects oversized, ambiguous, unknown-field, and non-object inputs.
-// Case-sensitive root keys follow OpenAPI instead of encoding/json's case folding.
+// Field names are case-sensitive at every depth, following the OpenAPI contract.
 func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 	mediaType, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" || (parameters["charset"] != "" && !strings.EqualFold(parameters["charset"], "utf-8")) {
@@ -45,28 +45,81 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 		problem(w, 400, "INVALID_JSON", "Send a JSON object.")
 		return false
 	}
-	known := map[string]bool{}
-	typeOf := reflect.TypeOf(destination).Elem()
-	for i := 0; i < typeOf.NumField(); i++ {
-		known[strings.Split(typeOf.Field(i).Tag.Get("json"), ",")[0]] = true
-	}
-	for field, value := range fields {
-		if !known[field] {
-			problem(w, 400, "INVALID_JSON", "The JSON object contains an unknown field.")
-			return false
-		}
-		// Implemented input contracts have no nullable fields. Omit an optional
-		// field instead; null must not silently become false or an absent patch.
-		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-			problem(w, 400, "INVALID_JSON", "The JSON fields must not be null.")
-			return false
-		}
+	if !exactJSONFields(data, reflect.TypeOf(destination).Elem()) {
+		problem(w, 400, "INVALID_JSON", "Use exact known field names and non-null values, including in nested objects.")
+		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		problem(w, 400, "INVALID_JSON", "The JSON fields have invalid types or names.")
 		return false
+	}
+	return true
+}
+
+// All current request fields are non-nullable. encoding/json otherwise silently
+// accepts null for scalar/struct fields and case-folds nested names. Validate the
+// declared shape recursively before decoding; future nullable fields need an
+// intentional contract/decoder extension, not a global null-to-zero fallback.
+func exactJSONFields(data []byte, kind reflect.Type) bool {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return false
+	}
+	for kind.Kind() == reflect.Pointer {
+		kind = kind.Elem()
+	}
+	switch kind.Kind() {
+	case reflect.Struct:
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(data, &fields) != nil || fields == nil {
+			return false
+		}
+		known := make(map[string]reflect.Type, kind.NumField())
+		for index := 0; index < kind.NumField(); index++ {
+			field := kind.Field(index)
+			name := strings.Split(field.Tag.Get("json"), ",")[0]
+			if field.PkgPath == "" && name != "" && name != "-" {
+				known[name] = field.Type
+			}
+		}
+		for name, value := range fields {
+			field, ok := known[name]
+			if !ok || !exactJSONFields(value, field) {
+				return false
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		var values []json.RawMessage
+		if json.Unmarshal(data, &values) != nil {
+			return false
+		}
+		for _, value := range values {
+			if !exactJSONFields(value, kind.Elem()) {
+				return false
+			}
+		}
+	case reflect.Map:
+		var values map[string]json.RawMessage
+		if kind.Key().Kind() != reflect.String || json.Unmarshal(data, &values) != nil {
+			return false
+		}
+		for _, value := range values {
+			if !exactJSONFields(value, kind.Elem()) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func requireEmptyBody(w http.ResponseWriter, r *http.Request) bool {
+	if r.Body != nil {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 1))
+		if err != nil || len(data) != 0 {
+			problem(w, 400, "INVALID_BODY", "This command does not accept a request body.")
+			return false
+		}
 	}
 	return true
 }
