@@ -48,7 +48,10 @@ Source `name`, `root`, and `marker` are accepted configuration fields. The marke
 must be provisioned by the storage owner inside the actual mounted filesystem,
 not auto-created by GalleryGo. The application validates these fields and root
 separation; original reads also require the indexed source name/root to match the
-configured allowlist and probe the marker. Mount sources read-only, with appropriate
+configured allowlist, the private path/marker pin and current inventory epoch to
+match, and a readable live marker. Register declared names and inspect reachability
+through the [source API](../docs/sources.md); no API accepts arbitrary root paths
+or creates a missing mount. Mount sources read-only, with appropriate
 `nodev`/`nosuid`/`noexec` policy and verified NAS I/O timeouts. Root confinement does
 not make stalled kernel filesystem calls cancellable. See [protected media](../docs/media.md).
 Scanning, media codec tooling, and worker commands are not part of this image yet.

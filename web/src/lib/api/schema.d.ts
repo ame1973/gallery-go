@@ -296,6 +296,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/source-roots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List declared source root names without filesystem paths */
+        get: operations["listSourceRoots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured source metadata in stable ID order */
+        get: operations["listSources"];
+        put?: never;
+        /**
+         * Register a declared read-only root and mapping
+         * @description Selects a YAML root_name, never an arbitrary path. Does not create roots or markers, scan inventory, or start a worker. Root names and canonical paths cannot be registered to two sources.
+         */
+        post: operations["createSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: components["parameters"]["SourceID"];
+            };
+            cookie?: never;
+        };
+        /** Inspect source configuration and reachability metadata */
+        get: operations["getSource"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove an empty source registration without touching files
+         * @description Indexed albums or entries return SOURCE_NOT_EMPTY. Deactivate an indexed source instead; this endpoint never purges it. Cancels outstanding source jobs atomically and retains audit/job history.
+         */
+        delete: operations["deleteSource"];
+        options?: never;
+        head?: never;
+        /**
+         * Change source configuration and invalidate stale work
+         * @description Real changes increment configuration and resource versions, rotate affected old/destination library scopes, cancel stale source jobs, and clear reachability. No-op preserves versions. Existing indexed rows and interactions are not rewritten. A library mismatch hides old albums from all accounts until a healthy inventory reassigns them. Original bytes require a current configuration-bound inventory.
+         */
+        patch: operations["updateSource"];
+        trace?: never;
+    };
+    "/admin/sources/{source_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: components["parameters"]["SourceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check root and mount-marker reachability without scanning
+         * @description Accepts no request body. Returns 200 for a completed inspection, including state unavailable with a safe last_error_code. Missing roots or markers are never created and existing inventory is preserved. A healthy result is only reachability, not a completed generation or minimum-file guarantee. Filesystem I/O is outside writer transactions; role/session/version are rechecked before publication.
+         */
+        post: operations["checkSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/jobs": {
         parameters: {
             query?: never;
@@ -720,7 +807,7 @@ export interface paths {
         };
         /**
          * Download an authorized original from a healthy configured read-only source
-         * @description Requires the actual account's download_original policy, including for administrators, in addition to media visibility. Policy denial is hidden as 404. Healthy registered source, readable mount marker, present entry, and matching current revision/stat signatures are required. Original bytes always use attachment disposition and a sandbox CSP; no fallback bypasses original policy. Changed or unavailable sources return 503 without altering metadata or files.
+         * @description Requires the actual account's download_original policy, including for administrators, in addition to media visibility. Policy denial is hidden as 404. Healthy active registered source, exact private root/marker configuration pin, readable mount marker, present configuration-epoch-bound entry, and matching current revision/stat signatures are required. Original bytes always use attachment disposition and a sandbox CSP; no fallback bypasses original policy. Changed or unavailable sources return 503 without altering metadata or files.
          */
         get: operations["getOriginal"];
         put?: never;
@@ -739,6 +826,121 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SourceRoot: {
+            /** @description Exact configured label of at most 64 UTF-8 bytes; never a filesystem path. */
+            root_name: string;
+        };
+        SourceRootPage: {
+            items: components["schemas"]["SourceRoot"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        SourceMapping: {
+            /** @description Directory segments forming the album path; zero groups the source root. */
+            album_depth: number;
+            /** @description One-based directory segment for the optional person; zero disables mapping and the value must not exceed album_depth. */
+            person_depth: number;
+        };
+        /** @description Full mapping replacement. Omitted member depths are zero; an empty object explicitly groups the whole source without person mapping. Omit mapping on source creation for album_depth 1 and person_depth 0. */
+        SourceMappingInput: {
+            /** @default 0 */
+            album_depth: number;
+            /**
+             * @description Must not exceed album_depth.
+             * @default 0
+             */
+            person_depth: number;
+        };
+        CreateSourceRequest: {
+            library_id: string;
+            /** @description Exact declared YAML source name of at most 64 UTF-8 bytes. */
+            root_name: string;
+            mapping?: components["schemas"]["SourceMappingInput"];
+            /** @default true */
+            active: boolean;
+            /**
+             * Format: int64
+             * @default 0
+             */
+            minimum_files: number;
+            /**
+             * Format: int64
+             * @default 60
+             */
+            poll_interval_seconds: number;
+            /**
+             * Format: int64
+             * @description Must be at least poll_interval_seconds. Scheduling policies are stored; inventory workers are not available yet.
+             * @default 86400
+             */
+            full_scan_interval_seconds: number;
+        };
+        SourcePatch: {
+            library_id?: string;
+            /** @description Exact declared YAML source name; no arbitrary path fields are accepted. */
+            root_name?: string;
+            mapping?: components["schemas"]["SourceMappingInput"];
+            active?: boolean;
+            /** Format: int64 */
+            minimum_files?: number;
+            /** Format: int64 */
+            poll_interval_seconds?: number;
+            /**
+             * Format: int64
+             * @description Must be at least poll_interval_seconds.
+             */
+            full_scan_interval_seconds?: number;
+        };
+        Source: {
+            id: string;
+            library_id: string;
+            root_name: string;
+            mapping: components["schemas"]["SourceMapping"];
+            /** @description False hides this source's albums and content from all accounts. */
+            active: boolean;
+            /** Format: int64 */
+            minimum_files: number;
+            /** Format: int64 */
+            poll_interval_seconds: number;
+            /** Format: int64 */
+            full_scan_interval_seconds: number;
+            /** @description Current runtime registry matches the stored private path/marker pin; independent of reachability. */
+            configured: boolean;
+            /**
+             * @description Reachability metadata; healthy alone does not authorize inventory reconciliation.
+             * @enum {string}
+             */
+            state: "unknown" | "healthy" | "unavailable" | "error";
+            /**
+             * Format: int64
+             * @description Last published inventory generation; zero before inventory publication.
+             */
+            scan_generation: number;
+            /** Format: int64 */
+            version: number;
+            /**
+             * Format: int64
+             * @description Independent worker/index policy epoch; reachability checks do not increment it.
+             */
+            config_version: number;
+            /** Format: date-time */
+            last_checked_at: string | null;
+            /** Format: date-time */
+            last_healthy_at: string | null;
+            /** Format: date-time */
+            last_full_scan_at: string | null;
+            /** @description Safe SOURCE_UNAVAILABLE or SOURCE_NOT_CONFIGURED code. */
+            last_error_code: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SourcePage: {
+            items: components["schemas"]["Source"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         /** @enum {string} */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead";
         /** @description Durable metadata only. Payloads, filesystem roots, lease owners, and deduplication tokens are never returned. The status describes the current or latest attempt, while counters retain all earlier work. */
@@ -1056,6 +1258,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Source metadata and strong source version tag. Replayed commands return historical metadata; GET refreshes current state. */
+        Source: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Source"];
+            };
+        };
         /** @description Job metadata and its strong job version tag. Idempotent commands return their original result; use GET to refresh the current state. */
         Job: {
             headers: {
@@ -1209,6 +1421,7 @@ export interface components {
         };
     };
     parameters: {
+        SourceID: string;
         JobID: string;
         MediaID: string;
         /** @description A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies. */
@@ -1221,7 +1434,7 @@ export interface components {
         ContentIfMatch: string;
         LibraryID: string;
         AlbumID: string;
-        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
         ResourceIfMatch: string;
         UserID: string;
         /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
@@ -1740,6 +1953,179 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listSourceRoots: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded sorted names from the immutable runtime YAML registry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceRootPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSources: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Source metadata without root paths or private configuration pins. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcePage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createSource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Registered source or its original idempotent result. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    Location: components["headers"]["CreatedLocation"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Source"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: components["parameters"]["SourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Source"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteSource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                source_id: components["parameters"]["SourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Empty registration removed; original directories and files remain unchanged. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateSource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                source_id: components["parameters"]["SourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourcePatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Source"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    checkSource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                source_id: components["parameters"]["SourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Source"];
+            default: components["responses"]["Problem"];
+        };
+    };
     listJobs: {
         parameters: {
             query?: {
@@ -1816,7 +2202,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
                 /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
@@ -1839,7 +2225,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
                 /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
@@ -1935,7 +2321,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -1962,7 +2348,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -2100,7 +2486,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -2127,7 +2513,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -2167,7 +2553,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -2207,7 +2593,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, or job. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {

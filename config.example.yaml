@@ -9,6 +9,8 @@ auth:
   session_idle_timeout: 24h
   session_absolute_timeout: 720h
 # Source roots are never created or written by GalleryGo.
+# Names are unique 1..64-byte UTF-8 labels; markers are normalized relative paths.
+# Register a declared name through /api/v2/admin/sources; paths are never API input.
 # Provision the marker yourself on the mounted NAS before configuring a source.
 sources: []
 # sources:

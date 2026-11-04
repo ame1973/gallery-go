@@ -17,6 +17,7 @@ import (
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
 	"gallerygo/internal/jobs"
+	"gallerygo/internal/library"
 	"gallerygo/internal/media"
 )
 
@@ -46,6 +47,13 @@ var Operations = []Operation{
 	{Method: "GET", Path: "/admin/users/{user_id}/sessions", ID: "listUserSessions"},
 	{Method: "DELETE", Path: "/admin/users/{user_id}/sessions/{session_id}", ID: "revokeUserSession"},
 	{Method: "GET", Path: "/admin/audit", ID: "listAudit"},
+	{Method: "GET", Path: "/admin/source-roots", ID: "listSourceRoots"},
+	{Method: "GET", Path: "/admin/sources", ID: "listSources"},
+	{Method: "POST", Path: "/admin/sources", ID: "createSource"},
+	{Method: "GET", Path: "/admin/sources/{source_id}", ID: "getSource"},
+	{Method: "PATCH", Path: "/admin/sources/{source_id}", ID: "updateSource"},
+	{Method: "DELETE", Path: "/admin/sources/{source_id}", ID: "deleteSource"},
+	{Method: "POST", Path: "/admin/sources/{source_id}/check", ID: "checkSource"},
 	{Method: "GET", Path: "/admin/jobs", ID: "listJobs"},
 	{Method: "GET", Path: "/admin/jobs/{job_id}", ID: "getJob"},
 	{Method: "GET", Path: "/admin/jobs/{job_id}/attempts", ID: "listJobAttempts"},
@@ -91,12 +99,13 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	authorization := authorization{service: access.New(db, service)}
 	content := mediaHandler{service: mediaService}
 	work := jobHandler{service: jobService}
+	sources := sourceHandler{service: sourceService}
 	handlers := map[string]http.HandlerFunc{
 		"login":              authentication.login,
 		"logout":             authentication.logout,
@@ -114,6 +123,13 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		"listUserSessions":   authentication.userSessions,
 		"revokeUserSession":  authentication.revokeUserSession,
 		"listAudit":          authentication.audit,
+		"listSourceRoots":    sources.roots,
+		"listSources":        sources.list,
+		"createSource":       sources.create,
+		"getSource":          sources.get,
+		"updateSource":       sources.update,
+		"deleteSource":       sources.remove,
+		"checkSource":        sources.check,
 		"listJobs":           work.list,
 		"getJob":             work.get,
 		"listJobAttempts":    work.attempts,

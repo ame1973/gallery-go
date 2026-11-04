@@ -7,10 +7,10 @@ media separately.
 **Development status:** this is not yet a production-ready private gallery.
 Database migrations, health checks, one-time administrator bootstrap, secure login,
 password changes, session management, and three-language account pages work.
-Administrative account/session/audit, group grants, authorized metadata,
-protected media GET/HEAD/Range, and durable job history/cancel/retry APIs are
-available. Management/browsing screens, source inventory, media processing,
-playback, and offline downloads are still being built. Do not expose this build
+Administrative account/session/audit, group grants, authorized metadata, source
+configuration/reachability, protected media GET/HEAD/Range, and durable job
+history/cancel/retry APIs are available. Management/browsing screens, source
+inventory, media processing, playback, and offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 
 ## Requirements
@@ -119,7 +119,10 @@ Database storage, cache, web assets, and source roots must not overlap, includin
 through symlinks. Source names are unique labels of 1..64 UTF-8 bytes without
 control characters; mount markers are normalized root-relative paths. GalleryGo
 does not create source roots or mount markers.
-Source configuration is validated now; inventory scanning is not implemented yet.
+Declare roots in YAML, then use the [source API](docs/sources.md) to register a
+library/mapping, inspect reachability, or deactivate a source. These operations do
+not scan or purge files. Inventory scanning and automatic scheduling are not
+implemented yet.
 `.env.example` contains only a Compose port setting. The application reads YAML,
 not arbitrary environment variables.
 

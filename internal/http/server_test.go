@@ -15,6 +15,7 @@ import (
 	"gallerygo/contracts"
 	"gallerygo/internal/auth"
 	"gallerygo/internal/jobs"
+	"gallerygo/internal/library"
 	"gallerygo/internal/media"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
@@ -42,7 +43,7 @@ func newTestServer(t *testing.T) (*sql.DB, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service))
+	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil))
 }
 
 func testJobAdmin(t *testing.T, db *sql.DB, authentication *auth.Service) *jobs.Admin {
@@ -52,6 +53,15 @@ func testJobAdmin(t *testing.T, db *sql.DB, authentication *auth.Service) *jobs.
 		t.Fatal(err)
 	}
 	return jobs.NewAdmin(queue, authentication)
+}
+
+func testSourceAdmin(t *testing.T, db *sql.DB, authentication *auth.Service, roots map[string]media.SourceRoot) *library.Sources {
+	t.Helper()
+	queue, err := jobs.New(db, jobs.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return library.NewSources(db, authentication, queue, roots)
 }
 
 func TestHealthAndHeaders(t *testing.T) {
@@ -178,7 +188,7 @@ func TestAssetRootRejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
+	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
 	if w.Code != 404 || strings.Contains(w.Body.String(), "PRIVATE") {
 		t.Fatalf("escape: %d %s", w.Code, w.Body.String())
 	}

@@ -12,6 +12,7 @@ import (
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
 	"gallerygo/internal/jobs"
+	"gallerygo/internal/library"
 	"gallerygo/internal/media"
 )
 
@@ -56,6 +57,14 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "GROUP_NAME_TAKEN", "Choose a different permission group name.")
 	case errors.Is(err, access.ErrLibraryNotEmpty):
 		problem(w, 409, "LIBRARY_NOT_EMPTY", "Deactivate the library instead; its sources and albums must be preserved.")
+	case errors.Is(err, library.ErrRootInUse):
+		problem(w, 409, "SOURCE_ROOT_IN_USE", "This configured root is already registered to a source.")
+	case errors.Is(err, library.ErrSourceNotEmpty):
+		problem(w, 409, "SOURCE_NOT_EMPTY", "Deactivate the source instead; indexed albums and entries must be preserved.")
+	case errors.Is(err, library.ErrSourceChanged):
+		problem(w, 409, "SOURCE_CONFIGURATION_CHANGED", "Reload the source configuration before starting new work.")
+	case errors.Is(err, library.ErrUnknownRoot), errors.Is(err, library.ErrSourceSettings):
+		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, jobs.ErrState):
 		problem(w, 409, "JOB_STATE_CONFLICT", "Refresh the job; this action is not available in its current state.")
 	case errors.Is(err, jobs.ErrResourceBusy):

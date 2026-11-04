@@ -4,7 +4,8 @@ Job history and online-only controls are available through the HTTPS API. There
 is not yet a source-scanning enqueue API, runnable `worker` command, or job UI.
 A fresh installation therefore has no jobs. The internal durable queue and worker
 executor are implemented and tested separately; synthetic test jobs do not imply
-that source ingestion or codec processing is available.
+that source ingestion or codec processing is available. Source registration,
+folder mapping, and separate reachability checks are in [sources.md](sources.md).
 
 All paths below are relative to `/api/v2`. Sign in as an active administrator as
 explained in [authentication.md](authentication.md). Responses use

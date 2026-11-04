@@ -21,6 +21,13 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     marker: '.marker',
   })),
 );
+const managementRoots = ['chromium', 'mobile-chromium'].flatMap((project) =>
+  ['managed', 'unmounted'].map((kind) => ({
+    name: `${kind}-${project}`,
+    root: join(directory, 'sources', `${kind}-${project}`),
+    marker: '.marker',
+  })),
+);
 if (!password) throw new Error('The Playwright harness must supply its generated test password');
 writeFileSync(
   config,
@@ -30,7 +37,7 @@ writeFileSync(
     database: join(directory, 'data/gallerygo.db'),
     cache_root: join(directory, 'cache'),
     web_root: resolve('web/dist'),
-    sources: fixtureSources,
+    sources: [...fixtureSources, ...managementRoots],
   }),
   { mode: 0o600 },
 );
@@ -75,6 +82,12 @@ run(
 let fixtureDB;
 let fixturesReady = false;
 try {
+  // These roots are registered through real administrative APIs by the test.
+  // Intentionally missing roots must remain missing; Go must not create them.
+  for (const root of managementRoots.filter((root) => root.name.startsWith('managed-'))) {
+    mkdirSync(root.root, { recursive: true, mode: 0o700 });
+    writeFileSync(join(root.root, root.marker), 'isolated management marker', { mode: 0o400 });
+  }
   fixtureDB = new DatabaseSync(join(directory, 'data/gallerygo.db'));
   fixtureDB.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
   for (const project of ['chromium', 'mobile-chromium']) {
