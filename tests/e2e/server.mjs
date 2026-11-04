@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { request as proxyRequest } from 'node:http';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 // Only this process's freshly allocated test directory is removed on shutdown.
@@ -13,6 +14,13 @@ const config = join(directory, 'config.yaml');
 const key = join(directory, 'tls.key');
 const certificate = join(directory, 'tls.pem');
 const password = process.env.GALLERYGO_TEST_PASSWORD;
+const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
+  ['media', 'outage'].map((kind) => ({
+    name: `${kind}-${project}`,
+    root: join(directory, 'sources', `${kind}-${project}`),
+    marker: '.marker',
+  })),
+);
 if (!password) throw new Error('The Playwright harness must supply its generated test password');
 writeFileSync(
   config,
@@ -22,7 +30,7 @@ writeFileSync(
     database: join(directory, 'data/gallerygo.db'),
     cache_root: join(directory, 'cache'),
     web_root: resolve('web/dist'),
-    sources: [],
+    sources: fixtureSources,
   }),
   { mode: 0o600 },
 );
@@ -80,6 +88,72 @@ try {
           'INSERT INTO albums(id,library_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?)',
         )
         .run(`acl-${project}-${name}`, library, `Fixture ${name}`, Date.now(), Date.now());
+    }
+  }
+  // A real one-pixel PNG encoded with Go's image/png, not a codec mock. These
+  // ready records are test setup only; the production scanner/publisher is separate.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGKSq9gCCAAA//8CCgFNa0v7mgAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  const hash = createHash('sha256').update(png).digest('hex');
+  for (const source of fixtureSources) {
+    const prefix = source.name;
+    const library = `${prefix}-library`;
+    const album = `${prefix}-album`;
+    const entry = `${prefix}-entry`;
+    mkdirSync(source.root, { recursive: true, mode: 0o700 });
+    if (!prefix.startsWith('outage-')) {
+      writeFileSync(join(source.root, source.marker), 'isolated test mount', { mode: 0o400 });
+    }
+    const original = join(source.root, 'fixture.png');
+    writeFileSync(original, png, { mode: 0o400 });
+    const stat = statSync(original, { bigint: true });
+    fixtureDB
+      .prepare('INSERT INTO libraries(id,name,created_at,updated_at) VALUES(?,?,?,?)')
+      .run(library, 'Isolated media fixture', Date.now(), Date.now());
+    fixtureDB
+      .prepare(
+        "INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES(?,?,?,?,'{}','healthy',?)",
+      )
+      .run(`${prefix}-source`, library, source.name, source.root, Date.now());
+    fixtureDB
+      .prepare(
+        'INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?)',
+      )
+      .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
+    fixtureDB
+      .prepare(
+        "INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,updated_at) VALUES(?,?,'fixture.png',?,?,?,?)",
+      )
+      .run(entry, `${prefix}-source`, stat.size, stat.mtimeNs, hash, Date.now());
+    for (const suffix of ['media', 'other-media']) {
+      const id = `${prefix}-${suffix}`;
+      const revision = `${prefix}-${suffix}-revision`;
+      fixtureDB
+        .prepare(
+          "INSERT INTO media(id,album_id,source_entry_id,kind,file_name,mime,width,height,current_revision_id,created_at,updated_at) VALUES(?,?,?,'image','fixture.png','image/png',1,1,?,?,?)",
+        )
+        .run(id, album, entry, revision, Date.now(), Date.now());
+      for (const version of [1, 2]) {
+        const revisionID = version === 2 ? revision : `${revision}-old`;
+        const variantID =
+          version === 2 ? `${prefix}-${suffix}-variant` : `${prefix}-${suffix}-old-variant`;
+        const storage = `variants/${revisionID}/fixture_png/1/${hash}.png`;
+        const target = join(directory, 'cache', ...storage.split('/'));
+        mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+        writeFileSync(target, png, { mode: 0o400 });
+        fixtureDB
+          .prepare(
+            'INSERT INTO media_revisions(id,media_id,source_sha256,source_size,source_mtime_ns,version,created_at) VALUES(?,?,?,?,?,?,?)',
+          )
+          .run(revisionID, id, hash, stat.size, stat.mtimeNs, version, Date.now());
+        fixtureDB
+          .prepare(
+            "INSERT INTO media_variants(id,revision_id,preset_key,preset_version,storage_path,mime,size_bytes,sha256,width,height,status,created_at) VALUES(?,?,'fixture_png',1,?,'image/png',?,?,1,1,'ready',?)",
+          )
+          .run(variantID, revisionID, storage, stat.size, hash, Date.now());
+      }
     }
   }
   fixtureDB.exec('COMMIT');

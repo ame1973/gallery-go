@@ -74,4 +74,5 @@ POSTs, last-active-administrator protection, and immediate online session revoca
 Group/resource ACLs and authorized metadata reads are documented in
 [access.md](access.md). Grant changes rotate scope without signing out valid
 sessions; account-policy and password changes revoke sessions as described above.
-Dedicated administrative screens and protected media routes are not implemented yet.
+Dedicated administrative screens remain under development. Protected media
+GET/HEAD/Range and original-download policy are described in [media.md](media.md).

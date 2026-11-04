@@ -14,6 +14,7 @@ import (
 
 	"gallerygo/contracts"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/media"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 
@@ -40,7 +41,7 @@ func newTestServer(t *testing.T) (*sql.DB, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db, New(db, assets, "test-version", service, "https://gallery.test")
+	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil))
 }
 
 func TestHealthAndHeaders(t *testing.T) {
@@ -105,6 +106,8 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 		{"POST", "/api/v2/health/live", 405}, {"POST", "/", 405},
 		{"GET", "/.env", 404}, {"GET", "/.gallerygo/image.webp", 404}, {"GET", "/missing.js", 404},
 		{"GET", "/assets/", 404}, {"GET", "/assets/.secret", 404},
+		{"GET", "/cache/private", 404}, {"GET", "/sources/private", 404}, {"GET", "/media/private", 404},
+		{"GET", "/static/private", 404}, {"GET", "/cache/../status", 404}, {"GET", "/api//v2/albums", 404},
 	} {
 		t.Run(c.method+" "+c.path, func(t *testing.T) {
 			w := httptest.NewRecorder()
@@ -165,7 +168,7 @@ func TestAssetRootRejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	New(db, root.FS(), "test", service, "https://gallery.test").ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
+	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
 	if w.Code != 404 || strings.Contains(w.Body.String(), "PRIVATE") {
 		t.Fatalf("escape: %d %s", w.Code, w.Body.String())
 	}

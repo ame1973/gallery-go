@@ -20,6 +20,8 @@ tags:
     description: Versioned group membership and fail-closed library and album grants.
   - name: Library
     description: Session-protected metadata filtered by the shared SQL authorization predicate.
+  - name: Media
+    description: Current-revision metadata and private read-only content with per-request authorization and single-byte-range support.
 paths:
   /health/live:
     get:
@@ -643,10 +645,154 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Album' }
         default: { $ref: '#/components/responses/Problem' }
+  /albums/{album_id}/media:
+    get:
+      operationId: listAlbumMedia
+      summary: List authorized media in an album
+      description: An unauthorized or missing album returns 404 even when it contains no media. Processing media may have a null current revision. No source path or GPS metadata is returned.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/AlbumID' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Stable ID keyset page filtered by the same media predicate as content reads.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /media/{media_id}:
+    get:
+      operationId: getMedia
+      summary: Read authorized media metadata
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/MediaID' }
+      responses:
+        '200':
+          description: Media metadata without filesystem paths or GPS fields.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Media' }
+        default: { $ref: '#/components/responses/Problem' }
+  /media/{media_id}/variants:
+    get:
+      operationId: listVariants
+      summary: List latest ready presets for the current media revision
+      description: URLs are canonical session-protected endpoints, not public or expiring bearer capabilities. Failed and retired variants and other revisions are not advertised. Offline downloads remain disabled.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/MediaID' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded ready-variant metadata without private storage keys.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /media/{media_id}/variants/{variant_id}/content:
+    parameters:
+      - { $ref: '#/components/parameters/MediaID' }
+      - { name: variant_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getVariantContent
+      summary: Read an authorized ready variant from the current revision
+      description: Authentication, active-account/library checks, group grants, source consistency, and ready/current-revision ownership are checked before any byte or conditional response. Only one satisfiable bytes range is supported. Strong ETags are the validators; HTTP-date If-Range values result in a full 200 response because Last-Modified is omitted. No source/cache directory is publicly mounted.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Range' }
+        - { $ref: '#/components/parameters/IfRange' }
+        - { $ref: '#/components/parameters/IfNoneMatch' }
+        - { $ref: '#/components/parameters/ContentIfMatch' }
+      responses:
+        '200': { $ref: '#/components/responses/MediaContent' }
+        '206': { $ref: '#/components/responses/PartialMediaContent' }
+        '304': { $ref: '#/components/responses/NotModifiedContent' }
+        '412': { $ref: '#/components/responses/Problem' }
+        '416': { $ref: '#/components/responses/InvalidRange' }
+        '503': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    head:
+      operationId: headVariantContent
+      summary: Inspect authorized current-variant headers without a body
+      description: Runs the same authorization and file validation as GET. Range is ignored for HEAD; full representation headers or a conditional status are returned without media bytes.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IfNoneMatch' }
+        - { $ref: '#/components/parameters/ContentIfMatch' }
+      responses:
+        '200': { $ref: '#/components/responses/MediaContentHead' }
+        '304': { $ref: '#/components/responses/NotModifiedContent' }
+        '412': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /media/{media_id}/original:
+    parameters:
+      - { $ref: '#/components/parameters/MediaID' }
+    get:
+      operationId: getOriginal
+      summary: Download an authorized original from a healthy configured read-only source
+      description: Requires the actual account's download_original policy, including for administrators, in addition to media visibility. Policy denial is hidden as 404. Healthy registered source, readable mount marker, present entry, and matching current revision/stat signatures are required. Original bytes always use attachment disposition and a sandbox CSP; no fallback bypasses original policy. Changed or unavailable sources return 503 without altering metadata or files.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Range' }
+        - { $ref: '#/components/parameters/IfRange' }
+        - { $ref: '#/components/parameters/IfNoneMatch' }
+        - { $ref: '#/components/parameters/ContentIfMatch' }
+      responses:
+        '200': { $ref: '#/components/responses/MediaContent' }
+        '206': { $ref: '#/components/responses/PartialMediaContent' }
+        '304': { $ref: '#/components/responses/NotModifiedContent' }
+        '412': { $ref: '#/components/responses/Problem' }
+        '416': { $ref: '#/components/responses/InvalidRange' }
+        '503': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    head:
+      operationId: headOriginal
+      summary: Inspect original headers with the same explicit download policy
+      description: Does not bypass original policy or source checks. Ignores Range and returns no response body.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IfNoneMatch' }
+        - { $ref: '#/components/parameters/ContentIfMatch' }
+      responses:
+        '200': { $ref: '#/components/responses/MediaContentHead' }
+        '304': { $ref: '#/components/responses/NotModifiedContent' }
+        '412': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: __Host-gallerygo_session }
   headers:
+    MediaETag:
+      description: Strong SHA-256 representation validator. It is not an authorization capability.
+      schema: { type: string }
+    MediaLength:
+      description: Byte length of the selected full representation or returned single range.
+      schema: { type: integer, format: int64, minimum: 0 }
+    ContentRange:
+      description: 'bytes start-end/total for 206, or bytes */total for 416.'
+      schema: { type: string }
+    AcceptRanges:
+      description: Only single bytes ranges are supported.
+      schema: { type: string, enum: [bytes] }
+    ContentDisposition:
+      description: Inline for safe ready variants; attachment for originals. Filename parameters are safely encoded.
+      schema: { type: string }
+    PrivateContentCache:
+      description: Private content is never shared or globally service-worker cached.
+      schema: { type: string, enum: ['private, no-store'] }
     ResourceETag:
       description: Strong tag in the quoted form "<kind>:<id>:<version>". Send it unchanged in If-Match.
       schema: { type: string }
@@ -657,6 +803,31 @@ components:
       description: Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match.
       schema: { type: string }
   parameters:
+    MediaID:
+      name: media_id
+      in: path
+      required: true
+      schema: { type: string }
+    Range:
+      name: Range
+      in: header
+      description: A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies.
+      schema: { type: string }
+    IfRange:
+      name: If-Range
+      in: header
+      description: Exact strong ETag for resuming a range. A stale or weak tag or HTTP-date value causes a full 200 response. Authorization is always rechecked first.
+      schema: { type: string }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks.
+      schema: { type: string }
+    ContentIfMatch:
+      name: If-Match
+      in: header
+      description: Standard content precondition; mismatch returns 412 Problem JSON, unlike versioned metadata mutation conflicts.
+      schema: { type: string }
     LibraryID:
       name: library_id
       in: path
@@ -711,6 +882,51 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    MediaContent:
+      description: Complete authorized bytes with validated media MIME. Originals use attachment disposition; safe ready variants use inline. No source path is disclosed.
+      headers:
+        ETag: { $ref: '#/components/headers/MediaETag' }
+        Content-Length: { $ref: '#/components/headers/MediaLength' }
+        Accept-Ranges: { $ref: '#/components/headers/AcceptRanges' }
+        Content-Disposition: { $ref: '#/components/headers/ContentDisposition' }
+        Cache-Control: { $ref: '#/components/headers/PrivateContentCache' }
+      content:
+        '*/*':
+          schema: { type: string, format: binary }
+    PartialMediaContent:
+      description: One authorized byte range with the same MIME and privacy headers as a complete response.
+      headers:
+        ETag: { $ref: '#/components/headers/MediaETag' }
+        Content-Length: { $ref: '#/components/headers/MediaLength' }
+        Content-Range: { $ref: '#/components/headers/ContentRange' }
+        Accept-Ranges: { $ref: '#/components/headers/AcceptRanges' }
+        Content-Disposition: { $ref: '#/components/headers/ContentDisposition' }
+        Cache-Control: { $ref: '#/components/headers/PrivateContentCache' }
+      content:
+        '*/*':
+          schema: { type: string, format: binary }
+    MediaContentHead:
+      description: Authorized full-representation headers without a response body. Range is ignored for HEAD.
+      headers:
+        ETag: { $ref: '#/components/headers/MediaETag' }
+        Content-Length: { $ref: '#/components/headers/MediaLength' }
+        Accept-Ranges: { $ref: '#/components/headers/AcceptRanges' }
+        Content-Disposition: { $ref: '#/components/headers/ContentDisposition' }
+        Cache-Control: { $ref: '#/components/headers/PrivateContentCache' }
+    NotModifiedContent:
+      description: Authorized representation has the matching ETag. No response body; authorization and file state were rechecked on this request.
+      headers:
+        ETag: { $ref: '#/components/headers/MediaETag' }
+        Cache-Control: { $ref: '#/components/headers/PrivateContentCache' }
+    InvalidRange:
+      description: A single satisfiable bytes range is required. Authentication and resource authorization have already passed. Privacy headers are preserved.
+      headers:
+        Content-Range: { $ref: '#/components/headers/ContentRange' }
+        ETag: { $ref: '#/components/headers/MediaETag' }
+        Cache-Control: { $ref: '#/components/headers/PrivateContentCache' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     Group:
       description: Group metadata and its current strong version tag.
       headers:
@@ -766,6 +982,77 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    Media:
+      type: object
+      additionalProperties: false
+      required:
+        [id, album_id, kind, file_name, width, height, duration_ms, revision, offline_capable]
+      properties:
+        id: { type: string }
+        album_id: { type: string }
+        kind: { type: string, enum: [image, video] }
+        file_name: { type: string, description: Display basename only; never a filesystem path. }
+        width: { type: [integer, 'null'], minimum: 1 }
+        height: { type: [integer, 'null'], minimum: 1 }
+        duration_ms: { type: [integer, 'null'], minimum: 0 }
+        revision:
+          {
+            type: [string, 'null'],
+            description: Current owned revision ID; null while not yet available.,
+          }
+        offline_capable:
+          {
+            type: boolean,
+            description: False until explicit scoped offline download manifests are enabled.,
+          }
+    MediaPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Media' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    Variant:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          revision_id,
+          preset_key,
+          preset_version,
+          mime,
+          size_bytes,
+          sha256,
+          width,
+          height,
+          duration_ms,
+          content_url,
+        ]
+      properties:
+        id: { type: string }
+        revision_id: { type: string }
+        preset_key: { type: string }
+        preset_version: { type: integer, minimum: 1 }
+        mime: { type: string }
+        size_bytes: { type: integer, format: int64, minimum: 1 }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        width: { type: [integer, 'null'], minimum: 1 }
+        height: { type: [integer, 'null'], minimum: 1 }
+        duration_ms: { type: [integer, 'null'], minimum: 0 }
+        content_url:
+          type: string
+          format: uri-reference
+          description: Canonical same-origin session-protected path, not a bearer or expiring URL.
+    VariantPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Variant' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     NameRequest:
       type: object
       additionalProperties: false

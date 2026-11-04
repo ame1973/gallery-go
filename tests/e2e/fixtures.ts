@@ -8,7 +8,7 @@ export type Account = {
   password: string;
 };
 
-type Administrator = {
+export type Administrator = {
   api: APIRequestContext;
   headers: { Origin: string; 'X-CSRF-Token': string };
 };

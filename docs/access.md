@@ -25,8 +25,9 @@ cannot read a private library. A library without grants does not become public.
 
 Administrators bypass resource group grants, but not inactive-library or source
 consistency checks. Original download policy remains a separate requirement for
-administrators as well as regular users. Protected media streaming is a separate
-implementation slice; no public media filesystem mount exists.
+administrators as well as regular users. [Protected media streaming](media.md)
+uses the same predicate for GET, HEAD, Range, and conditional requests; no public
+media filesystem mount exists.
 
 ## Configure access safely
 

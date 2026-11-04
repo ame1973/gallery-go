@@ -1,8 +1,8 @@
 # Container deployment and operations
 
-> This is an authentication/deployment development build, not the complete gallery.
-> Keep it on a trusted development machine; source ingestion and ACL management
-> are still being implemented.
+> This is an authentication/access/content-serving development build, not the
+> complete gallery. Keep it on a trusted development machine; source ingestion,
+> codec processing, gallery/player screens, and offline downloads remain pending.
 
 ## Build and initialize
 
@@ -24,7 +24,7 @@ UID/GID 65532. Fresh named volumes inherit the image directories' ownership.
 If using bind mounts instead, provision private directories with matching ownership
 before starting; do not run the application as root to hide a permission problem.
 
-Only `/data` (SQLite), `/cache` (future variants), and bounded `/tmp` are writable.
+Only `/data` (SQLite), `/cache` (private variants), and bounded `/tmp` are writable.
 The root filesystem is read-only. Capabilities are dropped and privilege elevation
 is disabled. Process, CPU, and memory limits are explicit in `compose.yaml`.
 Do not put `/data` on an SMB/NFS mount. Do not share it between different hosts.
@@ -46,9 +46,12 @@ read-only and separate from `/data`, `/cache`, and `/app/web`.
 
 Source `name`, `root`, and `marker` are accepted configuration fields. The marker
 must be provisioned by the storage owner inside the actual mounted filesystem,
-not auto-created by GalleryGo. The foundation validates these fields and root
-separation but does not scan sources. Media codec tooling and worker commands
-are not part of this image yet.
+not auto-created by GalleryGo. The application validates these fields and root
+separation; original reads also require the indexed source name/root to match the
+configured allowlist and probe the marker. Mount sources read-only, with appropriate
+`nodev`/`nosuid`/`noexec` policy and verified NAS I/O timeouts. Root confinement does
+not make stalled kernel filesystem calls cancellable. See [protected media](../docs/media.md).
+Scanning, media codec tooling, and worker commands are not part of this image yet.
 
 For a port change, use the provided non-secret environment example:
 
@@ -65,7 +68,7 @@ originals as `web_root`.
 The application listens on internal HTTP and expects TLS to terminate at a trusted
 reverse proxy. Bind the backend to loopback or a private container network. The
 proxy must set HSTS on HTTPS responses and must not publicly cache `/api` or any
-future authenticated media route. Preserve request methods, Origin, cookies,
+authenticated media route. Preserve request methods, Origin, cookies, ETag,
 Range, If-Range, and streaming response bodies. Do not add a public static alias
 for source or variant storage.
 

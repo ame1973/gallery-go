@@ -7,10 +7,10 @@ media separately.
 **Development status:** this is not yet a production-ready private gallery.
 Database migrations, health checks, one-time administrator bootstrap, secure login,
 password changes, session management, and three-language account pages work.
-Administrative account/session/audit, group grants, and authorized library/album
-metadata APIs are available. Their management/browsing screens, scanning, protected
-media streaming/processing, playback, and offline downloads are still being built.
-Do not expose this build to the Internet or connect sensitive media yet.
+Administrative account/session/audit, group grants, authorized metadata, and
+protected media GET/HEAD/Range APIs are available. Management/browsing screens,
+source inventory, media processing, playback, and offline downloads are still being
+built. Do not expose this build to the Internet or connect sensitive media yet.
 
 ## Requirements
 
@@ -165,6 +165,12 @@ Only implemented endpoints are advertised:
   `/admin/albums/{album_id}/access`: fail-closed grants and additive restrictions.
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
   SQL-authorized metadata, counts, and covers. See [docs/access.md](docs/access.md).
+- `GET /api/v2/albums/{album_id}/media`, `/media/{media_id}`, and
+  `/media/{media_id}/variants`: visible media and latest ready current-revision presets.
+- `GET/HEAD /api/v2/media/{media_id}/variants/{variant_id}/content` and
+  `/media/{media_id}/original`: protected read-only bytes, single Range, strong ETags,
+  and conditional requests. Originals require explicit download policy, even for
+  administrators. See [docs/media.md](docs/media.md).
 
 HEAD is supported for these GET endpoints. API responses use
 `Cache-Control: private, no-store`. Errors use `application/problem+json` with a
@@ -200,8 +206,10 @@ checks remain enabled. Authentication tests provision an isolated account per te
 through the real administrative API and run with two parallel workers. Each worker
 has its own administrator session; tests never mutate the bootstrap credentials.
 Before serving, Node's built-in SQLite module seeds only the newly created temporary
-DB with project-isolated ACL metadata fixtures. It is test-only and may emit Node's
-experimental SQLite warning; there is no production seed command or backdoor route.
+DB with project-isolated ACL/media metadata and real generated PNG fixtures. Source
+fixtures are read-only files; a separate missing-marker fixture verifies outages.
+This uses Node's test-only built-in SQLite module, which may emit an experimental
+warning; there is no production seed command or backdoor route.
 Screenshots/traces live in ignored test-output directories. Tests never use private
 source media or an existing user database.
 
@@ -217,7 +225,11 @@ password changes, cookie flags, logout, administrative deactivation/reactivation
 reset/deletion, cross-account session revocation, audit privacy, mandatory library
 grants, additive album restrictions, safe last-group deletion, and scope/cursor
 invalidation. SQLite/race tests also cover bulk revocation of 2,000 accounts and
-transactional policy-version/outbox rollback. Container smoke tests use only
+transactional policy-version/outbox rollback. Protected media tests cover actual
+browser PNG decoding, current-revision ownership, original-policy denial for users
+and admins, Range/HEAD/ETag/If-Range/304/412/416, traversal/symlinks/FIFOs, source
+outages, in-flight changes, and idle-write cancellation. These are serving tests,
+not full codec/player or physical-NAS evidence. Container smoke tests use only
 ephemeral tmpfs storage and remove only their own container.
 
 The included GitHub Actions workflow runs these checks and dependency auditing.
@@ -252,6 +264,7 @@ internal/app/         Configuration and process lifecycle
 internal/access/      Groups, grants, authorization scopes, and shared SQL visibility
 internal/auth/        Passwords, sessions, CSRF binding, and login abuse controls
 internal/http/        HTTP endpoints and security headers
+internal/media/       Authorized metadata, immutable variant keys, and read-only content
 internal/store/       SQLite and migration runner
 migrations/           Embedded, checksummed SQL migrations
 contracts/            Public OpenAPI contract

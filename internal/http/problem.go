@@ -11,6 +11,7 @@ import (
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/media"
 )
 
 type Problem struct {
@@ -66,6 +67,14 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 429, "RATE_LIMITED", "Too many authentication attempts. Try again later.")
 	case errors.Is(err, auth.ErrConflict):
 		problem(w, 409, "VERSION_CONFLICT", "The resource changed while the request was being processed.")
+	case errors.Is(err, media.ErrSourceUnavailable), errors.Is(err, media.ErrVariantUnavailable), errors.Is(err, media.ErrContentChanged):
+		slog.Warn("media content unavailable", "request_id", w.Header().Get("X-Request-ID"), "error", err)
+		w.Header().Set("Retry-After", "30")
+		code := "VARIANT_UNAVAILABLE"
+		if errors.Is(err, media.ErrSourceUnavailable) {
+			code = "SOURCE_UNAVAILABLE"
+		}
+		problem(w, 503, code, "The requested media bytes are not currently available.")
 	case errors.Is(err, sql.ErrNoRows):
 		problem(w, 404, "NOT_FOUND", "The resource does not exist.")
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):

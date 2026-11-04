@@ -10,59 +10,68 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/media"
 )
 
 // Operation is also checked against OpenAPI to prevent undocumented API routes.
 type Operation struct {
-	Method, Path, ID string
-	Public           bool
+	Method, Path, ID  string
+	Public, Streaming bool
 }
 
 var Operations = []Operation{
-	{"GET", "/health/live", "live", true},
-	{"GET", "/health/ready", "ready", true},
-	{"GET", "/public/config", "publicConfig", true},
-	{"POST", "/auth/login", "login", true},
-	{"POST", "/auth/logout", "logout", false},
-	{"GET", "/auth/me", "me", false},
-	{"GET", "/auth/csrf", "getCsrf", false},
-	{"POST", "/auth/password", "changePassword", false},
-	{"GET", "/auth/sessions", "listSessions", false},
-	{"DELETE", "/auth/sessions/{session_id}", "revokeSession", false},
-	{"GET", "/admin/users", "listUsers", false},
-	{"POST", "/admin/users", "createUser", false},
-	{"GET", "/admin/users/{user_id}", "getUser", false},
-	{"PATCH", "/admin/users/{user_id}", "updateUser", false},
-	{"DELETE", "/admin/users/{user_id}", "deleteUser", false},
-	{"POST", "/admin/users/{user_id}/reset-password", "resetUserPassword", false},
-	{"GET", "/admin/users/{user_id}/sessions", "listUserSessions", false},
-	{"DELETE", "/admin/users/{user_id}/sessions/{session_id}", "revokeUserSession", false},
-	{"GET", "/admin/audit", "listAudit", false},
-	{"GET", "/admin/groups", "listGroups", false},
-	{"POST", "/admin/groups", "createGroup", false},
-	{"GET", "/admin/groups/{group_id}", "getGroup", false},
-	{"PATCH", "/admin/groups/{group_id}", "renameGroup", false},
-	{"DELETE", "/admin/groups/{group_id}", "deleteGroup", false},
-	{"GET", "/admin/users/{user_id}/groups", "getUserGroups", false},
-	{"PUT", "/admin/users/{user_id}/groups", "setUserGroups", false},
-	{"GET", "/admin/libraries", "listAdminLibraries", false},
-	{"POST", "/admin/libraries", "createLibrary", false},
-	{"GET", "/admin/libraries/{library_id}", "getAdminLibrary", false},
-	{"PATCH", "/admin/libraries/{library_id}", "updateLibrary", false},
-	{"DELETE", "/admin/libraries/{library_id}", "deleteLibrary", false},
-	{"GET", "/admin/libraries/{library_id}/access", "getLibraryPolicy", false},
-	{"PUT", "/admin/libraries/{library_id}/access", "setLibraryPolicy", false},
-	{"GET", "/admin/albums/{album_id}/access", "getAlbumPolicy", false},
-	{"PUT", "/admin/albums/{album_id}/access", "setAlbumPolicy", false},
-	{"GET", "/libraries", "listLibraries", false},
-	{"GET", "/libraries/{library_id}", "getLibrary", false},
-	{"GET", "/albums", "listAlbums", false},
-	{"GET", "/albums/{album_id}", "getAlbum", false},
+	{Method: "GET", Path: "/health/live", ID: "live", Public: true},
+	{Method: "GET", Path: "/health/ready", ID: "ready", Public: true},
+	{Method: "GET", Path: "/public/config", ID: "publicConfig", Public: true},
+	{Method: "POST", Path: "/auth/login", ID: "login", Public: true},
+	{Method: "POST", Path: "/auth/logout", ID: "logout"},
+	{Method: "GET", Path: "/auth/me", ID: "me"},
+	{Method: "GET", Path: "/auth/csrf", ID: "getCsrf"},
+	{Method: "POST", Path: "/auth/password", ID: "changePassword"},
+	{Method: "GET", Path: "/auth/sessions", ID: "listSessions"},
+	{Method: "DELETE", Path: "/auth/sessions/{session_id}", ID: "revokeSession"},
+	{Method: "GET", Path: "/admin/users", ID: "listUsers"},
+	{Method: "POST", Path: "/admin/users", ID: "createUser"},
+	{Method: "GET", Path: "/admin/users/{user_id}", ID: "getUser"},
+	{Method: "PATCH", Path: "/admin/users/{user_id}", ID: "updateUser"},
+	{Method: "DELETE", Path: "/admin/users/{user_id}", ID: "deleteUser"},
+	{Method: "POST", Path: "/admin/users/{user_id}/reset-password", ID: "resetUserPassword"},
+	{Method: "GET", Path: "/admin/users/{user_id}/sessions", ID: "listUserSessions"},
+	{Method: "DELETE", Path: "/admin/users/{user_id}/sessions/{session_id}", ID: "revokeUserSession"},
+	{Method: "GET", Path: "/admin/audit", ID: "listAudit"},
+	{Method: "GET", Path: "/admin/groups", ID: "listGroups"},
+	{Method: "POST", Path: "/admin/groups", ID: "createGroup"},
+	{Method: "GET", Path: "/admin/groups/{group_id}", ID: "getGroup"},
+	{Method: "PATCH", Path: "/admin/groups/{group_id}", ID: "renameGroup"},
+	{Method: "DELETE", Path: "/admin/groups/{group_id}", ID: "deleteGroup"},
+	{Method: "GET", Path: "/admin/users/{user_id}/groups", ID: "getUserGroups"},
+	{Method: "PUT", Path: "/admin/users/{user_id}/groups", ID: "setUserGroups"},
+	{Method: "GET", Path: "/admin/libraries", ID: "listAdminLibraries"},
+	{Method: "POST", Path: "/admin/libraries", ID: "createLibrary"},
+	{Method: "GET", Path: "/admin/libraries/{library_id}", ID: "getAdminLibrary"},
+	{Method: "PATCH", Path: "/admin/libraries/{library_id}", ID: "updateLibrary"},
+	{Method: "DELETE", Path: "/admin/libraries/{library_id}", ID: "deleteLibrary"},
+	{Method: "GET", Path: "/admin/libraries/{library_id}/access", ID: "getLibraryPolicy"},
+	{Method: "PUT", Path: "/admin/libraries/{library_id}/access", ID: "setLibraryPolicy"},
+	{Method: "GET", Path: "/admin/albums/{album_id}/access", ID: "getAlbumPolicy"},
+	{Method: "PUT", Path: "/admin/albums/{album_id}/access", ID: "setAlbumPolicy"},
+	{Method: "GET", Path: "/libraries", ID: "listLibraries"},
+	{Method: "GET", Path: "/libraries/{library_id}", ID: "getLibrary"},
+	{Method: "GET", Path: "/albums", ID: "listAlbums"},
+	{Method: "GET", Path: "/albums/{album_id}", ID: "getAlbum"},
+	{Method: "GET", Path: "/albums/{album_id}/media", ID: "listAlbumMedia"},
+	{Method: "GET", Path: "/media/{media_id}", ID: "getMedia"},
+	{Method: "GET", Path: "/media/{media_id}/variants", ID: "listVariants"},
+	{Method: "GET", Path: "/media/{media_id}/variants/{variant_id}/content", ID: "getVariantContent", Streaming: true},
+	{Method: "HEAD", Path: "/media/{media_id}/variants/{variant_id}/content", ID: "headVariantContent", Streaming: true},
+	{Method: "GET", Path: "/media/{media_id}/original", ID: "getOriginal", Streaming: true},
+	{Method: "HEAD", Path: "/media/{media_id}/original", ID: "headOriginal", Streaming: true},
 }
 
 type Health struct {
@@ -76,10 +85,11 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	authorization := authorization{service: access.New(db, service)}
+	content := mediaHandler{service: mediaService}
 	handlers := map[string]http.HandlerFunc{
 		"login":              authentication.login,
 		"logout":             authentication.logout,
@@ -117,6 +127,13 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		"getLibrary":         authorization.library,
 		"listAlbums":         authorization.albums,
 		"getAlbum":           authorization.album,
+		"listAlbumMedia":     content.albumMedia,
+		"getMedia":           content.get,
+		"listVariants":       content.variants,
+		"getVariantContent":  content.variantContent,
+		"headVariantContent": content.variantContent,
+		"getOriginal":        content.original,
+		"headOriginal":       content.original,
 		"live":               func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
 		"ready": func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
@@ -144,9 +161,14 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		if !op.Public {
 			handler = authentication.protect(handler)
 		}
-		mux.HandleFunc(op.Method+" /api/v2"+op.Path, metadataTimeout(handler))
-		allowed[op.Path] = append(allowed[op.Path], op.Method)
-		if op.Method == "GET" {
+		if !op.Streaming {
+			handler = metadataTimeout(handler)
+		}
+		mux.HandleFunc(op.Method+" /api/v2"+op.Path, handler)
+		if !slices.Contains(allowed[op.Path], op.Method) {
+			allowed[op.Path] = append(allowed[op.Path], op.Method)
+		}
+		if op.Method == "GET" && !slices.Contains(allowed[op.Path], "HEAD") {
 			allowed[op.Path] = append(allowed[op.Path], "HEAD")
 		}
 	}
@@ -182,6 +204,18 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy(""))
+		// Reject ambiguous paths before ServeMux can redirect a private-looking
+		// traversal or duplicate slash into the SPA or a different API route.
+		if strings.Contains(r.URL.Path, "//") || strings.ContainsRune(r.URL.Path, 0) {
+			problem(w, 404, "NOT_FOUND", "The resource does not exist.")
+			return
+		}
+		for _, segment := range strings.Split(r.URL.Path, "/") {
+			if segment == "." || segment == ".." {
+				problem(w, 404, "NOT_FOUND", "The resource does not exist.")
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -204,6 +238,12 @@ func serveAsset(assets fs.FS, w http.ResponseWriter, r *http.Request) {
 	if name == "api" || strings.HasPrefix(name, "api/") {
 		problem(w, 404, "NOT_FOUND", "The API endpoint does not exist.")
 		return
+	}
+	for _, prefix := range []string{"data", "cache", "sources", "media", "variants", "originals", "static"} {
+		if name == prefix || strings.HasPrefix(name, prefix+"/") {
+			problem(w, 404, "NOT_FOUND", "The private resource does not exist.")
+			return
+		}
 	}
 	for _, segment := range strings.Split(name, "/") {
 		if strings.HasPrefix(segment, ".") {

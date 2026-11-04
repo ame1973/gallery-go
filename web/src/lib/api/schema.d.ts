@@ -523,10 +523,163 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/albums/{album_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List authorized media in an album
+         * @description An unauthorized or missing album returns 404 even when it contains no media. Processing media may have a null current revision. No source path or GPS metadata is returned.
+         */
+        get: operations["listAlbumMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{media_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read authorized media metadata */
+        get: operations["getMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{media_id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List latest ready presets for the current media revision
+         * @description URLs are canonical session-protected endpoints, not public or expiring bearer capabilities. Failed and retired variants and other revisions are not advertised. Offline downloads remain disabled.
+         */
+        get: operations["listVariants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{media_id}/variants/{variant_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: components["parameters"]["MediaID"];
+                variant_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read an authorized ready variant from the current revision
+         * @description Authentication, active-account/library checks, group grants, source consistency, and ready/current-revision ownership are checked before any byte or conditional response. Only one satisfiable bytes range is supported. Strong ETags are the validators; HTTP-date If-Range values result in a full 200 response because Last-Modified is omitted. No source/cache directory is publicly mounted.
+         */
+        get: operations["getVariantContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Inspect authorized current-variant headers without a body
+         * @description Runs the same authorization and file validation as GET. Range is ignored for HEAD; full representation headers or a conditional status are returned without media bytes.
+         */
+        head: operations["headVariantContent"];
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{media_id}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Download an authorized original from a healthy configured read-only source
+         * @description Requires the actual account's download_original policy, including for administrators, in addition to media visibility. Policy denial is hidden as 404. Healthy registered source, readable mount marker, present entry, and matching current revision/stat signatures are required. Original bytes always use attachment disposition and a sandbox CSP; no fallback bypasses original policy. Changed or unavailable sources return 503 without altering metadata or files.
+         */
+        get: operations["getOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Inspect original headers with the same explicit download policy
+         * @description Does not bypass original policy or source checks. Ignores Range and returns no response body.
+         */
+        head: operations["headOriginal"];
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Media: {
+            id: string;
+            album_id: string;
+            /** @enum {string} */
+            kind: "image" | "video";
+            /** @description Display basename only; never a filesystem path. */
+            file_name: string;
+            width: number | null;
+            height: number | null;
+            duration_ms: number | null;
+            /** @description Current owned revision ID; null while not yet available. */
+            revision: string | null;
+            /** @description False until explicit scoped offline download manifests are enabled. */
+            offline_capable: boolean;
+        };
+        MediaPage: {
+            items: components["schemas"]["Media"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        Variant: {
+            id: string;
+            revision_id: string;
+            preset_key: string;
+            preset_version: number;
+            mime: string;
+            /** Format: int64 */
+            size_bytes: number;
+            sha256: string;
+            width: number | null;
+            height: number | null;
+            duration_ms: number | null;
+            /**
+             * Format: uri-reference
+             * @description Canonical same-origin session-protected path, not a bearer or expiring URL.
+             */
+            content_url: string;
+        };
+        VariantPage: {
+            items: components["schemas"]["Variant"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         NameRequest: {
             /** @description Trimmed name of 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters. */
             name: string;
@@ -714,6 +867,68 @@ export interface components {
         };
     };
     responses: {
+        /** @description Complete authorized bytes with validated media MIME. Originals use attachment disposition; safe ready variants use inline. No source path is disclosed. */
+        MediaContent: {
+            headers: {
+                ETag: components["headers"]["MediaETag"];
+                "Content-Length": components["headers"]["MediaLength"];
+                "Accept-Ranges": components["headers"]["AcceptRanges"];
+                "Content-Disposition": components["headers"]["ContentDisposition"];
+                "Cache-Control": components["headers"]["PrivateContentCache"];
+                [name: string]: unknown;
+            };
+            content: {
+                "*/*": string;
+            };
+        };
+        /** @description One authorized byte range with the same MIME and privacy headers as a complete response. */
+        PartialMediaContent: {
+            headers: {
+                ETag: components["headers"]["MediaETag"];
+                "Content-Length": components["headers"]["MediaLength"];
+                "Content-Range": components["headers"]["ContentRange"];
+                "Accept-Ranges": components["headers"]["AcceptRanges"];
+                "Content-Disposition": components["headers"]["ContentDisposition"];
+                "Cache-Control": components["headers"]["PrivateContentCache"];
+                [name: string]: unknown;
+            };
+            content: {
+                "*/*": string;
+            };
+        };
+        /** @description Authorized full-representation headers without a response body. Range is ignored for HEAD. */
+        MediaContentHead: {
+            headers: {
+                ETag: components["headers"]["MediaETag"];
+                "Content-Length": components["headers"]["MediaLength"];
+                "Accept-Ranges": components["headers"]["AcceptRanges"];
+                "Content-Disposition": components["headers"]["ContentDisposition"];
+                "Cache-Control": components["headers"]["PrivateContentCache"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description Authorized representation has the matching ETag. No response body; authorization and file state were rechecked on this request. */
+        NotModifiedContent: {
+            headers: {
+                ETag: components["headers"]["MediaETag"];
+                "Cache-Control": components["headers"]["PrivateContentCache"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description A single satisfiable bytes range is required. Authentication and resource authorization have already passed. Privacy headers are preserved. */
+        InvalidRange: {
+            headers: {
+                "Content-Range": components["headers"]["ContentRange"];
+                ETag: components["headers"]["MediaETag"];
+                "Cache-Control": components["headers"]["PrivateContentCache"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Group metadata and its current strong version tag. */
         Group: {
             headers: {
@@ -795,6 +1010,15 @@ export interface components {
         };
     };
     parameters: {
+        MediaID: string;
+        /** @description A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies. */
+        Range: string;
+        /** @description Exact strong ETag for resuming a range. A stale or weak tag or HTTP-date value causes a full 200 response. Authorization is always rechecked first. */
+        IfRange: string;
+        /** @description Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks. */
+        IfNoneMatch: string;
+        /** @description Standard content precondition; mismatch returns 412 Problem JSON, unlike versioned metadata mutation conflicts. */
+        ContentIfMatch: string;
         LibraryID: string;
         AlbumID: string;
         /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Group tags use kind group, library/policy tags use library, and album/policy tags use album. */
@@ -813,6 +1037,18 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /** @description Strong SHA-256 representation validator. It is not an authorization capability. */
+        MediaETag: string;
+        /** @description Byte length of the selected full representation or returned single range. */
+        MediaLength: number;
+        /** @description bytes start-end/total for 206, or bytes *\/total for 416. */
+        ContentRange: string;
+        /** @description Only single bytes ranges are supported. */
+        AcceptRanges: "bytes";
+        /** @description Inline for safe ready variants; attachment for originals. Filename parameters are safely encoded. */
+        ContentDisposition: string;
+        /** @description Private content is never shared or globally service-worker cached. */
+        PrivateContentCache: "private, no-store";
         /** @description Strong tag in the quoted form "<kind>:<id>:<version>". Send it unchanged in If-Match. */
         ResourceETag: string;
         /** @description Relative URL of the created resource. */
@@ -1751,6 +1987,189 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Album"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAlbumMedia: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stable ID keyset page filtered by the same media predicate as content reads. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Media metadata without filesystem paths or GPS fields. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listVariants: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope and collection. Account-policy changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                media_id: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded ready-variant metadata without private storage keys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getVariantContent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies. */
+                Range?: components["parameters"]["Range"];
+                /** @description Exact strong ETag for resuming a range. A stale or weak tag or HTTP-date value causes a full 200 response. Authorization is always rechecked first. */
+                "If-Range"?: components["parameters"]["IfRange"];
+                /** @description Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+                /** @description Standard content precondition; mismatch returns 412 Problem JSON, unlike versioned metadata mutation conflicts. */
+                "If-Match"?: components["parameters"]["ContentIfMatch"];
+            };
+            path: {
+                media_id: components["parameters"]["MediaID"];
+                variant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MediaContent"];
+            206: components["responses"]["PartialMediaContent"];
+            304: components["responses"]["NotModifiedContent"];
+            412: components["responses"]["Problem"];
+            416: components["responses"]["InvalidRange"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    headVariantContent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+                /** @description Standard content precondition; mismatch returns 412 Problem JSON, unlike versioned metadata mutation conflicts. */
+                "If-Match"?: components["parameters"]["ContentIfMatch"];
+            };
+            path: {
+                media_id: components["parameters"]["MediaID"];
+                variant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MediaContentHead"];
+            304: components["responses"]["NotModifiedContent"];
+            412: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOriginal: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies. */
+                Range?: components["parameters"]["Range"];
+                /** @description Exact strong ETag for resuming a range. A stale or weak tag or HTTP-date value causes a full 200 response. Authorization is always rechecked first. */
+                "If-Range"?: components["parameters"]["IfRange"];
+                /** @description Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+                /** @description Standard content precondition; mismatch returns 412 Problem JSON, unlike versioned metadata mutation conflicts. */
+                "If-Match"?: components["parameters"]["ContentIfMatch"];
+            };
+            path: {
+                media_id: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MediaContent"];
+            206: components["responses"]["PartialMediaContent"];
+            304: components["responses"]["NotModifiedContent"];
+            412: components["responses"]["Problem"];
+            416: components["responses"]["InvalidRange"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    headOriginal: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+                /** @description Standard content precondition; mismatch returns 412 Problem JSON, unlike versioned metadata mutation conflicts. */
+                "If-Match"?: components["parameters"]["ContentIfMatch"];
+            };
+            path: {
+                media_id: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MediaContentHead"];
+            304: components["responses"]["NotModifiedContent"];
+            412: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

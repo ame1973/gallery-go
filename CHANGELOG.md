@@ -6,6 +6,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Session-protected media metadata, current-ready variant URLs, original-download
+  policy, GET/HEAD/single-Range, strong ETag/conditional handling, and private errors.
+- Root-confined read-only files, configured source/mount-marker checks, immutable
+  variant keys, in-flight change detection, and bounded idle writes without a
+  short metadata timeout or an original-policy fallback.
+- Real HTTPS browser PNG decoding and cross-account/Range/source-outage tests;
+  synthetic files and seeded rows remain confined to temporary test installations.
+
 - Group/membership/library/album-policy APIs with shared SQL visibility, explicit
   deny-by-default library grants, and persistent album restriction state.
 - SQL-authorized library/album metadata, counts, covers, and bounded keyset pages;
