@@ -20,15 +20,20 @@ var ErrInspectPolicy = errors.New("invalid media inspection resource limits")
 type InspectPolicy struct {
 	MaxPixels    int64         `yaml:"max_pixels"`
 	MaxDimension int           `yaml:"max_dimension"`
+	MaxFrames    int           `yaml:"max_frames"`
+	MaxDuration  time.Duration `yaml:"max_duration"`
 	HeaderBytes  int64         `yaml:"header_bytes"`
 	Timeout      time.Duration `yaml:"timeout"`
 }
 
 func DefaultInspectPolicy() InspectPolicy {
-	return InspectPolicy{MaxPixels: 120000000, MaxDimension: 65535, HeaderBytes: 8 << 20, Timeout: 15 * time.Second}
+	return InspectPolicy{MaxPixels: 120000000, MaxDimension: 65535, MaxFrames: 10000, MaxDuration: 24 * time.Hour, HeaderBytes: 8 << 20, Timeout: 15 * time.Second}
 }
 func (policy InspectPolicy) Validate() error {
 	if policy.MaxPixels < 1 || policy.MaxPixels > 1000000000 || policy.MaxDimension < 1 || policy.MaxDimension > 1000000 || policy.HeaderBytes < 512 || policy.HeaderBytes > 32<<20 || policy.Timeout < time.Second || policy.Timeout > time.Minute {
+		return ErrInspectPolicy
+	}
+	if policy.MaxFrames < 1 || policy.MaxFrames > 100000 || policy.MaxDuration < time.Millisecond || policy.MaxDuration > 24*time.Hour {
 		return ErrInspectPolicy
 	}
 	return nil
@@ -50,6 +55,8 @@ type Inspection struct {
 	Orientation *int64     `json:"orientation"`
 	CaptureAt   *time.Time `json:"capture_at"`
 	Animated    *bool      `json:"animated"`
+	FrameCount  *int64     `json:"frame_count"`
+	LoopCount   *int64     `json:"loop_count"`
 	Status      string     `json:"status"`
 	ErrorCode   *string    `json:"error_code"`
 }
@@ -58,7 +65,7 @@ func inspectionFailure(result Inspection, status, code string) Inspection {
 	result.Status = status
 	result.ErrorCode = &code
 	result.Width, result.Height, result.DurationMS, result.Orientation = nil, nil, nil, nil
-	result.CaptureAt, result.Animated = nil, nil
+	result.CaptureAt, result.Animated, result.FrameCount, result.LoopCount = nil, nil, nil, nil
 	return result
 }
 
@@ -132,23 +139,35 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 		} else {
 			width, height := int64(configuration.Width), int64(configuration.Height)
 			result.Width, result.Height, result.Status = &width, &height, "ok"
-			if codec == "jpeg" {
-				animated := false
-				result.Animated = &animated
-				orientation, capture, metadataErr := jpegEXIF(ctx, file, policy.HeaderBytes)
-				if err := ctx.Err(); err != nil {
+			var metadataErr error
+			switch codec {
+			case "jpeg":
+				animated, frames, loops := false, int64(1), int64(1)
+				result.Animated, result.FrameCount, result.LoopCount = &animated, &frames, &loops
+				result.Orientation, result.CaptureAt, metadataErr = jpegEXIF(ctx, file, policy.HeaderBytes)
+			case "gif":
+				if _, err := file.Seek(0, io.SeekStart); err != nil {
 					return Inspection{}, err
 				}
-				switch {
-				case errors.Is(metadataErr, errMetadataLimit):
-					result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
-				case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
-					result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
-				case metadataErr != nil:
-					return Inspection{}, metadataErr
-				default:
-					result.Orientation, result.CaptureAt = orientation, capture
+				var animation gifInfo
+				animation, metadataErr = inspectGIF(ctx, file, before.Size(), policy)
+				if metadataErr == nil {
+					animated := animation.frames > 1
+					result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &animation.frames, &animation.loops, animation.duration
 				}
+			}
+			if err := ctx.Err(); err != nil {
+				return Inspection{}, err
+			}
+			switch {
+			case errors.Is(metadataErr, errMetadataLimit):
+				result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
+			case errors.Is(metadataErr, errGIFUnsupported):
+				result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
+			case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+				result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
+			case metadataErr != nil:
+				return Inspection{}, metadataErr
 			}
 		}
 	}

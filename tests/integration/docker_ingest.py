@@ -37,6 +37,18 @@ def png(width, height):
             chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b""))
 
 
+def animated_gif():
+    # Two real 1x1 LZW images, with positive centisecond delays and two repeats.
+    data = (b"GIF89a" + struct.pack("<HHBBB", 1, 1, 0x80, 0, 0) +
+            b"\x00\x00\x00\xff\xff\xff\x21\xff\x0bNETSCAPE2.0\x03\x01\x02\x00\x00")
+    for delay, pixel in ((10, 0), (20, 1)):
+        data += b"\x21\xf9\x04\x00" + struct.pack("<H", delay) + b"\x00\x00"
+        data += b"\x2c" + struct.pack("<HHHHB", 0, 0, 1, 1, 0)
+        # Clear, one palette index, end-of-information: three 3-bit LSB-first codes.
+        data += b"\x02\x02" + struct.pack("<H", 4 | (pixel << 3) | (5 << 6)) + b"\x00"
+    return data + b"\x3b"
+
+
 class Proxy(http.server.BaseHTTPRequestHandler):
     # This TLS reverse proxy is a test client boundary, not a product endpoint.
     def forward(self):
@@ -115,7 +127,7 @@ def run(image, directory, embedded):
     album.mkdir(parents=True)
     marker = source / ".mounted"
     marker.write_bytes(b"isolated container source marker")
-    inputs = {"first.png": png(12, 7), "second.png": png(13, 7)}
+    inputs = {"first.png": png(12, 7), "second.png": png(13, 7), "animation.gif": animated_gif()}
     for name, data in inputs.items():
         (album / name).write_bytes(data)
         (album / name).chmod(0o444)
@@ -202,25 +214,35 @@ def run(image, directory, embedded):
             "library_id": library["id"], "root_name": "fixture", "minimum_files": 2,
         }, status=201)
         initial = api.scan(registration["id"])
-        assert initial["attempts"] == 1 and initial["succeeded"] == 6 and initial["total_known"] is True, initial
+        assert initial["attempts"] == 1 and initial["succeeded"] == 3 * len(inputs) and initial["total_known"] is True, initial
         albums, _ = api.request("GET", "/albums")
         assert len(albums["items"]) == 1, albums
         album_id = albums["items"][0]["id"]
         media, _ = api.request("GET", f"/albums/{album_id}/media")
-        assert len(media["items"]) == 2, media
+        assert len(media["items"]) == len(inputs), media
         identities = {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]}
-        assert {item["width"] for item in media["items"]} == {12, 13}
+        assert {item["width"] for item in media["items"]} == {1, 12, 13}
+        animation = next(item for item in media["items"] if item["file_name"] == "animation.gif")
+        assert (animation["width"], animation["height"], animation["animated"], animation["frame_count"],
+                animation["duration_ms"], animation["loop_count"]) == (1, 1, True, 2, 300, 3), animation
+        detail, _ = api.request("GET", "/media/" + animation["id"])
+        assert detail == animation, (detail, animation)
+        for item in media["items"]:
+            if item["file_name"].endswith(".png"):
+                assert all(item[field] is None for field in ("animated", "frame_count", "loop_count", "duration_ms")), item
         anonymous = API(origin, certificate)
         anonymous.request("GET", f"/media/{next(iter(identities.values()))[0]}/original", status=401)
         for name, (media_id, _revision) in identities.items():
             original, headers = api.request("GET", f"/media/{media_id}/original", raw=True)
-            assert original == inputs[name] and headers["Content-Type"] == "image/png"
+            expected_mime = "image/gif" if name.endswith(".gif") else "image/png"
+            assert original == inputs[name] and headers["Content-Type"] == expected_mime
             part, headers = api.request("GET", f"/media/{media_id}/original", status=206,
                                         headers={"Range": "bytes=0-3"}, raw=True)
             assert part == inputs[name][:4] and headers["Content-Range"] == f"bytes 0-3/{len(inputs[name])}"
         api.scan(registration["id"], "incremental")
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
+        assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         source.chmod(0o755)
         album.rename(source / "Renamed")
         source.chmod(0o555)
@@ -229,6 +251,7 @@ def run(image, directory, embedded):
         assert len(albums["items"]) == 1 and albums["items"][0]["id"] == album_id, albums
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
+        assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         healthy, _ = api.request("GET", "/admin/sources/" + registration["id"])
         source.chmod(0o755)
         marker.unlink()
@@ -239,6 +262,7 @@ def run(image, directory, embedded):
         assert unavailable["state"] == "unavailable" and unavailable["scan_generation"] == healthy["scan_generation"]
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
+        assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         api.request("GET", f"/media/{next(iter(identities.values()))[0]}/original", status=503)
         ready, _ = api.request("GET", "/health/ready")
         assert ready["status"] == "degraded" and ready["worker"] == "ok", ready
@@ -250,6 +274,7 @@ def run(image, directory, embedded):
         api.scan(registration["id"])
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
+        assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         for name, expected in inputs.items():
             assert hashlib.sha256((source / "Renamed" / name).read_bytes()).digest() == hashlib.sha256(expected).digest()
         denied = subprocess.run(["docker", "exec", container, "/bin/sh", "-ec",
@@ -262,8 +287,8 @@ def run(image, directory, embedded):
                                       "--config", "/app/config/integration.yaml"))
             assert state == {"status": "ok", "database": "ok", "worker": "ok", "sources": "ok"}
         mode = "embedded" if embedded else "standalone"
-        print(f"PASS ({mode}): rootless/read-only native ingestion, SQLite publication plans, private originals/Range, "
-              "stable rename/revision IDs, outage retention/recovery, read-only source and dependency probes")
+        print(f"PASS ({mode}): rootless/read-only PNG/GIF ingestion, GIF frames/cycle/loops, SQLite publication plans, "
+              "private originals/Range, stable rename/revision IDs, outage retention/recovery, source write denial and probes")
     except BaseException:
         if container:
             print(docker("logs", container), file=sys.stderr)

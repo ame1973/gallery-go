@@ -64,8 +64,8 @@ func TestNativeInspectionUsesMagicNotExtensionAndBoundsDimensions(t *testing.T) 
 			if result.Status != "ok" || result.Kind != "image" || result.Format != format || result.Width == nil || *result.Width != 12 || result.Height == nil || *result.Height != 7 || result.ErrorCode != nil {
 				t.Fatal(result)
 			}
-			if format == "gif" && result.Animated != nil {
-				t.Fatal("header-only probe fabricated GIF frame state")
+			if format == "gif" && (result.Animated == nil || *result.Animated) {
+				t.Fatal("complete GIF container did not prove one static frame")
 			}
 			policy := DefaultInspectPolicy()
 			policy.MaxPixels = 83
@@ -77,7 +77,7 @@ func TestNativeInspectionUsesMagicNotExtensionAndBoundsDimensions(t *testing.T) 
 	}
 }
 
-func TestAnimatedGIFInspectionDoesNotPretendStaticOrInventDuration(t *testing.T) {
+func TestAnimatedGIFInspectionReportsOnlyDeclaredContainerTiming(t *testing.T) {
 	frame := image.NewPaletted(image.Rect(0, 0, 3, 2), color.Palette{color.Black, color.White})
 	animation := gif.GIF{Image: []*image.Paletted{frame, frame}, Delay: []int{10, 20}, LoopCount: 0}
 	var data bytes.Buffer
@@ -85,8 +85,8 @@ func TestAnimatedGIFInspectionDoesNotPretendStaticOrInventDuration(t *testing.T)
 		t.Fatal(err)
 	}
 	result := inspectFixture(t, data.Bytes(), "animation.gif", DefaultInspectPolicy())
-	if result.Status != "ok" || result.Animated != nil || result.DurationMS != nil {
-		t.Fatal("header inspection fabricated animation metadata", result)
+	if result.Status != "ok" || result.Animated == nil || !*result.Animated || result.DurationMS == nil || *result.DurationMS != 300 {
+		t.Fatal("GIF container timing was lost or invented", result)
 	}
 }
 

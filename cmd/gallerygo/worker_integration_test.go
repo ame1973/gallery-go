@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -202,6 +204,18 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if err := os.WriteFile(exifName, exifInput, 0o400); err != nil {
 				t.Fatal(err)
 			}
+			palette := color.Palette{color.Black, color.White}
+			first := image.NewPaletted(image.Rect(0, 0, 3, 2), palette)
+			second := image.NewPaletted(image.Rect(0, 0, 3, 2), palette)
+			second.Pix[0] = 1
+			var animation bytes.Buffer
+			if err := gif.EncodeAll(&animation, &gif.GIF{Image: []*image.Paletted{first, second}, Delay: []int{10, 20}, LoopCount: 2}); err != nil {
+				t.Fatal(err)
+			}
+			animationName := filepath.Join(root, "Album", "animation.gif")
+			if err := os.WriteFile(animationName, animation.Bytes(), 0o400); err != nil {
+				t.Fatal(err)
+			}
 			assets := filepath.Join(directory, "web")
 			if err := os.Mkdir(assets, 0o700); err != nil {
 				t.Fatal(err)
@@ -337,7 +351,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			initialID := accepted.ID
 			result := api.waitJob(accepted.ID)
-			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 6 || result.Done != 6 || !result.TotalKnown {
+			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 9 || result.Done != 9 || !result.TotalKnown {
 				t.Fatal("compiled native execution failed", result, result.Counts)
 			}
 			var readiness health.Readiness
@@ -367,21 +381,25 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				Items []media.Metadata `json:"items"`
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 2 {
+			if len(medias.Items) != 3 {
 				t.Fatal("native metadata was not indexed", medias)
 			}
 			ids := make(map[string]string)
 			for _, item := range medias.Items {
 				ids[item.FileName] = item.ID
-				if item.Width == nil || *item.Width != 12 || item.Height == nil || *item.Height != 7 {
-					t.Fatal("EXIF changed encoded source dimensions", item)
+				width, height := int64(12), int64(7)
+				if item.FileName == "animation.gif" {
+					width, height = 3, 2
+				}
+				if item.Width == nil || *item.Width != width || item.Height == nil || *item.Height != height {
+					t.Fatal("encoded source dimensions changed", item)
 				}
 				if item.FileName == "photo.png" && (item.Orientation != nil || item.CaptureAt != nil) {
 					t.Fatal("unknown PNG metadata was invented", item)
 				}
 			}
-			id, exifID := ids["photo.png"], ids["capture.jpg"]
-			if id == "" || exifID == "" {
+			id, exifID, animationID := ids["photo.png"], ids["capture.jpg"], ids["animation.gif"]
+			if id == "" || exifID == "" || animationID == "" {
 				t.Fatal("source basenames were not preserved", medias)
 			}
 			var capture media.Metadata
@@ -390,8 +408,17 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if capture.Orientation == nil || *capture.Orientation != 6 || capture.CaptureAt == nil || !capture.CaptureAt.Equal(wantCapture) || capture.Revision == nil {
 				t.Fatal("compiled JPEG inspection did not publish whitelisted UTC metadata", capture)
 			}
+			var animationMetadata media.Metadata
+			api.request("GET", "/media/"+animationID, nil, 200, &animationMetadata)
+			if animationMetadata.Animated == nil || !*animationMetadata.Animated || animationMetadata.FrameCount == nil || *animationMetadata.FrameCount != 2 || animationMetadata.LoopCount == nil || *animationMetadata.LoopCount != 3 || animationMetadata.DurationMS == nil || *animationMetadata.DurationMS != 300 || animationMetadata.Revision == nil {
+				t.Fatal("compiled GIF metadata did not preserve normalized cycle evidence", animationMetadata)
+			}
 			var original []byte
-			headers := api.request("GET", "/media/"+exifID+"/original", nil, 200, &original)
+			headers := api.request("GET", "/media/"+animationID+"/original", nil, 200, &original)
+			if !bytes.Equal(original, animation.Bytes()) || headers.Get("Content-Type") != "image/gif" {
+				t.Fatal("GIF metadata processing rewrote protected original bytes", headers)
+			}
+			headers = api.request("GET", "/media/"+exifID+"/original", nil, 200, &original)
 			if !bytes.Equal(original, exifInput) || headers.Get("Content-Type") != "image/jpeg" {
 				t.Fatal("EXIF processing rewrote protected original bytes", headers)
 			}
@@ -404,7 +431,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(job, job.Counts)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 2 {
+			if len(medias.Items) != 3 {
 				t.Fatal("repeat execution lost indexed media", medias)
 			}
 			for _, item := range medias.Items {
@@ -413,6 +440,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				}
 				if item.ID == exifID && (item.Revision == nil || *item.Revision != *capture.Revision || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(wantCapture)) {
 					t.Fatal("repeat execution lost source-bound EXIF", item)
+				}
+				if item.ID == animationID && (item.Revision == nil || *item.Revision != *animationMetadata.Revision || item.Animated == nil || !*item.Animated || item.FrameCount == nil || *item.FrameCount != 2 || item.LoopCount == nil || *item.LoopCount != 3 || item.DurationMS == nil || *item.DurationMS != 300) {
+					t.Fatal("repeat execution lost source-bound animation", item)
 				}
 			}
 			api.request("GET", "/admin/sources/"+source.ID, nil, 200, &source)
@@ -429,7 +459,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal("source outage blessed old inventory", source)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 2 {
+			if len(medias.Items) != 3 {
 				t.Fatal("source outage purged old index", medias)
 			}
 			for _, item := range medias.Items {
@@ -445,6 +475,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			if data, err := os.ReadFile(exifName); err != nil || !bytes.Equal(data, exifInput) {
 				t.Fatal("process wrote EXIF source file", err)
+			}
+			if data, err := os.ReadFile(animationName); err != nil || !bytes.Equal(data, animation.Bytes()) {
+				t.Fatal("process wrote GIF source file", err)
 			}
 			api.request("GET", "/health/ready", nil, 200, &readiness)
 			if readiness.Status != "degraded" || readiness.Sources != "degraded" || readiness.Worker != "ok" {

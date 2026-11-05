@@ -10,9 +10,10 @@ password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
-publish read-only inventories, native JPEG/PNG/GIF dimensions, and whitelisted JPEG
-EXIF orientation/explicitly zoned capture time without exposing GPS/raw tags or
-inventing a timezone. See [media metadata](docs/media.md). Management/browsing
+publish read-only inventories, native JPEG/PNG/GIF dimensions, whitelisted JPEG
+EXIF orientation/explicitly zoned capture time, and bounded GIF frame/cycle/loop
+metadata. GPS/raw tags are not exposed and unknown timing stays null. See
+[media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and
 offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
@@ -247,9 +248,10 @@ Screenshots/traces live in ignored test-output directories. Tests never use priv
 source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
-both worker modes against fresh databases/read-only PNGs and EXIF JPEGs, including
-encoded dimensions, UTC capture/orientation, null unknown metadata, unchanged
-protected originals, repeat identity, safe source outage and graceful process shutdown.
+both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, and animated
+GIFs, including encoded dimensions, UTC capture/orientation, frame/cycle/normalized
+loop counts, null unknown metadata, unchanged protected originals, repeat identity,
+safe source outage and graceful process shutdown.
 A separate real SIGKILL regression interrupts native staging and partially published
 multi-source ingestion, closes all original DB handles, then reopens the server and
 worker. It verifies expired-attempt history, live replacement ownership, unchanged
@@ -276,8 +278,9 @@ outages, in-flight changes, and idle-write cancellation. These are serving tests
 not full codec/player or physical-NAS evidence. Container smoke tests use only
 ephemeral tmpfs storage and remove only their own container. The separate ingestion
 harness runs both embedded and standalone CLI consumers in rootless/read-only
-containers over real TLS/auth APIs, read-only generated PNG mounts, and temporary
-SQLite/cache storage. It verifies actual frozen SQLite publication plans, native
+containers over real TLS/auth APIs, read-only generated PNG/GIF mounts, and temporary
+SQLite/cache storage. It verifies GIF frame/cycle/loop evidence, actual frozen SQLite
+publication plans, native
 metadata, original/Range authorization, stable rename/revision IDs, source outage
 retention/recovery, write denial and dependency probes. Host-side fixture changes
 simulate an external rename/outage; no real NAS path or Compose volume is used.

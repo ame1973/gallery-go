@@ -70,20 +70,24 @@ type Metadata struct {
 	Width          *int64     `json:"width"`
 	Height         *int64     `json:"height"`
 	DurationMS     *int64     `json:"duration_ms"`
+	Animated       *bool      `json:"animated"`
+	FrameCount     *int64     `json:"frame_count"`
+	LoopCount      *int64     `json:"loop_count"`
 	Orientation    *int64     `json:"orientation"`
 	CaptureAt      *time.Time `json:"capture_at"`
 	Revision       *string    `json:"revision"`
 	OfflineCapable bool       `json:"offline_capable"`
 }
 
-const mediaSelect = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id,m.orientation,m.capture_at
+const mediaSelect = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id,m.orientation,m.capture_at,
+ json_extract(m.metadata_json,'$.animated'),json_extract(m.metadata_json,'$.frame_count'),json_extract(m.metadata_json,'$.loop_count')
  FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
  LEFT JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id`
 
 func scanMedia(row interface{ Scan(...any) error }) (Metadata, error) {
 	var value Metadata
 	var captured sql.NullInt64
-	err := row.Scan(&value.ID, &value.AlbumID, &value.Kind, &value.FileName, &value.Width, &value.Height, &value.DurationMS, &value.Revision, &value.Orientation, &captured)
+	err := row.Scan(&value.ID, &value.AlbumID, &value.Kind, &value.FileName, &value.Width, &value.Height, &value.DurationMS, &value.Revision, &value.Orientation, &captured, &value.Animated, &value.FrameCount, &value.LoopCount)
 	if captured.Valid {
 		instant := time.UnixMilli(captured.Int64).UTC()
 		value.CaptureAt = &instant

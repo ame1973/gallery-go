@@ -5,7 +5,8 @@ Media metadata and read-only content endpoints use the same SQL visibility rules
 mount, fallback credential, anonymous thumbnail URL, or original-download bypass.
 
 **Current scope:** protected serving and native read-only inventory publication are
-implemented, including bounded JPEG/PNG/GIF dimensions and whitelisted JPEG EXIF.
+implemented, including bounded JPEG/PNG/GIF dimensions, whitelisted JPEG EXIF, and
+GIF frame/cycle/loop metadata.
 External codec processing, normal variant publication, gallery/player screens, and
 offline manifests are still under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
@@ -23,9 +24,9 @@ The server rechecks these conditions before GET, HEAD, Range, or a conditional 3
 - `GET /albums/{album_id}/media` lists visible media in stable ID order. An empty
   authorized album returns an empty page; an unauthorized album returns 404.
 - `GET /media/{media_id}` returns ID, album ID, kind, display basename, nullable
-  dimensions/duration/orientation/capture time/current revision, and offline capability.
-  No absolute path, cache storage key, EXIF GPS field, password, or session capability
-  is returned.
+  dimensions/duration/animation/orientation/capture time/current revision, and offline
+  capability. No absolute path, cache storage key, EXIF GPS field, password, or
+  session capability is returned.
 - `GET /media/{media_id}/variants` lists the latest **ready** preset versions for
   the current owned media revision. Failed, retired, and other-revision variants
   are not advertised. Lists use default limit 30, maximum 100, and scope/collection-
@@ -61,7 +62,7 @@ and header/entry resource limits produce explicit invalid-media work without tru
 metadata. GPS, MakerNote, embedded thumbnails, raw EXIF maps, metadata paths/URLs,
 and unrelated directories are not followed or exposed. This is not full EXIF
 support: PNG EXIF, subseconds, other image containers, and video capture metadata
-remain pending. Native PNG/GIF animation timing is also not implemented.
+remain pending. PNG/APNG and animated WebP timing are not yet implemented.
 
 The inspector version/resource policy and post-inspection full source hash bind
 metadata to immutable staging. Publication retains logical identity on a valid
@@ -69,6 +70,37 @@ rescan, creates a new owned revision for a changed source signature, and clears
 old orientation/capture values when replacement bytes contain no such evidence.
 All metadata remains subject to the same fresh session and shared SQL visibility;
 orientation/capture fields do not grant original-download permission.
+
+### Image animation metadata
+
+Media detail and album-media pages also include these explicitly nullable fields:
+
+- `animated`: true when a fully inspected GIF container has multiple image frames;
+  false for a one-frame GIF or JPEG. Null means unknown, not static, including
+  current PNG/APNG inspection.
+- `frame_count`: the GIF image-frame count, or 1 for JPEG. It is not an estimate
+  from file size, a decoded-pixel count, or proof that every compressed frame decodes.
+- `loop_count`: **total playthroughs**, not repeats after the first play. Zero means
+  infinite, 1 means once, and a finite GIF repeat count of 2 becomes 3. Missing GIF
+  loop extensions mean one playthrough; uninspected formats remain null.
+- `duration_ms`: for GIF, one cycle's sum of positive declared frame delays. It is
+  not multiplied by `loop_count`. If any image frame lacks a positive delay or
+  requests user input, the duration is null. Zero/missing delays are never assigned
+  browser-specific minimum delays or a guessed frames-per-second value.
+
+The GIF inspector streams the complete bounded container without LZW pixel decoding
+or frame-pixel allocation. It checks frame/canvas bounds, palettes, block structure,
+control/loop ambiguity and the final trailer. Comments and unrelated application
+payloads are skipped privately. Plain Text and unknown rendering extensions return
+`CODEC_UNAVAILABLE`, not invented frame/timing evidence. Malformed structures clear
+trusted metadata and count as `INVALID_MEDIA`; input/frame/declared-duration limits
+produce `MEDIA_LIMIT`. See [worker policy bounds](workers.md).
+
+Source hash/revision, inspector version and policy bind this evidence to publication.
+Unchanged rescans retain it; format changes clear stale animation/timing fields.
+APNG/WebP timing, full pixel validation, generated animation/static fallbacks and
+playback variants remain separate implementation/acceptance work. These fields do
+not grant preview/original access or establish player/offline readiness.
 
 ## Read bytes
 

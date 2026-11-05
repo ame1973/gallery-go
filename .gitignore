@@ -25,6 +25,7 @@ coverage/
 *.tsbuildinfo
 playwright-report/
 test-results/
+__pycache__/
 
 # Private application data
 /data/

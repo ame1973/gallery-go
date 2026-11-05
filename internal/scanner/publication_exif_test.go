@@ -59,7 +59,7 @@ func TestPublicationCarriesWhitelistedEXIFAndClearsStaleMetadataOnRewrite(t *tes
 	generation := f.publish(t, "full", ".")
 	var id, revision string
 	var epoch int
-	if err := f.db.QueryRow(`SELECT m.id,m.current_revision_id,(SELECT inspect_version FROM inventory_media WHERE generation_id=?) FROM media m`, generation.ID).Scan(&id, &revision, &epoch); err != nil || epoch != 2 {
+	if err := f.db.QueryRow(`SELECT m.id,m.current_revision_id,(SELECT inspect_version FROM inventory_media WHERE generation_id=?) FROM media m`, generation.ID).Scan(&id, &revision, &epoch); err != nil || epoch != inspectVersion {
 		t.Fatal("EXIF inspection version not pinned", id, epoch, err)
 	}
 	service := media.New(f.db, f.auth, t.TempDir(), map[string]media.SourceRoot{"fixture": root})
@@ -111,27 +111,36 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Reproduce a completed native-header generation written by inspector version 1.
-	data, _ := json.Marshal(struct {
-		Version int
-		Policy  media.InspectPolicy
-	}{1, policy})
-	digest := sha256.Sum256(data)
-	if _, err := f.db.Exec(`UPDATE inventory_generations SET inspect_policy_sha256=? WHERE id=?`, hex.EncodeToString(digest[:]), generation.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.db.Exec(`UPDATE inventory_media SET inspect_version=1 WHERE generation_id=?`, generation.ID); err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.inventory.ProbeMetadata(t.Context(), lease, generation.ID, policy)
-	walkError(t, err, ErrGeneration)
-	after, err := f.queue.Get(t.Context(), lease.Job.ID)
-	if err != nil || after.Counts != before.Counts {
-		t.Fatal("inspector upgrade mixed metadata work or duplicated progress", before.Counts, after.Counts, err)
-	}
-	var version, indexed int
-	if err := f.db.QueryRow(`SELECT (SELECT inspect_version FROM inventory_media WHERE generation_id=?),(SELECT COUNT(*) FROM media)`, generation.ID).Scan(&version, &indexed); err != nil || version != 1 || indexed != 0 {
-		t.Fatal("old immutable metadata was rewritten or published", version, indexed, err)
+	// Versions 1 and 2 predate the GIF frame/duration policy fields. Preserve their
+	// original JSON field order when reproducing the historical policy digest.
+	oldPolicy := struct {
+		MaxPixels    int64
+		MaxDimension int
+		HeaderBytes  int64
+		Timeout      time.Duration
+	}{policy.MaxPixels, policy.MaxDimension, policy.HeaderBytes, policy.Timeout}
+	for _, older := range []int{1, 2} {
+		data, _ := json.Marshal(struct {
+			Version int
+			Policy  any
+		}{older, oldPolicy})
+		digest := sha256.Sum256(data)
+		if _, err := f.db.Exec(`UPDATE inventory_generations SET inspect_policy_sha256=? WHERE id=?`, hex.EncodeToString(digest[:]), generation.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.db.Exec(`UPDATE inventory_media SET inspect_version=? WHERE generation_id=?`, older, generation.ID); err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.inventory.ProbeMetadata(t.Context(), lease, generation.ID, policy)
+		walkError(t, err, ErrGeneration)
+		after, err := f.queue.Get(t.Context(), lease.Job.ID)
+		if err != nil || after.Counts != before.Counts {
+			t.Fatal("inspector upgrade mixed metadata work or duplicated progress", older, before.Counts, after.Counts, err)
+		}
+		var version, indexed int
+		if err := f.db.QueryRow(`SELECT (SELECT inspect_version FROM inventory_media WHERE generation_id=?),(SELECT COUNT(*) FROM media)`, generation.ID).Scan(&version, &indexed); err != nil || version != older || indexed != 0 {
+			t.Fatal("old immutable metadata was rewritten or published", version, indexed, err)
+		}
 	}
 }
 

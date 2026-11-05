@@ -16,12 +16,20 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded streaming GIF frame counts, declared single-cycle duration and normalized
+  total playthroughs, exposed as authorized nullable animation metadata. Missing/zero
+  delays or user-input timing stay unknown; comments/application payloads stay private.
+  Strict byte/frame/duration/time limits, inspector version 3, malformed/ambiguous/
+  unsupported controls, fuzz/cancellation and immutable rewrite tests cover the parser.
+  Actual CLI/HTTPS and rootless container ingestion include real GIF fixtures.
+  This is not full LZW decoding, APNG/WebP timing or READY animation/static variants.
+
 - Bounded, whitelisted JPEG EXIF orientation and explicitly zoned original capture
   time, normalized to UTC in authorized media detail/list responses. Unknown camera
   timezones stay null; no GPS/raw tags, source paths, host timezone or mtime fallback.
   Inspector-version pins, immutable publication/rewrite tests, malformed/resource
   bounds, fuzz tests and real compiled CLI/HTTPS ingestion cover the new metadata.
-  PNG EXIF, subseconds, animation timing and external codecs remain pending.
+  PNG EXIF, subseconds, APNG/WebP timing and external codecs remain pending.
 
 - Actual native indexed-ingestion tests inside rootless/read-only containers for
   embedded and standalone consumers, with generated TLS/auth/API setup, private
@@ -82,9 +90,9 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 - Bounded native JPEG/PNG/GIF header metadata with magic-based MIME, dimension/pixel
   guards, explicit invalid/unsupported diagnostics, and container-header fuzz tests.
-  Whitelisted JPEG EXIF is supported; external codecs, complete EXIF, and animation
-  timing remain unimplemented. No metadata inspection result is a READY variant or
-  a full decode claim.
+  Whitelisted JPEG EXIF and bounded GIF timing are supported; external codecs,
+  complete EXIF and other animation timing remain unimplemented. No metadata
+  inspection result is a READY variant or a full decode claim.
 
 - Bounded root-confined inventory walking with streamed hashes, read-only regular
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.

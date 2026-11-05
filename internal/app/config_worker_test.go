@@ -38,6 +38,8 @@ scanner:
 inspection:
   max_pixels: 999
   max_dimension: 22
+  max_frames: 3
+  max_duration: 2s
   header_bytes: 512
   timeout: 1s
 scheduler:
@@ -47,7 +49,7 @@ scheduler:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Worker.Embedded || c.Worker.Required || c.Worker.Concurrency != 3 || c.Worker.Lease != 6*time.Second || c.Worker.Heartbeat != time.Second || c.Worker.Poll != 100*time.Millisecond || c.Worker.MaxAttempts != 2 || c.Worker.RetryBase != 200*time.Millisecond || c.Worker.RetryMax != 2*time.Second || c.Scanner.MaxDepth != 7 || c.Scanner.MaxFiles != 100 || c.Scanner.MaxFileBytes != 1024 || c.Scanner.BatchSize != 4 || c.Scanner.Timeout != 2*time.Minute || c.Inspection.MaxPixels != 999 || c.Inspection.MaxDimension != 22 || c.Inspection.HeaderBytes != 512 || c.Inspection.Timeout != time.Second || c.Scheduler.Enabled || c.Scheduler.Interval != 2*time.Second {
+	if c.Worker.Embedded || c.Worker.Required || c.Worker.Concurrency != 3 || c.Worker.Lease != 6*time.Second || c.Worker.Heartbeat != time.Second || c.Worker.Poll != 100*time.Millisecond || c.Worker.MaxAttempts != 2 || c.Worker.RetryBase != 200*time.Millisecond || c.Worker.RetryMax != 2*time.Second || c.Scanner.MaxDepth != 7 || c.Scanner.MaxFiles != 100 || c.Scanner.MaxFileBytes != 1024 || c.Scanner.BatchSize != 4 || c.Scanner.Timeout != 2*time.Minute || c.Inspection.MaxPixels != 999 || c.Inspection.MaxDimension != 22 || c.Inspection.MaxFrames != 3 || c.Inspection.MaxDuration != 2*time.Second || c.Inspection.HeaderBytes != 512 || c.Inspection.Timeout != time.Second || c.Scheduler.Enabled || c.Scheduler.Interval != 2*time.Second {
 		t.Fatal(c.Worker, c.Scanner, c.Inspection)
 	}
 	if _, err := os.Stat(filepath.Dir(c.Database)); !os.IsNotExist(err) {
@@ -65,6 +67,8 @@ func TestWorkerAndScanConfigurationRejectsUnsafeOrAmbiguousPolicy(t *testing.T) 
 		"scanner: null", "scanner: {max_depth: 0}", "scanner: {max_depth: 257}", "scanner: {max_files: 0}", "scanner: {max_file_bytes: 0}",
 		"scanner: {batch_size: 0}", "scanner: {batch_size: 257}", "scanner: {timeout: 0s}", "scanner: {unknown: 1}",
 		"inspection: null", "inspection: {max_pixels: 0}", "inspection: {max_dimension: 0}", "inspection: {header_bytes: 511}",
+		"inspection: {max_frames: 0}", "inspection: {max_frames: 100001}", "inspection: {max_frames: null}",
+		"inspection: {max_duration: 0s}", "inspection: {max_duration: 1ns}", "inspection: {max_duration: 25h}", "inspection: {max_duration: null}", "inspection: {max_duration: 1000000000}",
 		"inspection: {timeout: 0s}", "inspection: {timeout: 61s}", "inspection: {max_pixels: null}", "inspection: {unknown: 1}",
 		"auth: null", "sources: null", "null", "worker: &policy {embedded: false}", "worker: &policy {embedded: false}\ninspection: *policy",
 		"worker: {<<: {embedded: false}}", "{1: false}",
