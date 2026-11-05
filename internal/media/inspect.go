@@ -142,6 +142,18 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 			result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &metadata.frames, &metadata.loops, metadata.duration
 			result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
 		}
+	} else if codec == "avif" {
+		var metadata avifInfo
+		metadata, metadataErr = inspectAVIF(ctx, file, before.Size(), policy)
+		if metadataErr == nil {
+			animated, avifCodec := metadata.frames > 1, "av1"
+			result.Status, result.Width, result.Height = "ok", &metadata.width, &metadata.height
+			result.Codec, result.Animated, result.FrameCount = &avifCodec, &animated, &metadata.frames
+			result.DurationMS, result.Orientation, result.CaptureAt = metadata.duration, metadata.orientation, metadata.capture
+			if metadata.loopKnown {
+				result.LoopCount = &metadata.loops
+			}
+		}
 	} else if kind == "video" {
 		var metadata videoInfo
 		metadata, metadataErr = inspectVideo(ctx, file, codec, policy)
@@ -201,14 +213,14 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 	switch {
 	case errors.Is(metadataErr, errMetadataLimit):
 		result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
-	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported), errors.Is(metadataErr, errVideoUnsupported):
+	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported), errors.Is(metadataErr, errAVIFUnsupported), errors.Is(metadataErr, errVideoUnsupported):
 		result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
-	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, errVideoMetadata), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, errAVIF), errors.Is(metadataErr, errVideoMetadata), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
 		result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
 	case metadataErr != nil:
 		return Inspection{}, metadataErr
 	}
-	if result.Status == "ok" && result.Kind == "image" {
+	if result.Status == "ok" && result.Kind == "image" && result.Codec == nil {
 		nativeCodec := result.Format
 		result.Codec = &nativeCodec
 	}
@@ -249,7 +261,18 @@ func sniffMedia(header []byte) (kind, mime, codec string) {
 		switch brand {
 		case "avif", "avis":
 			return "image", "image/avif", "avif"
-		case "heic", "heix", "hevc", "hevx", "mif1", "msf1":
+		case "mif1", "msf1":
+			boxSize := uint64(binary.BigEndian.Uint32(header[:4]))
+			if boxSize >= 16 && boxSize <= uint64(len(header)) {
+				for offset := 16; offset+4 <= int(boxSize); offset += 4 {
+					compatible := string(header[offset : offset+4])
+					if compatible == "avif" || compatible == "avis" {
+						return "image", "image/avif", "avif"
+					}
+				}
+			}
+			return "image", "image/heif", "heif"
+		case "heic", "heix", "hevc", "hevx":
 			return "image", "image/heif", "heif"
 		case "qt  ":
 			return "video", "video/quicktime", "quicktime"

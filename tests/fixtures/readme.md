@@ -12,6 +12,23 @@ mount is involved. Tests do not need an encoder at runtime.
 These tiny fixtures exercise real compressed image data, not just fabricated codec
 headers. They do not establish full decoder, animation-player, NAS or device support.
 
+## Owned AVIF vectors
+
+`avif.json` contains complete AV1 image containers over the same owned 16-by-12
+frames. System FFmpeg 6.1.1 `libaom-av1` generated still, two-play, infinite and
+one-play sequences at 5 fps with one encoder thread. Each sequence has two real
+frames and a 400 ms cycle. AVIF total plays do not add GIF's initial-play offset.
+
+The EXIF/rotated/mirrored still variants rebuild only bounded item/property metadata
+around those original coded pixels: a primary-associated synthetic classic-TIFF
+profile carries orientation, original date/offset and `.123` subseconds. `irot=3`
+and then `imir=1` prove association-order transform composition. No GPS or personal
+photograph is present. Every vector was independently frame-decoded during
+generation; system libvips also read the still EXIF/time metadata. That libvips
+build did not recognize the valid sequence vectors, so tests do not equate a
+single tool's file-recognition list with complete codec support. Runtime tests
+need only the fixed isolated FFprobe and checked-in vectors, not an encoder.
+
 ## Owned video vectors
 
 `video.json` contains tiny complete containers generated with system FFmpeg 6.1.1

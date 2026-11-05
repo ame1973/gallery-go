@@ -6,8 +6,9 @@ mount, fallback credential, anonymous thumbnail URL, or original-download bypass
 
 **Current scope:** protected serving, native image inventory and controlled video
 metadata publication are implemented. Native JPEG/PNG/GIF/WebP dimensions,
-whitelisted image EXIF, GIF/APNG/WebP frame/cycle/loop metadata and sandboxed
-MP4/MOV/MKV/WebM codec/geometry/duration/transform/creation evidence are available.
+whitelisted image EXIF, GIF/APNG/WebP frame/cycle/loop metadata, controlled AVIF
+primary-item/sequence metadata and sandboxed MP4/MOV/MKV/WebM codec/geometry/
+duration/transform/creation evidence are available.
 External image capabilities, normal variant publication, gallery/player screens,
 and offline manifests remain under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
@@ -54,12 +55,13 @@ when evidence is absent:
   never used as a codec value. Codec availability is not browser playback readiness.
 - `width` and `height` are the source's encoded pixel dimensions. EXIF orientation
   does not swap them or rewrite the original.
-- `orientation` is the JPEG/PNG/WebP EXIF orientation integer `1..8`; null means unknown,
+- `orientation` is a validated EXIF integer `1..8` or equivalent ordered AVIF/video
+  transform; null means unknown,
   not an inferred value of 1. Image viewers must respect it unless their decoder
   already does. Video uses equivalent validated orthogonal display transforms as
   described below; browser video decoders may already apply that transform. Never
   transform twice. Generated orientation-normalized variants are still pending.
-- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP
+- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP/AVIF
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
   substitutes file mtime, modification/digitization time, or its own timezone.
@@ -70,8 +72,8 @@ when evidence is absent:
   ASCII-space padding is allowed; non-digits, duplicate tags and unsafe counts/offsets
   are rejected. The subsecond ASCII value is capped at 64 bytes including its NUL.
 
-Only the bounded JPEG APP1/PNG eXIf/WebP EXIF classic-TIFF orientation and original
-time/offset fields are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
+Only bounded JPEG APP1/PNG eXIf/WebP EXIF/primary-associated AVIF Exif classic-TIFF
+orientation and original time/offset fields are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
 must occur once before IDAT. WebP accepts a raw TIFF profile or its Exif prefix.
 Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
 and header/entry resource limits produce explicit invalid-media work without trusted
@@ -91,16 +93,17 @@ orientation/capture fields do not grant original-download permission.
 
 Media detail and album-media pages also include these explicitly nullable fields:
 
-- `animated`: true when a fully inspected PNG/APNG, GIF or WebP container has multiple
-  animation frames; false for one-frame PNG/GIF/WebP or JPEG. Null means unknown, not static.
+- `animated`: true when an inspected PNG/APNG, GIF, WebP or AVIF container has multiple
+  image-animation frames; false for proven one-frame images. Null means unknown, not static.
   APNG's separate default image is not counted unless its frame control includes it.
-- `frame_count`: the proven image-animation frame count, or 1 for static PNG/JPEG/WebP.
+- `frame_count`: the proven image frame/sample count, or 1 for a proven still image.
   It is not an estimate from file size, a decoded-pixel count, or proof that every
   compressed frame decodes.
 - `loop_count`: **total playthroughs**, not repeats after the first play. Zero means
   infinite, 1 means once, and a finite GIF repeat count of 2 becomes 3. APNG
   `num_plays` and WebP loop counts are already totals and are not incremented. Missing GIF loop extensions
-  mean one playthrough; uninspected formats remain null.
+  mean one playthrough; uninspected formats remain null. AVIF whole-edit counts are
+  normalized as total plays without adding a GIF-style initial play; see below.
 - `duration_ms`: one cycle's sum of positive declared frame delays, never multiplied
   by `loop_count`. APNG uses exact rational delays rounded upward once for the complete
   cycle; a zero denominator means 100. Zero numerators/delays, missing GIF delays, or
@@ -132,6 +135,53 @@ Unchanged rescans retain it; format changes replace stale animation/timing/EXIF 
 fresh evidence. Full pixel validation, generated animation/static fallbacks and
 playback variants remain separate implementation/acceptance work. These fields do
 not grant preview/original access or establish player/offline readiness.
+
+## Controlled AVIF metadata
+
+Directly coded AV1 primary items and AVIF image sequences use a bounded ISO-BMFF
+metadata reader plus the same mandatory [FFprobe sandbox](codec-sandbox.md).
+The reader proves local item/sample relationships first; the tool must independently
+report AV1 and matching encoded dimensions. A tool name, extension or `avif` brand
+alone cannot establish a successful inspection. Missing isolation/codec capability
+remains explicit `CODEC_UNAVAILABLE`, never a header-only success fallback.
+
+- The primary item is selected through `pitm`, `iinf`/`infe`, `iloc` and `ipma`/`ipco`,
+  not whichever thumbnail or metadata item appears first. Local file/`idat` extents
+  must remain within their declared containers. External/protected references are
+  unsupported and never followed.
+- The primary item's `ispe` dimensions and AV1 configuration must agree with the
+  controlled probe. `irot` and `imir` properties compose in association order and
+  normalize to EXIF `1..8`; explicitly signaled item transforms precede EXIF fallback.
+  Encoded width/height are not swapped and source pixels are not rewritten.
+- Only a primary-associated `Exif` item is considered. Its bounded offset/profile
+  uses the same classic-TIFF whitelist for original date/explicit timezone/subseconds.
+  Capture is truncated to UTC milliseconds; GPS, raw fields, MakerNote, thumbnails,
+  metadata URLs and unrelated-image EXIF are not exposed. Ambiguous EXIF associations
+  or malformed values cannot silently replace trusted evidence.
+- A proven still-only container has one frame and one play, with null duration.
+  Sequence counts/timing come from consistent sample-size/timing/chunk tables with
+  nonempty local extents, never guessed FPS or primary-item presence. Positive exact
+  cycle timing rounds upward once to milliseconds; zero/missing timing remains null.
+- Finite repetition requires the edit-list repeat setting and a whole number of
+  declared edits in the track playback span, allowing at most one movie-clock tick
+  of edit quantization. The normalized value is total plays, not additional repeats.
+  Proven indefinite spans mean zero; missing/unproven/partial repetition stays null.
+  A known non-repeating edit means one. Loop counts never multiply `duration_ms`.
+
+The byte budget limits metadata reads, not the size of a copied `mdat`: compressed
+payloads are skipped/extent-checked and later source hashing is streamed. Independent
+caps include 4,096 boxes, 256 items, 16 extents per item, 64 associations per item,
+64 tracks, configured dimensions/pixels/frames/cycle duration and a 64 KiB EXIF item.
+The current profile explicitly rejects generic HEIF major brands, derived-grid primary items, protected or
+external data, ambiguous color tracks and unknown essential properties rather than
+guessing. These profiles and other image formats remain complete-codec/variant
+acceptance work, not an unrestricted fallback.
+
+Inspector v8 rejects historical v1..v7 policy pins. Source hash/configuration and
+live publication fences are unchanged. Owned still/finite/infinite/EXIF/transform
+fixtures exercise actual probing, immutable SQLite publication, source rewrites and
+compiled consumers. This is metadata evidence, not validation of every compressed
+AV1 frame, browser animation, packaged container codec or physical NAS/device.
 
 ## Controlled video metadata
 

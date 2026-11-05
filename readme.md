@@ -15,7 +15,9 @@ JPEG/PNG/WebP EXIF orientation/explicitly zoned capture time normalized to milli
 and bounded GIF/APNG/WebP frame/cycle/loop metadata. With a trusted system FFprobe
 and mandatory Linux isolation they also publish MP4/MOV/MKV/WebM codec, dimensions,
 declared duration, orthogonal display transforms and explicitly zoned creation
-metadata. GPS/raw tags are not exposed and unknown timing stays null. See
+metadata. The same sandbox also cross-checks bounded AVIF primary-item/sequence
+metadata with ordered transforms, EXIF and declared image timing/plays. GPS/raw tags
+are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and
 offline downloads are still being built. Do not expose this build
@@ -258,8 +260,8 @@ source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
 both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs, APNGs,
-WebP and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
-cases verify 27 work units, image animation, video codec/geometry/duration/display
+WebP, AVIF and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
+cases verify 33 work units, image animation, video codec/geometry/duration/display
 transforms, UTC milliseconds, unknown-null semantics, protected original/Range and
 anonymous denial, stable complete metadata/revisions on rescan, outage retention
 and graceful shutdown. Video fixtures need no runtime encoder and do not establish

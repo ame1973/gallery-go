@@ -311,7 +311,13 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					t.Fatal(err)
 				}
 			}
-			mediaCount := 5 + len(videos)
+			avifs := scanAVIFFixtures(t)
+			for name, data := range avifs {
+				if err := os.WriteFile(filepath.Join(root, "Album", name), data, 0o400); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mediaCount := 5 + len(videos) + len(avifs)
 			workUnits := int64(mediaCount * 3)
 			assets := filepath.Join(directory, "web")
 			if err := os.Mkdir(assets, 0o700); err != nil {
@@ -494,12 +500,26 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				if item.Codec == nil || !media.ValidCodec(*item.Codec) {
 					t.Fatal("trusted source codec was not indexed", item)
 				}
+				if data, ok := avifs[item.FileName]; ok {
+					width, height = 16, 12
+					if item.Kind != "image" || *item.Codec != "av1" || item.Animated == nil || item.FrameCount == nil || item.LoopCount == nil {
+						t.Fatal("AVIF container evidence missing", item)
+					}
+					if item.FileName == "still.avif" {
+						if *item.Animated || *item.FrameCount != 1 || *item.LoopCount != 1 || item.DurationMS != nil || item.Orientation == nil || *item.Orientation != 5 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != "2026-11-05T04:34:56.123Z" {
+							t.Fatal("AVIF ordered transforms/EXIF were not published", item)
+						}
+					} else if !*item.Animated || *item.FrameCount != 2 || *item.LoopCount != 2 || item.DurationMS == nil || *item.DurationMS != 400 || item.Orientation != nil || item.CaptureAt != nil {
+						t.Fatal("AVIF total plays/cycle were guessed", item)
+					}
+					assertCompiledOriginal(t, api, item.ID, data, "image/avif")
+				}
 				if fixture, ok := videos[item.FileName]; ok {
 					width, height = 16, 12
 					if item.Kind != "video" || *item.Codec != fixture.codec || item.DurationMS == nil || *item.DurationMS != 400 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != fixture.capture || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil || fixture.orientation == 0 && item.Orientation != nil || fixture.orientation != 0 && (item.Orientation == nil || *item.Orientation != fixture.orientation) {
 						t.Fatal("compiled video metadata lost or invented evidence", item)
 					}
-					assertCompiledVideoOriginal(t, api, item.ID, fixture)
+					assertCompiledOriginal(t, api, item.ID, fixture.data, fixture.mime)
 				}
 				if item.Width == nil || *item.Width != width || item.Height == nil || *item.Height != height {
 					t.Fatal("encoded source dimensions changed", item)
@@ -633,6 +653,14 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				info, statErr := os.Stat(path)
 				if err != nil || statErr != nil || !bytes.Equal(data, fixture.data) || info.Mode().Perm() != 0o400 {
 					t.Fatal("process changed read-only video source", name, err, statErr)
+				}
+			}
+			for name, expected := range avifs {
+				path := filepath.Join(root, "Album", name)
+				data, err := os.ReadFile(path)
+				info, statErr := os.Stat(path)
+				if err != nil || statErr != nil || !bytes.Equal(data, expected) || info.Mode().Perm() != 0o400 {
+					t.Fatal("process changed read-only AVIF source", name, err, statErr)
 				}
 			}
 			api.request("GET", "/health/ready", nil, 200, &readiness)

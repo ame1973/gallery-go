@@ -101,7 +101,7 @@ func TestInspectionExplicitlyDiagnosesUnsupportedAndInvalidInputs(t *testing.T) 
 		data                           []byte
 		name, kind, mime, status, code string
 	}{
-		{avif, "video.mov", "image", "image/avif", "unsupported", "CODEC_UNAVAILABLE"},
+		{avif, "video.mov", "image", "image/avif", "invalid", "INVALID_MEDIA"},
 		{webp, "image.webp", "image", "image/webp", "invalid", "INVALID_MEDIA"},
 		{[]byte("\x1a\x45\xdf\xa3\x8b\x42\x82\x88matroska"), "video.mkv", "video", "video/x-matroska", "invalid", "INVALID_MEDIA"},
 		{[]byte("\x1a\x45\xdf\xa3\x87\x42\x82\x84webm"), "video.webm", "video", "video/webm", "invalid", "INVALID_MEDIA"},

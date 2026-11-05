@@ -5,8 +5,8 @@
 GalleryGo executes **one fixed metadata command**, `/usr/bin/ffprobe`, inside a
 mandatory Linux boundary. The scan inspector uses it for [controlled video
 metadata](media.md); native images keep their separate bounded parser. This does
-not establish HEIF/AVIF/TIFF capability, complete decoding, generated variants, a
-new API or a configurable command runner. The current container does not bundle
+not establish complete HEIF/TIFF/RAW capability or AVIF/video decoding,
+generated variants, a new API or a configurable command runner. The current container does not bundle
 FFprobe.
 
 The caller supplies an already-confined, read-only regular file descriptor, not a

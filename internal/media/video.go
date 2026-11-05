@@ -84,43 +84,74 @@ func (policy InspectPolicy) PinCodecRuntime(ctx context.Context) (InspectPolicy,
 // filesystem path, capability claim or metadata API field.
 func (policy InspectPolicy) CodecRuntimePin() string { return policy.codecRuntime }
 
-func inspectVideo(ctx context.Context, input *os.File, container string, policy InspectPolicy) (videoInfo, error) {
+func probeCodec(ctx context.Context, input *os.File, policy InspectPolicy) ([]byte, error) {
 	if policy.codecRuntime == "" {
 		var err error
 		policy, err = policy.PinCodecRuntime(ctx)
 		if err != nil {
-			return videoInfo{}, err
+			return nil, err
 		}
 	}
 	if policy.codecRuntime == "unavailable" {
-		return videoInfo{}, errVideoUnsupported
+		return nil, errVideoUnsupported
 	}
 	limits := sandbox.DefaultLimits()
 	limits.Timeout = policy.Timeout
 	output, err := sandbox.Probe(ctx, input, limits, policy.codecRuntime)
 	switch {
 	case errors.Is(err, sandbox.ErrRuntimeChanged):
-		return videoInfo{}, ErrContentChanged
+		return nil, ErrContentChanged
 	case errors.Is(err, sandbox.ErrUnavailable):
-		return videoInfo{}, errVideoUnsupported
+		return nil, errVideoUnsupported
 	case errors.Is(err, sandbox.ErrResource), errors.Is(err, sandbox.ErrInput):
-		return videoInfo{}, errMetadataLimit
+		return nil, errMetadataLimit
 	case errors.Is(err, sandbox.ErrProbe):
-		return videoInfo{}, errVideoMetadata
+		return nil, errVideoMetadata
 	case err != nil:
+		return nil, err
+	}
+	return output, nil
+}
+
+func inspectVideo(ctx context.Context, input *os.File, container string, policy InspectPolicy) (videoInfo, error) {
+	output, err := probeCodec(ctx, input, policy)
+	if err != nil {
 		return videoInfo{}, err
 	}
 	return parseVideoProjection(output, container, policy)
 }
 
-func parseVideoProjection(data []byte, container string, policy InspectPolicy) (videoInfo, error) {
-	if len(data) > 1<<20 {
-		return videoInfo{}, errMetadataLimit
-	}
+func decodeCodecProjection(data []byte, family string, policy InspectPolicy) (videoProjection, error) {
 	var projection videoProjection
-	if strictjson.Decode(data, &projection) != nil || len(projection.Programs) != 0 || len(projection.StreamGroups) != 0 || len(projection.Streams) > 1 {
-		return videoInfo{}, errVideoMetadata
+	if len(data) > 1<<20 {
+		return projection, errMetadataLimit
 	}
+	if strictjson.Decode(data, &projection) != nil || len(projection.Programs) != 0 || len(projection.StreamGroups) != 0 || len(projection.Streams) > 1 {
+		return projection, errVideoMetadata
+	}
+	if projection.Format.Name != family {
+		return projection, errVideoMetadata
+	}
+	if len(projection.Streams) == 0 {
+		return projection, errVideoUnsupported
+	}
+	stream := projection.Streams[0]
+	if stream.Index == nil || *stream.Index < 0 || *stream.Index >= 64 || stream.Kind != "video" || stream.Disposition.Attached == nil || *stream.Disposition.Attached != 0 {
+		return projection, errVideoMetadata
+	}
+	if stream.Codec == "" || stream.Codec == "unknown" {
+		return projection, errVideoUnsupported
+	}
+	if !ValidCodec(stream.Codec) || stream.Width == nil || stream.Height == nil || *stream.Width < 1 || *stream.Height < 1 {
+		return projection, errVideoMetadata
+	}
+	if *stream.Width > int64(policy.MaxDimension) || *stream.Height > int64(policy.MaxDimension) || *stream.Width > policy.MaxPixels / *stream.Height {
+		return projection, errMetadataLimit
+	}
+	return projection, nil
+}
+
+func parseVideoProjection(data []byte, container string, policy InspectPolicy) (videoInfo, error) {
 	family := "mov,mp4,m4a,3gp,3g2,mj2"
 	switch container {
 	case "mp4", "quicktime":
@@ -129,25 +160,11 @@ func parseVideoProjection(data []byte, container string, policy InspectPolicy) (
 	default:
 		return videoInfo{}, errVideoUnsupported
 	}
-	if projection.Format.Name != family {
-		return videoInfo{}, errVideoMetadata
-	}
-	if len(projection.Streams) == 0 {
-		return videoInfo{}, errVideoUnsupported
+	projection, err := decodeCodecProjection(data, family, policy)
+	if err != nil {
+		return videoInfo{}, err
 	}
 	stream := projection.Streams[0]
-	if stream.Index == nil || *stream.Index < 0 || *stream.Index >= 64 || stream.Kind != "video" || stream.Disposition.Attached == nil || *stream.Disposition.Attached != 0 {
-		return videoInfo{}, errVideoMetadata
-	}
-	if stream.Codec == "" || stream.Codec == "unknown" {
-		return videoInfo{}, errVideoUnsupported
-	}
-	if !ValidCodec(stream.Codec) || stream.Width == nil || stream.Height == nil || *stream.Width < 1 || *stream.Height < 1 {
-		return videoInfo{}, errVideoMetadata
-	}
-	if *stream.Width > int64(policy.MaxDimension) || *stream.Height > int64(policy.MaxDimension) || *stream.Width > policy.MaxPixels / *stream.Height {
-		return videoInfo{}, errMetadataLimit
-	}
 	duration, err := videoDuration(stream.Duration, policy.MaxDuration)
 	if err != nil {
 		return videoInfo{}, err

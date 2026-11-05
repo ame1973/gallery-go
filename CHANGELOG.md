@@ -16,6 +16,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Controlled AVIF primary-item/sequence metadata with bounded ISO-BMFF item,
+  property, local-extent and sample-table validation plus isolated AV1/dimension
+  cross-checks. Ordered rotation/mirroring, primary-associated whitelisted EXIF,
+  exact one-cycle timing and total edit-list playthroughs retain unknown-null
+  semantics. Inspector v8 rejects older policy pins. Owned still/finite/infinite/
+  EXIF/transform vectors, malformed/resource/fuzz tests, SQLite rewrite/publication
+  and actual 33-unit CLI/HTTPS modes cover the new path. Generic-major-brand/derived/protected/external/
+  ambiguous/unknown-essential layouts remain explicit unsupported work; this is not
+  full AV1 pixel validation, READY variants or container codec packaging.
+
 - Controlled MP4/MOV/MKV/WebM metadata through the fixed Linux FFprobe sandbox:
   primary non-attached video codec, encoded geometry, exact declared duration,
   orthogonal display-matrix orientation and explicitly zoned creation evidence

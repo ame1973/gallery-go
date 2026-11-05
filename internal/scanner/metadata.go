@@ -16,7 +16,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-const inspectVersion = 7
+const inspectVersion = 8
 
 type inspectedFile struct {
 	file       File

@@ -50,7 +50,8 @@ intents rather than guessing roots or scopes. Queued work cannot progress withou
 a compatible embedded or standalone consumer.
 
 The pipeline performs bounded manifests and streamed hashes, native JPEG/PNG/GIF/WebP
-metadata, whitelisted image EXIF/animation and controlled MP4/MOV/MKV/WebM metadata,
+metadata, whitelisted image EXIF/animation, controlled AVIF primary items/sequences
+and MP4/MOV/MKV/WebM metadata,
 then fenced indexed publication. Indexed resources and authorized originals become
 available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
@@ -66,7 +67,7 @@ explicit failed work. External image capabilities and variant processing remain
 under development. Video uses the fail-closed [codec sandbox](codec-sandbox.md),
 with strict JSON, codec/geometry/duration checks, orthogonal display transforms
 and explicitly zoned creation tags. Its private trusted-installation epoch joins
-inspector v7/resource policy in immutable staging, with per-child epoch checks and
+inspector v8/resource policy in immutable staging, with per-child epoch checks and
 post-probe source rehashing. Keep trusted codecs immutable while workers run.
 Missing tools/kernel support count as unsupported failed media, not successful or
 silently skipped work; the current container still does not include codecs.
@@ -84,6 +85,13 @@ Missing/zero delays and user-input timing remain unknown, never browser-clamped.
 PNG/GIF/WebP files exceeding the metadata byte budget fail with `MEDIA_LIMIT` even when the
 separate scanner input-file budget is larger. Plain Text/unknown rendering extensions
 are explicitly unsupported; metadata success is not LZW decoding or player readiness.
+
+AVIF reads bounded primary-item/sample tables while skipping compressed payloads,
+then cross-checks AV1/encoded dimensions through the sandbox. It validates local
+extents, ordered transforms and primary-associated EXIF; image timing comes from
+sample tables and declared edit repetition, never FPS. Unknown/unsupported profiles
+stay explicit. Native-only deployments without the probe cannot bless AVIF from
+headers. See [AVIF boundaries](media.md#controlled-avif-metadata).
 
 ## Strict YAML policies
 

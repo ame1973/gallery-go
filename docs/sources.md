@@ -167,8 +167,8 @@ share one fenced transaction; no raw source path or system error enters these DT
 ## Inventory processing boundaries
 
 The backend can stage a complete, bounded, root-confined filesystem manifest and
-native JPEG/PNG/GIF/WebP metadata, whitelisted image EXIF/animation, and sandboxed
-MP4/MOV/MKV/WebM codec/geometry/duration/display-transform/explicit-UTC evidence in
+native JPEG/PNG/GIF/WebP metadata, whitelisted image EXIF/animation, controlled AVIF
+primary-item/sequence evidence and sandboxed MP4/MOV/MKV/WebM metadata in
 private database tables. See [media metadata](media.md) for unknown/timezone/privacy
 rules and capability requirements. It revalidates streamed source hashes instead
 of trusting equal sizes/timestamps, pins inspector/resource policy plus a private
