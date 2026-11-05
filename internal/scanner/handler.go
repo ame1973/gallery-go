@@ -245,8 +245,20 @@ func (s *Scans) recordSourceFailure(ctx context.Context, lease jobs.Lease, inven
 		if err := inventory.AbortTx(ctx, tx, lease, generation.ID, code, path); err != nil {
 			return err
 		}
-	} else if err := inventory.workProgress(ctx, tx, lease, 0, 1, 0); err != nil {
-		return err
+	} else {
+		inserted, err := tx.ExecContext(ctx, `INSERT INTO job_issues(id,job_id,attempt,source_id,source_config_version,generation_id,relative_path,error_code,created_at) VALUES(?,?,?,?,?,'',?,?,?) ON CONFLICT(job_id,attempt,source_id,generation_id,relative_path,error_code) DO NOTHING`, store.NewID(), lease.Job.ID, lease.Job.Attempts, target.sourceID, target.config, path, code, s.clock().UnixMilli())
+		if err != nil {
+			return err
+		}
+		count, err := inserted.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 0 {
+			if err := inventory.workProgress(ctx, tx, lease, 0, 1, 0); err != nil {
+				return err
+			}
+		}
 	}
 	if err := inventory.sources.RecordScanFailureTx(ctx, tx, target.sourceID, target.config, code); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err

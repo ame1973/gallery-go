@@ -652,6 +652,25 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if job := api.waitJob(accepted.ID); job.Status != "dead" || job.Attempts != 2 || job.Failed != 2 {
 				t.Fatal("source outage was hidden", job, job.Counts)
 			}
+			var issuePage struct {
+				Items      []jobs.Issue `json:"items"`
+				NextCursor *string      `json:"next_cursor"`
+				HasMore    bool         `json:"has_more"`
+			}
+			api.request("GET", "/admin/jobs/"+accepted.ID+"/issues?limit=1", nil, 200, &issuePage)
+			if len(issuePage.Items) != 1 || !issuePage.HasMore || issuePage.NextCursor == nil {
+				t.Fatal("compiled source failures did not expose bounded diagnostic history", issuePage)
+			}
+			firstIssue := issuePage.Items[0]
+			api.request("GET", "/admin/jobs/"+accepted.ID+"/issues?limit=1&cursor="+*issuePage.NextCursor, nil, 200, &issuePage)
+			if len(issuePage.Items) != 1 || issuePage.HasMore || issuePage.NextCursor != nil || issuePage.Items[0].ID == firstIssue.ID {
+				t.Fatal("compiled diagnostic cursor lost or duplicated attempts", issuePage)
+			}
+			for _, issue := range []jobs.Issue{firstIssue, issuePage.Items[0]} {
+				if issue.Attempt < 1 || issue.Attempt > 2 || issue.SourceID != source.ID || issue.SourceConfigVersion != source.ConfigVersion || issue.GenerationID == nil || issue.RelativePath == nil || *issue.RelativePath != "." || issue.ErrorCode != "SOURCE_UNAVAILABLE" || issue.Message == "" {
+					t.Fatal("compiled scan diagnostics guessed or lost safe historical context", issue)
+				}
+			}
 			api.request("GET", "/admin/sources/"+source.ID, nil, 200, &source)
 			if source.ScanGeneration != generation || source.State != "unavailable" {
 				t.Fatal("source outage blessed old inventory", source)

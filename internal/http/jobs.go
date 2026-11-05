@@ -58,6 +58,25 @@ func (h jobHandler) attempts(w http.ResponseWriter, r *http.Request) {
 	writePage(w, page, items, func(attempt jobs.Attempt) string { return strconv.Itoa(attempt.Number) })
 }
 
+func (h jobHandler) issues(w http.ResponseWriter, r *http.Request) {
+	page, ok := readPage(w, r)
+	if !ok {
+		return
+	}
+	for key := range page.query {
+		if key != "limit" && key != "cursor" {
+			problem(w, 400, "INVALID_FILTER", "Issue pages support only limit and cursor.")
+			return
+		}
+	}
+	items, err := h.service.Issues(r.Context(), currentSession(r), r.PathValue("job_id"), page.cursor.After, page.limit+1)
+	if err != nil {
+		requestError(w, err)
+		return
+	}
+	writePage(w, page, items, func(issue jobs.Issue) string { return issue.ID })
+}
+
 func (h jobHandler) cancel(w http.ResponseWriter, r *http.Request) { h.mutate(w, r, false) }
 func (h jobHandler) retry(w http.ResponseWriter, r *http.Request)  { h.mutate(w, r, true) }
 

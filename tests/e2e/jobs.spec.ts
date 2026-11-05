@@ -11,6 +11,7 @@ test('HTTPS job controls enforce administrator access, versions, filter cursors,
 }, testInfo) => {
   const path = `/api/v2/admin/jobs/jobs-${testInfo.project.name}-queued`;
   expect((await request.get(path)).status()).toBe(401);
+  expect((await request.get(`${path}/issues`)).status()).toBe(401);
   const initial = await administrator.api.get(path);
   expect(initial.status()).toBe(200);
   expect(initial.headers()['cache-control']).toBe('private, no-store');
@@ -20,7 +21,7 @@ test('HTTPS job controls enforce administrator access, versions, filter cursors,
   const initialTag = initial.headers().etag!;
 
   await signIn(page, account);
-  for (const url of ['/api/v2/admin/jobs', path, `${path}/attempts`]) {
+  for (const url of ['/api/v2/admin/jobs', path, `${path}/attempts`, `${path}/issues`]) {
     expect((await context.request.get(url)).status()).toBe(403);
   }
   const csrf = (await (await context.request.get('/api/v2/auth/csrf')).json()) as { token: string };
@@ -78,6 +79,16 @@ test('HTTPS job controls enforce administrator access, versions, filter cursors,
   const history = await administrator.api.get(`${path}/attempts`);
   expect(history.status()).toBe(200);
   expect(await history.json()).toEqual({ items: [], next_cursor: null, has_more: false });
+  const issues = await administrator.api.get(`${path}/issues`);
+  expect(issues.status()).toBe(200);
+  expect(issues.headers()['cache-control']).toBe('private, no-store');
+  const issuePage = (await issues.json()) as components['schemas']['JobIssuePage'];
+  expect(issuePage).toEqual({ items: [], next_cursor: null, has_more: false });
+  const wrongIssueCursor = await administrator.api.get(
+    `${path}/issues?cursor=${pageResult.next_cursor!}`,
+  );
+  expect(wrongIssueCursor.status()).toBe(400);
+  expect(await wrongIssueCursor.json()).toMatchObject({ code: 'INVALID_CURSOR' });
   const invalidBody = await administrator.api.post(`${path}/cancel`, {
     headers: {
       ...administrator.headers,

@@ -104,7 +104,8 @@ and other indexed overrides are not rewritten by a configuration edit.
 - `DELETE /admin/sources/{source_id}` requires `If-Match` and only removes an
   **empty registration**. Indexed albums or entries return `409 SOURCE_NOT_EMPTY`.
   Deactivate an indexed source instead; this endpoint never purges its index or
-  original files. Job and audit history remain.
+  original files. Job, attempt, committed [scan diagnostic](jobs.md#inspect-per-entry-diagnostics)
+  and audit history remain, including historical source/configuration identifiers.
 
 Missing `If-Match` returns `428 PRECONDITION_REQUIRED`; malformed, weak, wildcard,
 multiple, or cross-resource tags return `400 INVALID_PRECONDITION`. A stale version

@@ -22,6 +22,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Administrator-only paged per-entry scan diagnostics with fixed safe messages,
+  validated nullable relative paths and historical attempt/source/configuration/
+  generation context. Job-owned issue history survives source registration removal;
+  private staging projection and pre-generation source failures co-commit with
+  their existing lease/progress/event/audit fences. Available history is backfilled
+  without inventing missing causes. Cursor/privacy/rollback/migration and actual
+  compiled HTTPS source-outage coverage accompany the API; no source writes or purge.
+
 - Controlled HEVC HEIF/HEIC primary still metadata through the shared bounded local
   item/grid/EXIF reader and mandatory isolated libvips header profile. Validate hvcC/
   VPS/SPS/PPS and independent one-picture NAL framing; slice count is not frame count.

@@ -544,6 +544,25 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/JobAttemptPage' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/jobs/{job_id}/issues:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    get:
+      operationId: listJobIssues
+      summary: Read committed per-entry scan diagnostics without private worker details
+      description: Administrator only. Live stable-ID keysets across all recorded attempts. Historical source/configuration/generation context survives source registration removal. No filesystem I/O or raw subprocess errors. Issue count is not a work counter; unsafe or unrepresentable relative paths are null.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Safe diagnostic history; an existing job without recorded issues returns an empty page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobIssuePage' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/jobs/{job_id}/cancel:
     parameters:
       - { $ref: '#/components/parameters/JobID' }
@@ -1577,6 +1596,62 @@ components:
       required: [items, next_cursor, has_more]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/JobAttempt' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    JobIssue:
+      type: object
+      additionalProperties: false
+      description: Committed scan source or entry diagnosis. Identifiers refer to historical inputs and do not grant access to bytes or imply current configuration.
+      required:
+        [
+          id,
+          attempt,
+          source_id,
+          source_config_version,
+          generation_id,
+          relative_path,
+          error_code,
+          message,
+          created_at,
+        ]
+      properties:
+        id: { type: string }
+        attempt: { type: integer, minimum: 1 }
+        source_id:
+          {
+            type: string,
+            description: Historical opaque source identifier; registration may no longer exist.,
+          }
+        source_config_version: { type: integer, format: int64, minimum: 1 }
+        generation_id:
+          {
+            type: [string, 'null'],
+            description: Historical generation identifier; null when the source failed before a generation was created.,
+          }
+        relative_path:
+          {
+            type: [string, 'null'],
+            maxLength: 4096,
+            description: Validated source-relative path; dot means a source-level issue. Unsafe or unrepresentable text is null rather than guessed or exposed.,
+          }
+        error_code:
+          {
+            type: string,
+            pattern: '^[A-Z][A-Z0-9_]{0,63}$',
+            description: Safe stable code; unknown stored values become PROCESSING_FAILED.,
+          }
+        message:
+          {
+            type: string,
+            description: Fixed safe English message selected by code; never raw diagnostics.,
+          }
+        created_at: { type: string, format: date-time }
+    JobIssuePage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/JobIssue' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
     Media:

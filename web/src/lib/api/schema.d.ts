@@ -461,6 +461,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/jobs/{job_id}/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read committed per-entry scan diagnostics without private worker details
+         * @description Administrator only. Live stable-ID keysets across all recorded attempts. Historical source/configuration/generation context survives source registration removal. No filesystem I/O or raw subprocess errors. Issue count is not a work counter; unsafe or unrepresentable relative paths are null.
+         */
+        get: operations["listJobIssues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/jobs/{job_id}/cancel": {
         parameters: {
             query?: never;
@@ -1053,6 +1075,30 @@ export interface components {
         };
         JobAttemptPage: {
             items: components["schemas"]["JobAttempt"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        /** @description Committed scan source or entry diagnosis. Identifiers refer to historical inputs and do not grant access to bytes or imply current configuration. */
+        JobIssue: {
+            id: string;
+            attempt: number;
+            /** @description Historical opaque source identifier; registration may no longer exist. */
+            source_id: string;
+            /** Format: int64 */
+            source_config_version: number;
+            /** @description Historical generation identifier; null when the source failed before a generation was created. */
+            generation_id: string | null;
+            /** @description Validated source-relative path; dot means a source-level issue. Unsafe or unrepresentable text is null rather than guessed or exposed. */
+            relative_path: string | null;
+            /** @description Safe stable code; unknown stored values become PROCESSING_FAILED. */
+            error_code: string;
+            /** @description Fixed safe English message selected by code; never raw diagnostics. */
+            message: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        JobIssuePage: {
+            items: components["schemas"]["JobIssue"][];
             next_cursor: string | null;
             has_more: boolean;
         };
@@ -2278,6 +2324,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobAttemptPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listJobIssues: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Safe diagnostic history; an existing job without recorded issues returns an empty page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobIssuePage"];
                 };
             };
             default: components["responses"]["Problem"];

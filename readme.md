@@ -9,7 +9,8 @@ Database migrations, health checks, one-time administrator bootstrap, secure log
 password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
-and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
+and job/attempt/per-entry diagnostic history plus cancel/retry APIs are available.
+Embedded/standalone scan workers can
 publish read-only inventories, native JPEG/PNG/GIF/WebP dimensions, whitelisted
 JPEG/PNG/WebP EXIF orientation/explicitly zoned capture time normalized to milliseconds,
 and bounded GIF/APNG/WebP frame/cycle/loop metadata. With a trusted system FFprobe

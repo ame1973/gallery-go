@@ -75,11 +75,12 @@ IDs/revisions, and no duplicate versioned changes or missing outbox events.
 
 ## Inspect history
 
-| Method | Path                            | Result                                      |
-| ------ | ------------------------------- | ------------------------------------------- |
-| GET    | `/admin/jobs`                   | Jobs in ascending stable ID order.          |
-| GET    | `/admin/jobs/{job_id}`          | One job and its strong `ETag`.              |
-| GET    | `/admin/jobs/{job_id}/attempts` | Attempt history in ascending attempt order. |
+| Method | Path                            | Result                                                           |
+| ------ | ------------------------------- | ---------------------------------------------------------------- |
+| GET    | `/admin/jobs`                   | Jobs in ascending stable ID order.                               |
+| GET    | `/admin/jobs/{job_id}`          | One job and its strong `ETag`.                                   |
+| GET    | `/admin/jobs/{job_id}/attempts` | Attempt history in ascending attempt order.                      |
+| GET    | `/admin/jobs/{job_id}/issues`   | Safe committed source/entry scan diagnostics in stable ID order. |
 
 Lists have a default `limit` of 30 and accept 1..100. Follow `next_cursor` only
 while `has_more` is true. The job list accepts one optional `status` filter:
@@ -101,6 +102,52 @@ an existing/coalesced intent. A source configuration edit or empty-source deleti
 atomically requests cancellation of every related queued/running parent job, not
 only jobs whose primary resource key names that source. Deletion retains the job's
 dependency and attempt history. Unrelated source jobs remain untouched.
+
+## Inspect per-entry diagnostics
+
+`GET /admin/jobs/{job_id}/issues` complements the aggregate job/attempt summaries.
+It currently records scan source and entry failures or deferred identity decisions.
+Only the current administrator can read it; ordinary media visibility is not an
+operations grant. An unknown job returns `404`, while an existing job with no recorded
+diagnostics returns `{ "items": [], "next_cursor": null, "has_more": false }`.
+
+Each item contains:
+
+- Opaque `id`, the historical `attempt`, `source_id` and `source_config_version`.
+  These identify the processed configuration, not current reachability or a grant
+  to source bytes. A source registration may no longer exist.
+- Nullable `generation_id`: null means the source failed before an inventory
+  generation was created. A non-null ID is historical even if private staging was
+  later removed; it is not a worker capability or a public filesystem link.
+- Nullable `relative_path`: a validated root-relative entry name, or `.` for a
+  source-level issue. Absolute/unsafe/unrepresentable, control-bearing or excessive
+  text is null, not truncated, normalized into another filename or exposed as a root.
+- A stable `error_code`, a fixed safe English `message`, and UTC `created_at`.
+  Unknown stored codes become `PROCESSING_FAILED`; raw process stderr, SQL errors,
+  root/marker/pin paths, lease owners, payloads and EXIF maps are never returned.
+
+Common entry codes include `INVALID_MEDIA`, `CODEC_UNAVAILABLE`, `MEDIA_LIMIT`,
+`UNSAFE_ENTRY`, `SYMLINK_CYCLE`, `AMBIGUOUS_RENAME`, `AMBIGUOUS_ALBUM_RENAME` and
+`TARGET_RENAME_OUTSIDE_SCOPE`. Source checks may report `SOURCE_UNAVAILABLE`,
+`SOURCE_CHANGED`, `SOURCE_NOT_CONFIGURED`, `IO_ERROR`, `SCAN_LIMIT` or `MINIMUM_FILES`.
+A deferred move is not proof that a logical identity was successfully reassigned.
+
+Only `limit` and `cursor` are supported; other filters return `400 INVALID_FILTER`.
+The normal default of 30 and maximum of 100 apply. Cursors bind account, scope and **this job's
+issue collection**. This is live committed keyset history, not an immutable offline
+snapshot. Revisit the first page when the job changes or reaches its terminal state.
+Issue count cannot be used as `failed`, `done` or unique-media count: one input can
+have several diagnostics and one attempt performs several kinds of work units.
+
+Issue history shares the staging/source-failure transaction, including live lease,
+source configuration, progress, event/outbox and audit checks. A rollback cannot
+leave a public issue from uncommitted work. Retries retain earlier attempts and
+immutable issue IDs. Source removal may discard private inventory staging but never
+this job-owned projection. Migration backfills **available** private issues; missing
+historical causes that were never recorded or already removed are not fabricated.
+Reading diagnostics performs no source filesystem/probe I/O and never deletes,
+changes, downloads or purges source files. Full job/issue management screens remain
+under development; this API does not complete the operations UI.
 
 ## Interpret progress correctly
 
