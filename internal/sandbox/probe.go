@@ -1,0 +1,94 @@
+package sandbox
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"strconv"
+	"sync/atomic"
+	"time"
+)
+
+// Probe returns only the fixed tool's narrow JSON projection. The caller must
+// still validate that metadata and rehash/bind it to the immutable source revision.
+func Probe(ctx context.Context, input *os.File, limits Limits) ([]byte, error) {
+	if err := limits.Validate(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if input == nil {
+		return nil, ErrInput
+	}
+	info, err := input.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > limits.InputBytes {
+		return nil, ErrInput
+	}
+	attributes := childAttributes()
+	if attributes == nil {
+		return nil, ErrUnavailable
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	runCtx, cancel := context.WithTimeout(ctx, limits.Timeout)
+	defer cancel()
+	command := exec.CommandContext(runCtx, binary, ChildCommand,
+		strconv.FormatUint(limits.MemoryBytes, 10), strconv.FormatUint(limits.CPUSeconds, 10), strconv.FormatInt(limits.InputBytes, 10))
+	command.Env = childEnvironment
+	command.Dir = "/"
+	command.ExtraFiles = []*os.File{input}
+	command.SysProcAttr = attributes
+	command.Cancel = func() error { return killChild(command.Process) }
+	command.WaitDelay = time.Second
+	output := &boundedOutput{limit: limits.OutputBytes, cancel: cancel}
+	diagnostic := &boundedOutput{limit: 64 << 10, cancel: cancel}
+	command.Stdout, command.Stderr = output, diagnostic
+	err = command.Run()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if output.exceeded.Load() || diagnostic.exceeded.Load() || errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		return nil, ErrResource
+	}
+	if err != nil {
+		var failure *exec.ExitError
+		if errors.As(err, &failure) {
+			switch failure.ExitCode() {
+			case 70:
+				return nil, ErrUnavailable
+			case 71:
+				return nil, ErrInput
+			case -1:
+				return nil, ErrResource
+			}
+		}
+		return nil, ErrProbe
+	}
+	return output.data.Bytes(), nil
+}
+
+var childEnvironment = []string{
+	"LANG=C", "LC_ALL=C", "TZ=UTC", "HOME=/nonexistent",
+	"OMP_NUM_THREADS=1", "OPENBLAS_NUM_THREADS=1", "MKL_NUM_THREADS=1",
+}
+
+type boundedOutput struct {
+	data     bytes.Buffer
+	limit    int64
+	exceeded atomic.Bool
+	cancel   context.CancelFunc
+}
+
+func (output *boundedOutput) Write(data []byte) (int, error) {
+	if int64(len(data)) > output.limit-int64(output.data.Len()) {
+		output.exceeded.Store(true)
+		output.cancel()
+		return 0, ErrResource
+	}
+	return output.data.Write(data)
+}

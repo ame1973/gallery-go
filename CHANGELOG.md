@@ -16,6 +16,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Fail-closed Linux amd64/arm64 FFprobe isolation primitive with a fixed command,
+  read-only descriptor input, exact-file Landlock rules, argument-restricted
+  seccomp, child-only resource budgets, bounded private output and process-group
+  cancellation. Actual kernel/FFprobe and compiled-child regressions are separate
+  from test-only supervision stubs. Scan integration, complete external metadata
+  and container codec packaging remain pending; no unrestricted fallback exists.
+
 - Bounded original EXIF subseconds in the shared JPEG/PNG/WebP whitelist, with
   inline/offset ASCII handling, ambiguity/resource checks and UTC millisecond
   normalization before immutable staging. Missing date/timezone remains unknown;

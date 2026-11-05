@@ -223,6 +223,12 @@ checks every registered API operation against the schema. Never hand-edit
 
 ## Testing
 
+The codec sandbox regressions additionally require Linux amd64/arm64, Landlock
+ABI 3+, unprivileged seccomp filters, and a trusted `/usr/bin/ffprobe`. They fail
+closed when mandatory isolation is unavailable; they never skip to unrestricted
+execution. See [codec sandbox boundaries](docs/codec-sandbox.md). This internal
+primitive is not yet connected to scan ingestion or bundled in the container.
+
 ```sh
 make check                         # Go race/vet, formatting, API, TS, lint, unit tests, build
 CGO_ENABLED=0 go test ./...         # Pure-Go deployment path

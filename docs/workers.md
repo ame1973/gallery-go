@@ -63,6 +63,9 @@ to immutable staging. A changed inspector cannot resume a differently pinned gen
 Header/EXIF metadata is not full pixel/frame decoding, complete EXIF/animation
 support, a generated preview, or a READY variant. Unsupported/corrupt media remains
 explicit failed work. External codecs and variant processing are still under development.
+The [codec sandbox](codec-sandbox.md) implements a separately tested, fail-closed
+Linux FFprobe execution boundary; it is not yet connected to this inspector and
+does not change supported scan formats or the current container's codec contents.
 PNG/GIF/WebP inspection streams each complete file without allocating frame pixels or
 decoding zlib/LZW/VP8 pixels. It is bounded by `inspection.header_bytes`, `max_frames`,
 `max_duration` and `timeout`. PNG eXIf/WebP EXIF separately have fixed 64 KiB bounds; APNG uses

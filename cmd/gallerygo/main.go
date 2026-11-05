@@ -18,6 +18,7 @@ import (
 
 	"gallerygo/internal/app"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/sandbox"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 )
@@ -25,6 +26,9 @@ import (
 var version = "2.0.0-dev.0"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == sandbox.ChildCommand {
+		os.Exit(sandbox.RunChild(os.Args[2:]))
+	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

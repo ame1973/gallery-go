@@ -28,6 +28,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm peers check
       - run: python3 -I tests/integration/repository_hygiene.py
+      - name: Check the fixed codec sandbox test dependency
+        run: /usr/bin/ffprobe -version
       - run: make check
       - run: CGO_ENABLED=0 go test ./...
       - run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /tmp/gallerygo-arm64 ./cmd/gallerygo
