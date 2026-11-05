@@ -225,6 +225,7 @@ CGO_ENABLED=0 go test ./...         # Pure-Go deployment path
 pnpm exec playwright install chromium
 make e2e                           # Real Go process + temporary SQLite + production JS
 python3 -I tests/integration/docker_smoke.py gallerygo:local
+python3 -I tests/integration/docker_ingest.py gallerygo:local
 ```
 
 E2E starts an isolated HTTPS proxy on `127.0.0.1:4318` and a Go server on
@@ -270,7 +271,13 @@ browser PNG decoding, current-revision ownership, original-policy denial for use
 and admins, Range/HEAD/ETag/If-Range/304/412/416, traversal/symlinks/FIFOs, source
 outages, in-flight changes, and idle-write cancellation. These are serving tests,
 not full codec/player or physical-NAS evidence. Container smoke tests use only
-ephemeral tmpfs storage and remove only their own container.
+ephemeral tmpfs storage and remove only their own container. The separate ingestion
+harness runs both embedded and standalone CLI consumers in rootless/read-only
+containers over real TLS/auth APIs, read-only generated PNG mounts, and temporary
+SQLite/cache storage. It verifies actual frozen SQLite publication plans, native
+metadata, original/Range authorization, stable rename/revision IDs, source outage
+retention/recovery, write denial and dependency probes. Host-side fixture changes
+simulate an external rename/outage; no real NAS path or Compose volume is used.
 
 The included GitHub Actions workflow runs these checks and dependency auditing.
 A checked-in workflow is not evidence that a remote CI run has passed.

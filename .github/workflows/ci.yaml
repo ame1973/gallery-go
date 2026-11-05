@@ -51,6 +51,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - run: docker compose -f deploy/compose.yaml config --quiet
+      - run: docker compose --env-file .env.example -f deploy/compose.yaml --profile worker config --quiet
       - run: docker build -f deploy/Dockerfile -t gallerygo:ci .
       - run: python3 -I tests/integration/docker_smoke.py gallerygo:ci
+      - run: python3 -I tests/integration/docker_ingest.py gallerygo:ci

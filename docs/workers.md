@@ -153,6 +153,10 @@ live successor rejects the killed owner's lease, abandoned staging is superseded
 and already-published logical IDs/revisions remain unchanged without duplicate events.
 This is local process-crash evidence, not a NAS/kernel/power-loss or restore drill.
 
-Complete external metadata and actual rootless container ingestion remain pending;
-a successful startup or native scan is not the complete source-processing phase
-or a production-release claim.
+Actual rootless/read-only container ingestion is also covered for embedded and
+standalone CLI consumers through TLS/admin APIs, generated read-only PNG mounts and
+private tmpfs storage. The test exercises SQLite temporary publication/rename plans,
+protected originals/Range, stable logical/revision/album IDs, source outage retention
+and restoration, dependency probes and denied source writes. See [deployment tests](../deploy/readme.md).
+Complete external metadata remains pending; these native header/index checks do not
+complete the source-processing phase or establish production-release acceptance.

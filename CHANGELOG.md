@@ -16,6 +16,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Actual native indexed-ingestion tests inside rootless/read-only containers for
+  embedded and standalone consumers, with generated TLS/auth/API setup, private
+  tmpfs metadata/cache and read-only source mounts. Exercise frozen SQLite plans,
+  stable rename/revision IDs, protected originals/Range, outage retention/recovery,
+  denied source writes and health probes; wired into the container CI job.
+
 - Real compiled-worker SIGKILL recovery tests for native staging and partially
   published multi-source scans, with all old DB connections closed before reopened
   WAL recovery. Verify live replacement ownership, lease-expired attempt history,
@@ -37,8 +43,8 @@ All notable public changes are recorded here. This project uses Conventional Com
 - Embedded scan execution in `serve` and a standalone `gallerygo worker` command
   using the same queue, immutable roots, native handler, and strict YAML resource
   limits. Coordinated shutdown and real compiled CLI/HTTPS ingestion, repeat
-  identity, source-outage and no-asset worker tests. External codecs and actual
-  rootless container ingestion remain pending.
+  identity, source-outage and no-asset worker tests. Complete external codecs and
+  metadata remain pending.
 
 - A versioned-intent scan handler connecting durable execution to read-only inventory,
   native metadata, and indexed publication. Multi-source failures retain healthy

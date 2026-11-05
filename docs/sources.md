@@ -213,9 +213,11 @@ dispatch deadlines do not imply a healthy scan or advance full-publication evide
 source observations without probing NAS inside an HTTP request. It does not change
 source health or grant inventory authority. Queued acceptance alone cannot prove
 successful ingestion. Header inspection does not prove complete pixel/frame decoding. External
-codecs, EXIF, animation timing, variant generation, and actual rootless container
-ingestion remain pending. Native compiled-worker SIGKILL/reopened-WAL tests cover
-staging and partial multi-source publication, retained logical IDs/revisions, old
-owner rejection and duplicate-free events. This is not physical NAS or power-loss
+codecs, EXIF, animation timing and variant generation remain pending. Native compiled-worker
+SIGKILL/reopened-WAL tests cover staging and partial multi-source publication,
+retained logical IDs/revisions, old owner rejection and duplicate-free events.
+Rootless/read-only container tests also exercise actual native publication/rename
+plans, protected bytes and source-outage retention/restoration in both consumer
+modes. These tests use isolated generated media, not physical NAS or power-loss
 verification. These capabilities do not complete the source-processing phase or
 authorize index purge.
