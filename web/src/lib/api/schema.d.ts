@@ -4,6 +4,49 @@
  */
 
 export interface paths {
+    "/admin/duplicates/exact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List indexed exact duplicate groups
+         * @description Administrator-only read of current owned revisions with equal valid source SHA-256 and byte length. Library/source filters constrain the corpus before counts and grouping. IDs are immutable representative revision identifiers, never source hashes. Reads perform no filesystem I/O or deletion and do not prove current source reachability, perceptual similarity, download permission or unchanged bytes since ingestion. Pages are live keysets, not immutable offline snapshots.
+         */
+        get: operations["listExactDuplicateGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/duplicates/exact/{group_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque representative revision ID returned by the filtered group page. A rewritten, hidden or nonrepresentative anchor is not an alias for another group. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * List current members of an indexed exact duplicate group
+         * @description Administrator-only metadata with the same fresh SQL visibility and selected corpus as the group page. Default 30/max 100 member keysets use media IDs and account/scope/group/filter-bound cursors. The group must still contain at least two members and retain its immutable representative revision, otherwise 404. No source hashes, relative paths, roots or download capability are returned.
+         */
+        get: operations["listExactDuplicateMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/live": {
         parameters: {
             query?: never;
@@ -1102,6 +1145,22 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
+        ExactDuplicateGroup: {
+            /** @description Opaque minimum current owned revision identifier within the filtered equal-signature corpus; not a source hash or mutable media ID. */
+            id: string;
+            /** Format: int64 */
+            source_size: number;
+            /**
+             * Format: int64
+             * @description Number of current visible logical media in this selected indexed group, not a global or current filesystem count.
+             */
+            media_count: number;
+        };
+        ExactDuplicateGroupPage: {
+            items: components["schemas"]["ExactDuplicateGroup"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         Media: {
             id: string;
             album_id: string;
@@ -1521,6 +1580,10 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Optional current library selection applied before duplicate grouping/counts. Use at most one nonempty opaque ID. */
+        DuplicateLibraryFilter: string;
+        /** @description Optional current source selection applied before duplicate grouping/counts. Intersects library_id when both are present. */
+        DuplicateSourceFilter: string;
         SourceID: string;
         JobID: string;
         MediaID: string;
@@ -1573,6 +1636,68 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listExactDuplicateGroups: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Optional current library selection applied before duplicate grouping/counts. Use at most one nonempty opaque ID. */
+                library_id?: components["parameters"]["DuplicateLibraryFilter"];
+                /** @description Optional current source selection applied before duplicate grouping/counts. Intersects library_id when both are present. */
+                source_id?: components["parameters"]["DuplicateSourceFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded groups in stable representative-revision ID order; singleton, archived, inactive and inconsistent resources are excluded before counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExactDuplicateGroupPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listExactDuplicateMedia: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Optional current library selection applied before duplicate grouping/counts. Use at most one nonempty opaque ID. */
+                library_id?: components["parameters"]["DuplicateLibraryFilter"];
+                /** @description Optional current source selection applied before duplicate grouping/counts. Intersects library_id when both are present. */
+                source_id?: components["parameters"]["DuplicateSourceFilter"];
+            };
+            header?: never;
+            path: {
+                /** @description Opaque representative revision ID returned by the filtered group page. A rewritten, hidden or nonrepresentative anchor is not an alias for another group. */
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current member metadata in stable media ID order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     live: {
         parameters: {
             query?: never;

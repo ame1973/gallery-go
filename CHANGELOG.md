@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Administrative indexed exact-duplicate group/member APIs using current owned
+  revision SHA-256 plus byte length, shared SQL visibility and filtered-before-count
+  bounded keysets. Opaque representative revision IDs prevent an overwritten media
+  from retargeting old member cursors. No raw fingerprint/path, source I/O,
+  perceptual claim, deletion or download authority is added. A covering signature
+  index, real SQLite/HTTP/privacy/current-role cases and compiled four-mode HTTPS
+  ingestion/copy/rewrite checks accompany the API. Group UI and perceptual workflows
+  remain separate work.
+
 - Private bounded static artifact storage with file/parent-directory fsync,
   post-write hashing and pinned-directory atomic no-replace rename on supported
   Linux hosts. Replays preserve existing inodes; conflicting bytes, symbolic links,

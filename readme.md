@@ -204,6 +204,10 @@ Only implemented endpoints are advertised:
   probed by enqueue; a compatible embedded or standalone worker executes the job.
 - `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
   and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
+- `GET /api/v2/admin/duplicates/exact` and `/admin/duplicates/exact/{group_id}/media`:
+  current-owned-revision indexed exact duplicates, filtered counts and bounded
+  administrative metadata pages. No perceptual claim, source probing, deletion or
+  original-download bypass. See [docs/duplicates.md](docs/duplicates.md).
 - `GET /api/v2/albums/{album_id}/media`, `/media/{media_id}`, and
   `/media/{media_id}/variants`: visible media and latest ready current-revision presets.
 - `GET/HEAD /api/v2/media/{media_id}/variants/{variant_id}/content` and
@@ -271,7 +275,10 @@ WebP, AVIF, HEIF/HEIC, classic TIFF and owned MP4/MOV/MKV/WebM vectors. Four emb
 cases verify 57 work units, image animation, HEIF primary selection, TIFF first-page/unknown-animation semantics, video codec/geometry/duration/display
 transforms, UTC milliseconds, unknown-null semantics, protected original/Range and
 anonymous denial, stable complete metadata/revisions on rescan, outage retention
-and graceful shutdown. Video fixtures need no runtime encoder and do not establish
+and graceful shutdown. They then add a read-only identical PNG copy, execute
+60-unit scans, and verify real indexed duplicate groups/member cursors, replay
+identity, anonymous denial and an external same-path rewrite removing the old group.
+Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published
 multi-source ingestion, closes all original DB handles, then reopens the server and

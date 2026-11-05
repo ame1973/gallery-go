@@ -27,6 +27,51 @@ tags:
   - name: Media
     description: Current-revision metadata and private read-only content with per-request authorization and single-byte-range support.
 paths:
+  /admin/duplicates/exact:
+    get:
+      operationId: listExactDuplicateGroups
+      summary: List indexed exact duplicate groups
+      description: Administrator-only read of current owned revisions with equal valid source SHA-256 and byte length. Library/source filters constrain the corpus before counts and grouping. IDs are immutable representative revision identifiers, never source hashes. Reads perform no filesystem I/O or deletion and do not prove current source reachability, perceptual similarity, download permission or unchanged bytes since ingestion. Pages are live keysets, not immutable offline snapshots.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/DuplicateLibraryFilter' }
+        - { $ref: '#/components/parameters/DuplicateSourceFilter' }
+      responses:
+        '200':
+          description: Bounded groups in stable representative-revision ID order; singleton, archived, inactive and inconsistent resources are excluded before counts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExactDuplicateGroupPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/duplicates/exact/{group_id}/media:
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        description: Opaque representative revision ID returned by the filtered group page. A rewritten, hidden or nonrepresentative anchor is not an alias for another group.
+        schema: { type: string, minLength: 1, maxLength: 64 }
+    get:
+      operationId: listExactDuplicateMedia
+      summary: List current members of an indexed exact duplicate group
+      description: Administrator-only metadata with the same fresh SQL visibility and selected corpus as the group page. Default 30/max 100 member keysets use media IDs and account/scope/group/filter-bound cursors. The group must still contain at least two members and retain its immutable representative revision, otherwise 404. No source hashes, relative paths, roots or download capability are returned.
+      tags: [Media]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/DuplicateLibraryFilter' }
+        - { $ref: '#/components/parameters/DuplicateSourceFilter' }
+      responses:
+        '200':
+          description: Current member metadata in stable media ID order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaPage' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
   /health/live:
     get:
       operationId: live
@@ -1060,6 +1105,16 @@ components:
       description: Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match.
       schema: { type: string }
   parameters:
+    DuplicateLibraryFilter:
+      name: library_id
+      in: query
+      description: Optional current library selection applied before duplicate grouping/counts. Use at most one nonempty opaque ID.
+      schema: { type: string, minLength: 1, maxLength: 64 }
+    DuplicateSourceFilter:
+      name: source_id
+      in: query
+      description: Optional current source selection applied before duplicate grouping/counts. Intersects library_id when both are present.
+      schema: { type: string, minLength: 1, maxLength: 64 }
     SourceID:
       name: source_id
       in: path
@@ -1652,6 +1707,29 @@ components:
       required: [items, next_cursor, has_more]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/JobIssue' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    ExactDuplicateGroup:
+      type: object
+      additionalProperties: false
+      required: [id, source_size, media_count]
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: Opaque minimum current owned revision identifier within the filtered equal-signature corpus; not a source hash or mutable media ID.
+        source_size: { type: integer, format: int64, minimum: 1 }
+        media_count:
+          type: integer
+          format: int64
+          minimum: 2
+          description: Number of current visible logical media in this selected indexed group, not a global or current filesystem count.
+    ExactDuplicateGroupPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ExactDuplicateGroup' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
     Media:

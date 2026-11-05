@@ -742,6 +742,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if readiness.Status != "degraded" || readiness.Sources != "degraded" || readiness.Worker != "ok" {
 				t.Fatal("source failure hid metadata availability or worker status", readiness)
 			}
+			verifyCompiledExactDuplicates(t, api, source, marker, input.Bytes(), workUnits)
 			if stopWorker != nil {
 				stopWorker()
 				api.request("GET", "/health/ready", nil, 503, nil)
