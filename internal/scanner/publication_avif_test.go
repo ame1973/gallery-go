@@ -45,7 +45,9 @@ func TestAVIFPublicationRetainsIdentityAndClearsStaleContainerEvidence(t *testin
 	generation := f.publish(t, "full", ".")
 	job, err := f.queue.Get(t.Context(), generation.JobID)
 	if err != nil || job.Status != "succeeded" || job.Succeeded != 12 || job.Total != 12 || !job.TotalKnown {
-		t.Fatal("AVIF work counters were invented", job, err)
+		var failures string
+		_ = f.db.QueryRow(`SELECT json_group_array(json_object('path',relative_path,'inspection',json(inspection_json))) FROM inventory_media WHERE generation_id=? AND status!='ok'`, generation.ID).Scan(&failures)
+		t.Fatalf("AVIF publication failed: job=%v counts=%+v error=%v media=%s", job, job.Counts, err, failures)
 	}
 	service := media.New(f.db, f.auth, t.TempDir(), map[string]media.SourceRoot{"fixture": root})
 	ids, revisions, snapshots := map[string]string{}, map[string]string{}, map[string]string{}

@@ -119,7 +119,7 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 		HeaderBytes  int64
 		Timeout      time.Duration
 	}{policy.MaxPixels, policy.MaxDimension, policy.HeaderBytes, policy.Timeout}
-	for _, older := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9} {
+	for _, older := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10} {
 		legacyPolicy := any(oldPolicy)
 		if older >= 3 {
 			legacyPolicy = policy

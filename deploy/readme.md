@@ -77,7 +77,9 @@ calls do no synchronous scanning or filesystem creation. The host build supports
 [controlled AVIF/video metadata](../docs/media.md) only when a trusted system FFprobe and
 mandatory Linux isolation are available. Static grid/generic AVIF and controlled
 classic TIFF metadata also require the fixed libvips header profile with its trusted
-loader dependencies; AVIF additionally needs HEIF/AV1 support. This image
+loader dependencies. HEVC-coded HEIF/HEIC stills additionally require the trusted
+libheif HEVC decoder; AVIF requires its AV1 decoder. Neither header capability
+establishes full codec or preview support. This image
 still lacks those codec packages;
 affected paths report explicit failed/unsupported work, not successful decoding.
 Do not disable isolation or add a public original-file fallback to make it work.

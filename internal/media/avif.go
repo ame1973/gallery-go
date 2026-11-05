@@ -46,6 +46,7 @@ type avifReader struct {
 	file            io.ReaderAt
 	size, remaining int64
 	boxes           int
+	hevc            bool
 }
 
 func (r *avifReader) read(offset, length int64) ([]byte, error) {
@@ -100,10 +101,14 @@ func (r *avifReader) children(data []byte, offset int64) ([]avifBox, error) {
 	return result, nil
 }
 
-// AVIF metadata is sought through bounded local boxes, never through arbitrary
-// item URLs or external data references. Compressed mdat payloads are not copied.
+// AVIF and HEVC HEIF share local item/extent/property contracts. This finite
+// format choice is internal, never a caller-supplied command or decoder option.
 func parseAVIF(ctx context.Context, file io.ReaderAt, size int64, policy InspectPolicy) (avifInfo, error) {
-	r := &avifReader{ctx: ctx, file: file, size: size, remaining: policy.HeaderBytes}
+	return parseItemImage(ctx, file, size, policy, false)
+}
+
+func parseItemImage(ctx context.Context, file io.ReaderAt, size int64, policy InspectPolicy, hevc bool) (avifInfo, error) {
+	r := &avifReader{ctx: ctx, file: file, size: size, remaining: policy.HeaderBytes, hevc: hevc}
 	var meta, movie *avifBox
 	var mediaData []avifExtent
 	var brands []string
@@ -165,18 +170,23 @@ func parseAVIF(ctx context.Context, file io.ReaderAt, size int64, policy Inspect
 		}
 		offset += int64(length)
 	}
-	avifBrand := false
+	avifBrand, heifBrand, heifSequence := false, false, false
 	for _, brand := range brands {
 		avifBrand = avifBrand || brand == "avif" || brand == "avis"
+		heifBrand = heifBrand || brand == "heic" || brand == "heix" || brand == "hevc" || brand == "hevx"
+		heifSequence = heifSequence || brand == "hevc" || brand == "hevx" || brand == "msf1"
 	}
-	if !avifBrand || meta == nil {
+	if meta == nil || !hevc && !avifBrand {
 		return avifInfo{}, errAVIF
+	}
+	if hevc && (!heifBrand || movie != nil || heifSequence) {
+		return avifInfo{}, errAVIFUnsupported
 	}
 	info, err := r.meta(*meta, mediaData, policy)
 	if err != nil {
 		return avifInfo{}, err
 	}
-	info.imageHeader = info.imageHeader || brands[0] != "avif" && brands[0] != "avis"
+	info.imageHeader = hevc || info.imageHeader || brands[0] != "avif" && brands[0] != "avis"
 	if movie == nil {
 		for _, brand := range brands {
 			if brand == "avis" {
@@ -203,19 +213,8 @@ func inspectAVIF(ctx context.Context, file *os.File, size int64, policy InspectP
 		return avifInfo{}, err
 	}
 	if info.imageHeader {
-		header, err := inspectImageHeader(ctx, file, policy)
-		if err != nil {
+		if err := checkHEIFGeometry(ctx, file, info, policy); err != nil {
 			return avifInfo{}, err
-		}
-		if header.loader != "heifload" {
-			return avifInfo{}, errAVIFUnsupported
-		}
-		matches := header.width == info.width && header.height == info.height
-		if info.orientation != nil && *info.orientation >= 5 {
-			matches = matches || header.width == info.height && header.height == info.width
-		}
-		if !matches {
-			return avifInfo{}, errAVIF
 		}
 		return info, nil
 	}
@@ -412,7 +411,11 @@ func (r *avifReader) meta(box avifBox, mediaData []avifExtent, policy InspectPol
 	if main == nil || main.kind == "" || !main.located {
 		return avifInfo{}, errAVIF
 	}
-	if (main.kind != "av01" && main.kind != "grid") || main.hidden {
+	coding := "av01"
+	if r.hevc {
+		coding = "hvc1"
+	}
+	if (main.kind != coding && main.kind != "grid") || main.hidden || main.kind == coding && len(main.derived) != 0 {
 		return avifInfo{}, errAVIFUnsupported
 	}
 	for _, value := range items {
@@ -442,6 +445,11 @@ func (r *avifReader) meta(box avifBox, mediaData []avifExtent, policy InspectPol
 	info, err := avifPrimaryProperties(main, properties, policy)
 	if err != nil {
 		return avifInfo{}, err
+	}
+	if r.hevc && main.kind == "hvc1" {
+		if err := r.hevcItem(main); err != nil {
+			return avifInfo{}, err
+		}
 	}
 	if main.kind == "grid" {
 		if err := r.grid(main, items, properties, info, policy); err != nil {
@@ -699,8 +707,24 @@ func avifPrimaryProperties(item *avifItem, properties []avifBox, policy InspectP
 			}
 			result.width, result.height = int64(binary.BigEndian.Uint32(property.body[4:8])), int64(binary.BigEndian.Uint32(property.body[8:12]))
 		case "av1C":
+			if item.kind == "hvc1" {
+				if item.essential[offset] {
+					return avifInfo{}, errAVIFUnsupported
+				}
+				continue
+			}
 			if len(property.body) < 4 || property.body[0] != 0x81 {
 				return avifInfo{}, errAVIF
+			}
+		case "hvcC":
+			if item.kind != "hvc1" {
+				if item.essential[offset] {
+					return avifInfo{}, errAVIFUnsupported
+				}
+				continue
+			}
+			if err := hevcConfiguration(property.body); err != nil {
+				return avifInfo{}, err
 			}
 		case "irot":
 			if len(property.body) != 1 || property.body[0] > 3 {
@@ -723,7 +747,11 @@ func avifPrimaryProperties(item *avifItem, properties []avifBox, policy InspectP
 			transformed = true
 		}
 	}
-	if !seen["ispe"] || item.kind != "grid" && !seen["av1C"] || result.width < 1 || result.height < 1 {
+	configuration := "av1C"
+	if item.kind == "hvc1" {
+		configuration = "hvcC"
+	}
+	if !seen["ispe"] || item.kind != "grid" && !seen[configuration] || result.width < 1 || result.height < 1 {
 		return avifInfo{}, errAVIF
 	}
 	if result.width > int64(policy.MaxDimension) || result.height > int64(policy.MaxDimension) || result.width > policy.MaxPixels/result.height {

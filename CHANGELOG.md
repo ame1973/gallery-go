@@ -6,6 +6,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Prepare codec exec arguments/environment and seccomp filters before budgets, then
+  use an allocation-free private Linux handoff for AS/filter/exec. Quiesce only the
+  short-lived Go helper, avoiding GC/profiling allocations under codec limits.
+  Default-budget pressure and real kernel/resource regressions retain the original
+  AS/CPU/timeout/descriptor/permission restrictions and do not change the parent.
+
 - Report target renames crossing either direction of a selected scope as deferred
   failed work, rather than silently succeeding when files move out of the target.
 
@@ -15,6 +21,16 @@ All notable public changes are recorded here. This project uses Conventional Com
   fail-closed. A real writer-timeout regression covers atomic completion.
 
 ### Added
+
+- Controlled HEVC HEIF/HEIC primary still metadata through the shared bounded local
+  item/grid/EXIF reader and mandatory isolated libvips header profile. Validate hvcC/
+  VPS/SPS/PPS and independent one-picture NAL framing; slice count is not frame count.
+  Ordered transforms, explicit-zone UTC-millisecond capture, generic brands and
+  non-first primary collections retain native dimensions and unknown-null semantics.
+  Inspector v11 refuses older pins. Owned independently decoded vectors, native
+  malformed/resource/fuzz cases, SQLite rewrites and four 57-unit CLI modes cover
+  the path. Original-only HEIF attachments do not expand inline READY MIME types.
+  Full HEVC decoding, sequences, variants and container packaging remain pending.
 
 - Controlled classic TIFF metadata through bounded native directories/local strip
   and tile extents plus the existing isolated libvips header profile. First-page

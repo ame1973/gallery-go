@@ -37,6 +37,31 @@ HEIF-major tests change only the owned still's major brand, not private media.
 The isolated image-header profile is tested separately from that trusted-input
 fixture-generation decode; metadata success is not full AV1 pixel acceptance.
 
+## Owned HEVC HEIF/HEIC vectors
+
+`heif.json` contains seven compact primary-item stills built from owned 64-by-64
+RGB colors `(32, 96, 144)` and `(240, 224, 192)`. System FFmpeg/libx265 encoded one
+main-still-picture frame per color, with one frame thread, no thread pool/WPP and
+explicit SDR color parameters. Standard-library container packing creates direct,
+generic-major, 96-by-64 two-tile grid, EXIF, rotated, mirrored and non-first-primary
+collection vectors. No personal photograph, network sample or runtime encoder is used.
+
+The owned encoder repeats parameter sets despite its `repeat-headers=0` option.
+The fixture packer verifies those bytes match the out-of-band configuration, removes
+the repeats and encoder-only unregistered SEI, then independently decodes every
+RGB pixel of every final file. That is fixture assembly, **not** production source
+repair or a runtime fallback. The seven packed files total 3,892 bytes and decoded
+RGB data totals 104,448 bytes; each pixel matches its expected owned-color region
+within the generation tolerance. This is not HDR/ICC/color-calibration acceptance.
+
+The synthetic primary EXIF has orientation 3 and an explicitly offset original
+clock with `.123456` subseconds; container rotation followed by mirroring overrides
+that orientation with 5 while keeping capture UTC milliseconds. Grid rotations
+also prove swapped display geometry without rewriting encoded 96-by-64 dimensions.
+The collection puts another image before the declared primary, so first-image
+selection would choose the wrong pixels. Runtime tests use mandatory isolated
+headers plus bounded native framing, not a full HEVC decoder or browser player.
+
 ## Owned classic TIFF vectors
 
 `tiff.json` contains seven complete TIFFs built with standard-library byte packing

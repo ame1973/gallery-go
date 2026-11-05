@@ -7,8 +7,8 @@ mount, fallback credential, anonymous thumbnail URL, or original-download bypass
 **Current scope:** protected serving, native image inventory and controlled video
 metadata publication are implemented. Native JPEG/PNG/GIF/WebP dimensions,
 whitelisted image EXIF, GIF/APNG/WebP frame/cycle/loop metadata, controlled AVIF
-primary-item/sequence metadata, classic TIFF first-page dimensions/EXIF and sandboxed
-MP4/MOV/MKV/WebM codec/geometry/duration/transform/creation evidence are available.
+primary-item/sequence metadata, HEVC HEIF/HEIC primary stills, classic TIFF first-page
+dimensions/EXIF and sandboxed MP4/MOV/MKV/WebM geometry/duration/creation evidence are available.
 External image capabilities, normal variant publication, gallery/player screens,
 and offline manifests remain under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
@@ -61,7 +61,7 @@ when evidence is absent:
   already does. Video uses equivalent validated orthogonal display transforms as
   described below; browser video decoders may already apply that transform. Never
   transform twice. Generated orientation-normalized variants are still pending.
-- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP/AVIF/TIFF
+- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP/AVIF/HEIF/TIFF
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
   substitutes file mtime, modification/digitization time, or its own timezone.
@@ -72,7 +72,7 @@ when evidence is absent:
   ASCII-space padding is allowed; non-digits, duplicate tags and unsafe counts/offsets
   are rejected. The subsecond ASCII value is capped at 64 bytes including its NUL.
 
-Only bounded JPEG APP1/PNG eXIf/WebP EXIF/primary-associated AVIF Exif profiles and
+Only bounded JPEG APP1/PNG eXIf/WebP EXIF/primary-associated AVIF/HEIF Exif profiles and
 classic TIFF's first-page orientation/original-time whitelist are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
 must occur once before IDAT. WebP accepts a raw TIFF profile or its Exif prefix.
 Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
@@ -135,6 +135,42 @@ Unchanged rescans retain it; format changes replace stale animation/timing/EXIF 
 fresh evidence. Full pixel validation, generated animation/static fallbacks and
 playback variants remain separate implementation/acceptance work. These fields do
 not grant preview/original access or establish player/offline readiness.
+
+## Controlled HEIF/HEIC still metadata
+
+HEVC-coded HEIF/HEIC stills use the same bounded local item/extent/property/EXIF
+reader as AVIF, plus the mandatory fixed `heifload` header sandbox. The `pitm`
+primary image supplies encoded dimensions, not the first top-level image or a
+thumbnail. Compatible direct `hvc1` items and uniform direct-tile grids are supported;
+primary collections do not become animation timelines. The codec is `hevc` and
+original-download MIME is the generic `image/heif` family.
+
+- Local `hvcC` records are capped at 64 KiB, 16 arrays and 64 NAL units per array.
+  Framing must include VPS/SPS/PPS with matching NAL headers. Opaque SEI payloads
+  are never projected as metadata. This validates framing, not full SPS/RBSP semantics.
+- Each coded item uses one local extent and four-byte NAL lengths, with at most
+  4096 NAL units. Exactly one independently coded IRAP picture is established;
+  additional slices are not counted as additional frames. Compressed bodies are
+  skipped, not copied or decoded in Go. In-band parameter-set overrides, dependent/
+  multilayer pictures and multiple pictures in one still item remain unsupported.
+- Grid canvas, tile count/configuration/geometry and full coverage use the same
+  bounds as AVIF. Ordered `irot`/`imir` properties precede the whitelisted EXIF
+  orientation; original time still requires an explicit offset and normalizes to
+  UTC milliseconds. HEIF EXIF orientation can be informational: avoid applying it
+  twice when a decoder already handles item transforms.
+- The isolated summary must agree with native encoded geometry, allowing only a
+  proven display quarter-turn swap. Missing tools/isolation never bless native
+  headers. Proven stills return `animated:false`, one frame, one play and null
+  duration; sequence/movie brands and unsupported profiles do not get those defaults.
+
+HEIF sequences, other primary codecs, protected/external references, recursive or
+incompatible grids and unknown essential properties remain explicit unsupported
+work. These limits do not promise full HEVC pixel/color/profile or browser support.
+Originals remain attachment-only behind the extra download grant; HEIF is not added
+to inline READY MIME types. Source/runtime/configuration/revision/lease and full
+post-inspection hash fences are unchanged. Owned direct/grid/collection/transform/
+EXIF vectors are independently decoded during generation, not by an unrestricted
+runtime fallback.
 
 ## Controlled classic TIFF metadata
 

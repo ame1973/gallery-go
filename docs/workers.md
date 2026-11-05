@@ -51,7 +51,7 @@ a compatible embedded or standalone consumer.
 
 The pipeline performs bounded manifests and streamed hashes, native JPEG/PNG/GIF/WebP
 metadata, whitelisted image EXIF/animation, controlled AVIF primary items/sequences,
-classic TIFF first-page dimensions/EXIF and MP4/MOV/MKV/WebM metadata,
+classic TIFF first-page dimensions/EXIF, HEVC HEIF/HEIC primary stills and MP4/MOV/MKV/WebM metadata,
 then fenced indexed publication. Indexed resources and authorized originals become
 available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
@@ -67,7 +67,7 @@ explicit failed work. External image capabilities and variant processing remain
 under development. Video uses the fail-closed [codec sandbox](codec-sandbox.md),
 with strict JSON, codec/geometry/duration checks, orthogonal display transforms
 and explicitly zoned creation tags. Its private trusted-installation epoch joins
-inspector v10/resource policy in immutable staging, with per-child epoch checks and
+inspector v11/resource policy in immutable staging, with per-child epoch checks and
 post-probe source rehashing. Keep trusted codecs immutable while workers run.
 Missing tools/kernel support count as unsupported failed media, not successful or
 silently skipped work; the current container still does not include codecs.
@@ -93,6 +93,13 @@ extents, ordered transforms and primary-associated EXIF; image timing comes from
 sample tables and declared edit repetition, never FPS. Unknown/unsupported profiles stay explicit.
 Missing a required profile cannot bless AVIF from headers; the independent FFprobe
 and image-header runtime pins are collected before database writers. See [AVIF boundaries](media.md#controlled-avif-metadata).
+
+HEVC-coded HEIF/HEIC stills share AVIF's bounded local item/grid/EXIF reader and
+mandatory isolated header profile. They select the declared primary, validate
+bounded hvcC/VPS/SPS/PPS and four-byte local NAL framing, and prove one independently
+coded still without decoding compressed bodies. Slice count is not frame count.
+Sequence/movie, dependent/multilayer, split-coded-extent and unknown profiles stay
+explicit unsupported work. See [HEIF boundaries](media.md#controlled-heifheic-still-metadata).
 
 Classic TIFF also uses the fixed image-header profile. A bounded native first-page
 reader validates dimensions, strip/tile local extents and only primary EXIF;

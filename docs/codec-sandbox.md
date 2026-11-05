@@ -5,7 +5,7 @@
 GalleryGo has two finite fixed metadata profiles: `/usr/bin/ffprobe` and
 `/usr/bin/vipsheader`, both inside the same mandatory Linux boundary. The latter
 returns only its default geometry summary, never raw all-fields/history output.
-They support [controlled AVIF/TIFF/video metadata](media.md); this is not full HEIF/TIFF/
+They support [controlled HEIF/AVIF/TIFF/video metadata](media.md); this is not full HEIF/TIFF/
 RAW decoding, generated variants, a new API or a configurable command runner.
 The current container does not bundle these tools.
 
@@ -42,6 +42,16 @@ Landlock ABI 3 is thread-local. The trusted setup goroutine stays locked to its 
 thread; no untrusted codec code runs until `exec` replaces all sibling Go threads.
 The read-only input stays alive across that boundary. Other inherited descriptors
 are only standard streams; the child receives no database or source-root handle.
+
+The trusted Go helper prepares fixed NUL-terminated arguments/environment and the
+seccomp filter **before** installing codec budgets. It uses one Go scheduler lane,
+finishes/disables its own GC, then seals the address-space limit, filter and exec
+through a small allocation-free Linux syscall handoff. That process-private handoff
+cannot grow a Go stack, run race instrumentation or enter allocating Go cleanup;
+its buffers are immutable. Failure exits directly. The parent GC is unchanged and
+all codec hard budgets remain enforced. This avoids running Go GC/profiling or exec
+argument allocation after AS has been lowered below the existing Go mappings.
+Actual kernel/budget and aggressive-pre-exec-GC regressions exercise the boundary.
 
 FFprobe receives a fixed demuxer allowlist, `file,pipe` protocol allowlist, bounded
 probe/analyze/allocation settings, and one decoder thread. The filesystem and

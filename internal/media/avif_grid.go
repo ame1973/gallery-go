@@ -6,7 +6,7 @@ import (
 )
 
 // Grid geometry is declared by a tiny local descriptor. Its inputs must be
-// directly coded, compatible AV1 tiles, never a recursive derived-item graph.
+// directly coded, compatible AV1 or HEVC tiles, never a recursive derived graph.
 func (r *avifReader) grid(main *avifItem, items map[uint64]*avifItem, properties []avifBox, info avifInfo, policy InspectPolicy) error {
 	var descriptor []byte
 	for _, extent := range main.extents {
@@ -46,12 +46,16 @@ func (r *avifReader) grid(main *avifItem, items map[uint64]*avifItem, properties
 	}
 	var tileWidth, tileHeight int64
 	var configuration []byte
+	coding, configType := "av01", "av1C"
+	if r.hevc {
+		coding, configType = "hvc1", "hvcC"
+	}
 	for _, id := range main.derived {
 		tile := items[id]
 		if tile == nil {
 			return errAVIF
 		}
-		if tile.kind != "av01" || len(tile.derived) != 0 {
+		if tile.kind != coding || len(tile.derived) != 0 {
 			return errAVIFUnsupported
 		}
 		geometry, err := avifPrimaryProperties(tile, properties, policy)
@@ -64,9 +68,14 @@ func (r *avifReader) grid(main *avifItem, items map[uint64]*avifItem, properties
 		if geometry.width < 64 || geometry.height < 64 || geometry.width%64 != 0 || geometry.height%64 != 0 {
 			return errAVIFUnsupported
 		}
+		if r.hevc {
+			if err := r.hevcItem(tile); err != nil {
+				return err
+			}
+		}
 		var config []byte
 		for _, index := range tile.properties {
-			if properties[index-1].kind == "av1C" {
+			if properties[index-1].kind == configType {
 				config = properties[index-1].body
 			}
 		}

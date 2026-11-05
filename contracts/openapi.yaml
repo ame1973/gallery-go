@@ -1630,7 +1630,7 @@ components:
           {
             type: [integer, 'null'],
             minimum: 1,
-            description: Image frame/sample count proven by bounded container inspection; null when unknown or for TIFF document pages. AVIF uses matching sample-size/timing tables and local chunk extents. Does not imply full pixel decoding.,
+            description: Image frame/sample count proven by bounded container inspection; null when unknown or for TIFF document pages. AVIF uses matching sample-size/timing tables and local chunk extents; HEIF stills use one independently coded primary picture. Does not imply full pixel decoding.,
           }
         loop_count:
           {
@@ -1643,7 +1643,7 @@ components:
             type: [integer, 'null'],
             minimum: 1,
             maximum: 8,
-            description: Validated EXIF orientation or equivalent ordered AVIF item/video display-matrix transform. Unknown or arbitrary transforms remain null; dimensions remain encoded source dimensions.,
+            description: Validated EXIF orientation or equivalent ordered HEIF/AVIF item/video display-matrix transform. Unknown or arbitrary transforms remain null; dimensions remain encoded source dimensions.,
           }
         capture_at:
           {

@@ -143,13 +143,19 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 			result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &metadata.frames, &metadata.loops, metadata.duration
 			result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
 		}
-	} else if codec == "avif" {
+	} else if codec == "avif" || codec == "heif" {
 		var metadata avifInfo
-		metadata, metadataErr = inspectAVIF(ctx, file, before.Size(), policy)
+		imageCodec := "av1"
+		if codec == "heif" {
+			metadata, metadataErr = inspectHEIF(ctx, file, before.Size(), policy)
+			imageCodec = "hevc"
+		} else {
+			metadata, metadataErr = inspectAVIF(ctx, file, before.Size(), policy)
+		}
 		if metadataErr == nil {
-			animated, avifCodec := metadata.frames > 1, "av1"
+			animated := metadata.frames > 1
 			result.Status, result.Width, result.Height = "ok", &metadata.width, &metadata.height
-			result.Codec, result.Animated, result.FrameCount = &avifCodec, &animated, &metadata.frames
+			result.Codec, result.Animated, result.FrameCount = &imageCodec, &animated, &metadata.frames
 			result.DurationMS, result.Orientation, result.CaptureAt = metadata.duration, metadata.orientation, metadata.capture
 			if metadata.loopKnown {
 				result.LoopCount = &metadata.loops

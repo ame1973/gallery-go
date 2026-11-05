@@ -17,8 +17,9 @@ and mandatory Linux isolation they also publish MP4/MOV/MKV/WebM codec, dimensio
 declared duration, orthogonal display transforms and explicitly zoned creation
 metadata. The same sandbox also cross-checks bounded AVIF primary-item/sequence
 metadata with ordered transforms, EXIF and declared image timing/plays. An additional
-fixed libvips header profile supports generic-brand/grid AVIF stills and controlled
-classic TIFF first-page dimensions/EXIF. TIFF document pages do not fabricate image
+fixed libvips header profile supports generic-brand/grid AVIF stills, HEVC-coded
+HEIF/HEIC primary still/grid metadata and controlled classic TIFF first-page
+dimensions/EXIF. TIFF document pages do not fabricate image
 animation. GPS/raw tags
 are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
@@ -265,8 +266,8 @@ source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
 both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs, APNGs,
-WebP, AVIF, classic TIFF and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
-cases verify 48 work units, image animation, TIFF first-page/unknown-animation semantics, video codec/geometry/duration/display
+WebP, AVIF, HEIF/HEIC, classic TIFF and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
+cases verify 57 work units, image animation, HEIF primary selection, TIFF first-page/unknown-animation semantics, video codec/geometry/duration/display
 transforms, UTC milliseconds, unknown-null semantics, protected original/Range and
 anonymous denial, stable complete metadata/revisions on rescan, outage retention
 and graceful shutdown. Video fixtures need no runtime encoder and do not establish

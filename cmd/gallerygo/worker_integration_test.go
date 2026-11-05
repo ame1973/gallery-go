@@ -323,7 +323,13 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					t.Fatal(err)
 				}
 			}
-			mediaCount := 5 + len(videos) + len(avifs) + len(tiffs)
+			heifs := scanHEIFFixtures(t)
+			for name, data := range heifs {
+				if err := os.WriteFile(filepath.Join(root, "Album", name), data, 0o400); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mediaCount := 5 + len(videos) + len(avifs) + len(tiffs) + len(heifs)
 			workUnits := int64(mediaCount * 3)
 			assets := filepath.Join(directory, "web")
 			if err := os.Mkdir(assets, 0o700); err != nil {
@@ -527,6 +533,21 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					}
 					assertCompiledOriginal(t, api, item.ID, data, "image/avif")
 				}
+				if data, ok := heifs[item.FileName]; ok {
+					width, height = 64, 64
+					if item.Kind != "image" || *item.Codec != "hevc" || item.Animated == nil || *item.Animated || item.FrameCount == nil || *item.FrameCount != 1 || item.LoopCount == nil || *item.LoopCount != 1 || item.DurationMS != nil {
+						t.Fatal("compiled HEIF did not preserve primary still evidence", item)
+					}
+					if item.FileName == "capture.heif" {
+						width = 96
+						if item.Orientation == nil || *item.Orientation != 5 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != "2026-11-05T04:34:56.123Z" {
+							t.Fatal("compiled HEIF item transforms/EXIF were lost", item)
+						}
+					} else if item.Orientation != nil || item.CaptureAt != nil {
+						t.Fatal("compiled HEIF invented capture metadata", item)
+					}
+					assertCompiledOriginal(t, api, item.ID, data, "image/heif")
+				}
 				if data, ok := tiffs[item.FileName]; ok {
 					if item.Kind != "image" || *item.Codec != "tiff" || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != "2026-11-05T04:34:56.123Z" || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil || item.DurationMS != nil {
 						t.Fatal("compiled TIFF metadata lost first-page EXIF or invented animation", item)
@@ -680,6 +701,14 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				info, statErr := os.Stat(path)
 				if err != nil || statErr != nil || !bytes.Equal(data, expected) || info.Mode().Perm() != 0o400 {
 					t.Fatal("process changed read-only AVIF source", name, err, statErr)
+				}
+			}
+			for name, expected := range heifs {
+				path := filepath.Join(root, "Album", name)
+				data, err := os.ReadFile(path)
+				info, statErr := os.Stat(path)
+				if err != nil || statErr != nil || !bytes.Equal(data, expected) || info.Mode().Perm() != 0o400 {
+					t.Fatal("process changed read-only HEIF source", name, err, statErr)
 				}
 			}
 			for name, expected := range tiffs {

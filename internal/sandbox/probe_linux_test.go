@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"testing"
@@ -403,6 +404,7 @@ func TestActualChildResourceLimitsDoNotChangeTheParent(t *testing.T) {
 	}
 }
 
+//go:norace
 func sandboxBudgetTest(mode string) int {
 	pin, err := Signature(context.Background())
 	if err != nil {
@@ -422,41 +424,79 @@ func sandboxBudgetTest(mode string) int {
 		limits.MemoryBytes = current.Cur
 	}
 	runtime.LockOSThread()
-	if restrictFilesystem(input, pin) != nil || applyLimits(limits) != nil || restrictSyscalls() != nil {
+	runtime.GOMAXPROCS(1)
+	debug.SetGCPercent(-1)
+	if restrictFilesystem(input, pin) != nil {
 		return 70
 	}
-	for resource, expected := range map[int]unix.Rlimit{
-		unix.RLIMIT_AS:  {Cur: limits.MemoryBytes, Max: limits.MemoryBytes},
-		unix.RLIMIT_CPU: {Cur: 1, Max: 2}, unix.RLIMIT_CORE: {}, unix.RLIMIT_FSIZE: {},
-		unix.RLIMIT_NOFILE: {Cur: 64, Max: 64},
+	filter := syscallFilter()
+	runtime.GC()
+	if applyPreExecLimits(limits) != nil {
+		return 70
+	}
+	status := checkBudgetTest(mode == "cpu", limits.MemoryBytes, filter, input.Fd())
+	runtime.KeepAlive(input)
+	_, _, _ = unix.RawSyscall(unix.SYS_EXIT_GROUP, uintptr(status), 0, 0)
+	return status
+}
+
+// These assertions run under the actual production AS/filter boundary. Like the
+// production final handoff, they cannot allocate or invoke Go/race cleanup.
+//
+//go:norace
+//go:nosplit
+func checkBudgetTest(cpu bool, memory uint64, filter []unix.SockFilter, inputFD uintptr) int {
+	if !installMemoryAndFilter(memory, filter) {
+		return 70
+	}
+	for _, resource := range [...]struct {
+		number uintptr
+		limit  unix.Rlimit
+	}{
+		{unix.RLIMIT_AS, unix.Rlimit{Cur: memory, Max: memory}},
+		{unix.RLIMIT_CPU, unix.Rlimit{Cur: 1, Max: 2}},
+		{unix.RLIMIT_CORE, unix.Rlimit{}}, {unix.RLIMIT_FSIZE, unix.Rlimit{}},
+		{unix.RLIMIT_NOFILE, unix.Rlimit{Cur: 64, Max: 64}},
 	} {
 		var actual unix.Rlimit
-		if unix.Getrlimit(resource, &actual) != nil || actual != expected {
+		_, _, errno := unix.RawSyscall6(unix.SYS_PRLIMIT64, 0, resource.number, 0, uintptr(unsafe.Pointer(&actual)), 0, 0)
+		if errno != 0 || actual != resource.limit {
 			return 80
 		}
 	}
-	if mode == "cpu" {
+	if cpu {
 		for {
 			_, _, _ = unix.RawSyscall(unix.SYS_GETPID, 0, 0, 0)
 		}
 	}
-	if data, err := unix.Mmap(-1, 0, 768<<20, unix.PROT_NONE, unix.MAP_PRIVATE|unix.MAP_ANON); err != unix.ENOMEM {
-		if err == nil {
-			_ = unix.Munmap(data)
+	address, _, errno := unix.RawSyscall6(unix.SYS_MMAP, 0, 768<<20, unix.PROT_NONE, unix.MAP_PRIVATE|unix.MAP_ANON, ^uintptr(0), 0)
+	if errno != unix.ENOMEM {
+		if errno == 0 {
+			_, _, _ = unix.RawSyscall(unix.SYS_MUNMAP, address, 768<<20, 0)
 		}
 		return 81
 	}
-	if err := unix.Prlimit(0, unix.RLIMIT_AS, &unix.Rlimit{Cur: ^uint64(0), Max: ^uint64(0)}, nil); err != unix.EPERM {
+	raised := unix.Rlimit{Cur: ^uint64(0), Max: ^uint64(0)}
+	_, _, errno = unix.RawSyscall6(unix.SYS_PRLIMIT64, 0, unix.RLIMIT_AS, uintptr(unsafe.Pointer(&raised)), 0, 0, 0)
+	if errno != unix.EPERM {
 		return 82
 	}
-	if fd, err := unix.FcntlInt(input.Fd(), unix.F_DUPFD, 64); err != unix.EINVAL {
-		if err == nil {
-			unix.Close(fd)
+	fd, _, errno := unix.RawSyscall(unix.SYS_FCNTL, inputFD, unix.F_DUPFD, 64)
+	if errno != unix.EINVAL {
+		if errno == 0 {
+			_, _, _ = unix.RawSyscall(unix.SYS_CLOSE, fd, 0, 0)
 		}
 		return 83
 	}
-	runtime.KeepAlive(input)
 	return 0
+}
+
+func TestInvalidFilterProgramsAreRejectedBeforeKernelInstall(t *testing.T) {
+	for _, filter := range [][]unix.SockFilter{nil, make([]unix.SockFilter, 4097)} {
+		if result, errno := installSyscallFilter(filter); result != 0 || errno != unix.EINVAL {
+			t.Fatal("invalid filter reached kernel installation", result, errno)
+		}
+	}
 }
 
 func exitRestrictedTest(status int) {

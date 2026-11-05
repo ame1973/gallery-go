@@ -31,7 +31,7 @@ jobs:
       - name: Install the fixed image-header test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libvips-tools libheif-plugin-aomdec
+          sudo apt-get install --yes --no-install-recommends libvips-tools libheif-plugin-aomdec libheif-plugin-libde265
       - name: Check fixed codec sandbox test dependencies
         run: |
           /usr/bin/ffprobe -version

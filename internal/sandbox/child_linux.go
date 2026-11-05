@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -80,32 +81,74 @@ func runChild(args []string, profile codecProfile) int {
 	if profile == profileImageHeader {
 		arguments = []string{imageHeaderBinary, "--vips-concurrency=1", "--vips-cache-max=0", "--vips-cache-max-memory=0", "--vips-cache-max-files=0", "/proc/self/fd/3"}
 	}
-	// Landlock before ABI8 is thread-local. This trusted helper never runs codec code
-	// until exec replaces every sibling Go thread; the final thread must stay locked.
+	executable, err := syscall.BytePtrFromString(profileBinary(profile))
+	if err != nil {
+		return 70
+	}
+	argv, err := syscall.SlicePtrFromStrings(arguments)
+	if err != nil {
+		return 70
+	}
+	environment, err := syscall.SlicePtrFromStrings(childEnvironment)
+	if err != nil {
+		return 70
+	}
+	filter := syscallFilter()
+	// Landlock before ABI8 is thread-local. Untrusted code runs only after exec
+	// replaces sibling Go threads; keep the final thread locked and quiescent.
 	runtime.LockOSThread()
+	runtime.GOMAXPROCS(1)
+	debug.SetGCPercent(-1)
 	if err := restrictFilesystemFor(input, args[3], profile); err != nil {
 		if err == ErrRuntimeChanged {
 			return 72
 		}
 		return 70
 	}
-	if err := applyLimits(limits); err != nil {
+	runtime.GC()
+	if err := applyPreExecLimits(limits); err != nil {
 		return 70
 	}
-	if err := restrictSyscalls(); err != nil {
-		return 70
+	return constrainedExec(limits.MemoryBytes, filter, executable, argv, environment, input)
+}
+
+// No Go allocations, stack growth, runtime syscall transitions or cleanup may run
+// after lowering AS below the existing Go mappings. Seccomp already prevents thread
+// creation before exec; the locked thread retains Landlock. Prepared C strings keep
+// the fixed profile, original hard NOFILE budget and input FD alive across exec.
+//
+//go:norace
+//go:nosplit
+func constrainedExec(memory uint64, filter []unix.SockFilter, executable *byte, argv, environment []*byte, input *os.File) int {
+	if executable != nil && len(argv) > 0 && len(environment) > 0 && installMemoryAndFilter(memory, filter) {
+		_, _, _ = unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(executable)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&environment[0])))
 	}
-	err = unix.Exec(profileBinary(profile), arguments, childEnvironment)
-	// The Go file finalizer must not close the inherited input after the last
-	// policy check but before exec; ELF resolution can trigger garbage collection.
+	runtime.KeepAlive(filter)
+	runtime.KeepAlive(executable)
+	runtime.KeepAlive(argv)
+	runtime.KeepAlive(environment)
 	runtime.KeepAlive(input)
-	if err != nil {
-		return 70
-	}
+	// Exit errors must not enter allocating Go/race finalizers under codec limits.
+	_, _, _ = unix.RawSyscall(unix.SYS_EXIT_GROUP, 70, 0, 0)
 	return 70
 }
 
-func applyLimits(limits Limits) error {
+// The immutable buffers and raw kernel calls are the only operations in this
+// process-private boundary. Race instrumentation would itself allocate under AS.
+//
+//go:norace
+//go:nosplit
+func installMemoryAndFilter(memory uint64, filter []unix.SockFilter) bool {
+	limit := unix.Rlimit{Cur: memory, Max: memory}
+	_, _, errno := unix.RawSyscall6(unix.SYS_PRLIMIT64, 0, unix.RLIMIT_AS, uintptr(unsafe.Pointer(&limit)), 0, 0, 0)
+	if errno != 0 {
+		return false
+	}
+	result, filterErr := installSyscallFilter(filter)
+	return result == 0 && filterErr == 0
+}
+
+func applyPreExecLimits(limits Limits) error {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}
@@ -115,7 +158,6 @@ func applyLimits(limits Limits) error {
 		return err
 	}
 	for resource, limit := range map[int]unix.Rlimit{
-		unix.RLIMIT_AS:     {Cur: limits.MemoryBytes, Max: limits.MemoryBytes},
 		unix.RLIMIT_CPU:    {Cur: limits.CPUSeconds, Max: limits.CPUSeconds + 1},
 		unix.RLIMIT_CORE:   {Cur: 0, Max: 0},
 		unix.RLIMIT_FSIZE:  {Cur: 0, Max: 0},
@@ -216,6 +258,17 @@ func restrictFilesystemFor(input *os.File, expected string, profile codecProfile
 }
 
 func restrictSyscalls() error {
+	result, errno := installSyscallFilter(syscallFilter())
+	if errno != 0 {
+		return errno
+	}
+	if result != 0 {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+func syscallFilter() []unix.SockFilter {
 	filter := []unix.SockFilter{
 		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 4},
 		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: auditArchitecture, Jt: 1},
@@ -265,16 +318,19 @@ func restrictSyscalls() error {
 			unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW})
 	}
 	filter = append(filter, unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ERRNO | uint32(unix.EPERM)})
+	return filter
+}
+
+//go:norace
+//go:nosplit
+func installSyscallFilter(filter []unix.SockFilter) (uintptr, unix.Errno) {
+	if len(filter) == 0 || len(filter) > 4096 {
+		return 0, unix.EINVAL
+	}
 	program := unix.SockFprog{Len: uint16(len(filter)), Filter: &filter[0]}
-	result, _, errno := unix.Syscall(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER, unix.SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(&program)))
+	result, _, errno := unix.RawSyscall6(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER, unix.SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(&program)), 0, 0, 0)
 	runtime.KeepAlive(filter)
-	if errno != 0 {
-		return errno
-	}
-	if result != 0 {
-		return ErrUnavailable
-	}
-	return nil
+	return result, errno
 }
 
 func allowedSyscalls() []uintptr {
