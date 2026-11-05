@@ -44,6 +44,34 @@ Treat IDs, revisions, and account scopes as opaque.
 `offline_capable` remains false until explicit scoped offline manifests are
 implemented. A stable URL or a browser HTTP cache is not an offline grant.
 
+### Static image preset contract
+
+Internal artifact validation recognizes only version 1 of these static WebP
+recipes. Production rendering and atomic variant publication are not enabled yet;
+this validation does not create a READY row or make bytes downloadable.
+
+| Preset         | Maximum long edge | Encoded output byte limit |
+| -------------- | ----------------- | ------------------------- |
+| `thumb_320`    | 320 px            | 1 MiB                     |
+| `thumb_720`    | 720 px            | 4 MiB                     |
+| `display_1920` | 1920 px           | 8 MiB                     |
+
+All three fit the orientation-normalized source without enlargement. Quarter-turn
+orientations swap the axes; dimensions round to the nearest positive pixel once.
+Unknown orientation preserves encoded axes rather than inferring camera evidence.
+Output must have exactly the expected geometry, a complete bounded static WebP
+container, one frame, and no animation/timing or ICC/EXIF/XMP/unknown chunks. The
+input metadata reader remains intentionally compatible with those source chunks;
+accepting an original's metadata is not sufficient validation for a derived output.
+
+The validator computes output length/SHA-256 and the existing immutable
+revision/preset/version/hash storage key. It does not decode entropy-coded pixels,
+prove source identity, write files, enqueue work, grant access, or publish READY.
+A producer must still complete isolated decoding, rehash the source, check its
+current root/configuration/revision and live lease, fsync/rename private output,
+and commit READY with change/outbox/progress. Static output never claims to retain
+source animation, and no original is copied or symlinked into a preview mount.
+
 ### Orientation and capture time
 
 Media detail and album-media pages return these fields, including explicit `null`

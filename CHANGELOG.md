@@ -22,6 +22,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Native static WebP artifact validation for the finite versioned 320/720/1920
+  presets: orientation-aware no-upscale geometry, per-preset byte bounds, complete
+  container checks, no metadata/animation/unknown output chunks, and immutable
+  revision/preset/version/SHA keys. Source metadata compatibility is unchanged.
+  This does not enable rendering, filesystem publication or DB READY; mandatory
+  isolated decoding and transactional source/lease publication remain separate.
+
 - Administrator-only paged per-entry scan diagnostics with fixed safe messages,
   validated nullable relative paths and historical attempt/source/configuration/
   generation context. Job-owned issue history survives source registration removal;
