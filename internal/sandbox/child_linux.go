@@ -8,13 +8,24 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
 
-const probeBinary = "/usr/bin/ffprobe"
+const (
+	probeBinary       = "/usr/bin/ffprobe"
+	imageHeaderBinary = "/usr/bin/vipsheader"
+)
+
+func profileBinary(profile codecProfile) string {
+	if profile == profileImageHeader {
+		return imageHeaderBinary
+	}
+	return probeBinary
+}
 
 func childAttributes() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL, Setpgid: true}
@@ -30,7 +41,10 @@ func killChild(process *os.Process) error {
 
 // RunChild is a private self-exec entrypoint. It opens no config, database, listener
 // or source root, and executes only the fixed probe after all isolation succeeds.
-func RunChild(args []string) int {
+func RunChild(args []string) int      { return runChild(args, profileProbe) }
+func RunImageChild(args []string) int { return runChild(args, profileImageHeader) }
+
+func runChild(args []string, profile codecProfile) int {
 	if len(args) != 4 || !validRuntimeSignature(args[3]) {
 		return 70
 	}
@@ -63,10 +77,13 @@ func RunChild(args []string) int {
 		"-format_whitelist", "mov,matroska,webm,image2,image2pipe,jpeg_pipe,png_pipe,webp_pipe,gif,tiff_pipe",
 		"-select_streams", "V:0", "-show_entries", "stream=index,codec_type,codec_name,width,height,duration:stream_disposition=attached_pic:stream_tags=rotate,creation_time,com.apple.quicktime.creationdate:stream_side_data=rotation,displaymatrix:format=format_name,duration:format_tags=creation_time,com.apple.quicktime.creationdate",
 		"-of", "json", "-i", "/proc/self/fd/3"}
+	if profile == profileImageHeader {
+		arguments = []string{imageHeaderBinary, "--vips-concurrency=1", "--vips-cache-max=0", "--vips-cache-max-memory=0", "--vips-cache-max-files=0", "/proc/self/fd/3"}
+	}
 	// Landlock before ABI8 is thread-local. This trusted helper never runs codec code
 	// until exec replaces every sibling Go thread; the final thread must stay locked.
 	runtime.LockOSThread()
-	if err := restrictFilesystem(input, args[3]); err != nil {
+	if err := restrictFilesystemFor(input, args[3], profile); err != nil {
 		if err == ErrRuntimeChanged {
 			return 72
 		}
@@ -78,7 +95,7 @@ func RunChild(args []string) int {
 	if err := restrictSyscalls(); err != nil {
 		return 70
 	}
-	err = unix.Exec(probeBinary, arguments, childEnvironment)
+	err = unix.Exec(profileBinary(profile), arguments, childEnvironment)
 	// The Go file finalizer must not close the inherited input after the last
 	// policy check but before exec; ELF resolution can trigger garbage collection.
 	runtime.KeepAlive(input)
@@ -112,6 +129,10 @@ func applyLimits(limits Limits) error {
 }
 
 func restrictFilesystem(input *os.File, expected string) error {
+	return restrictFilesystemFor(input, expected, profileProbe)
+}
+
+func restrictFilesystemFor(input *os.File, expected string, profile codecProfile) error {
 	version, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, unix.LANDLOCK_CREATE_RULESET_VERSION)
 	if errno != 0 || version < 3 {
 		return ErrUnavailable
@@ -138,11 +159,11 @@ func restrictFilesystem(input *os.File, expected string) error {
 	if err := add(int(input.Fd()), unix.LANDLOCK_ACCESS_FS_READ_FILE); err != nil {
 		return err
 	}
-	files, err := runtimeFiles()
+	files, err := runtimeFilesFor(profile)
 	if err != nil {
 		return err
 	}
-	probe, err := filepath.EvalSymlinks(probeBinary)
+	probe, err := filepath.EvalSymlinks(profileBinary(profile))
 	if err != nil {
 		return err
 	}
@@ -162,6 +183,30 @@ func restrictFilesystem(input *os.File, expected string) error {
 	}
 	if pin != expected {
 		return ErrRuntimeChanged
+	}
+	if profile == profileImageHeader {
+		// GLib/libheif enumerate their module folders. Directory names are readable,
+		// but payload reads remain restricted to the exact pinned decoder files.
+		seen := make(map[string]bool)
+		for _, name := range files {
+			if !strings.Contains(name, "/vips-modules-") && !strings.Contains(name, "/libheif/plugins/") {
+				continue
+			}
+			directory := filepath.Dir(name)
+			if seen[directory] {
+				continue
+			}
+			seen[directory] = true
+			fd, err := unix.Open(directory, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			err = add(fd, unix.LANDLOCK_ACCESS_FS_READ_DIR)
+			unix.Close(fd)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	_, _, errno = unix.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, fd, 0, 0)
 	if errno != 0 {

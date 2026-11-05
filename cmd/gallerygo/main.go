@@ -26,6 +26,9 @@ import (
 var version = "2.0.0-dev.0"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == sandbox.ImageHeaderCommand {
+		os.Exit(sandbox.RunImageChild(os.Args[2:]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == sandbox.ChildCommand {
 		os.Exit(sandbox.RunChild(os.Args[2:]))
 	}

@@ -56,12 +56,65 @@ func TestAVIFStaticAnimationExifAndTransformsUseActualBoundedEvidence(t *testing
 	}
 }
 
-func TestAVIFGenericHEIFBrandIsRecognizedWithoutFalseCapability(t *testing.T) {
+func TestAVIFGenericHEIFBrandUsesTheIsolatedImageCapability(t *testing.T) {
 	data := avifFixture(t, "still")
 	copy(data[8:12], "mif1")
 	result := inspectFixture(t, data, "misleading.heic", DefaultInspectPolicy())
-	if result.Status != "unsupported" || result.MIME != "image/avif" || result.Codec != nil || result.ErrorCode == nil || *result.ErrorCode != "CODEC_UNAVAILABLE" {
-		t.Fatal("generic brand was mislabeled or claimed unsupported decoder capability", result)
+	if result.Status != "ok" || result.MIME != "image/avif" || result.Codec == nil || *result.Codec != "av1" || result.Width == nil || *result.Width != 16 || result.Height == nil || *result.Height != 12 {
+		t.Fatal("generic AVIF did not use proven image capability", result)
+	}
+	policy := DefaultInspectPolicy()
+	policy.imageRuntime = "unavailable"
+	policy.codecRuntime = "unavailable"
+	failed := inspectFixture(t, data, "image.avif", policy)
+	if failed.Status != "unsupported" || failed.Codec != nil || failed.Width != nil || failed.ErrorCode == nil || *failed.ErrorCode != "CODEC_UNAVAILABLE" {
+		t.Fatal("missing image capability fell back", failed)
+	}
+}
+
+func TestAVIFGridUsesDeclaredCanvasAndTheConfinedImageHeader(t *testing.T) {
+	result := inspectFixture(t, avifFixture(t, "grid"), "misleading.png", DefaultInspectPolicy())
+	if result.Status != "ok" || result.Kind != "image" || result.MIME != "image/avif" || result.Codec == nil || *result.Codec != "av1" || result.Width == nil || *result.Width != 96 || result.Height == nil || *result.Height != 64 || result.FrameCount == nil || *result.FrameCount != 1 || result.Animated == nil || *result.Animated || result.LoopCount == nil || *result.LoopCount != 1 || result.DurationMS != nil {
+		t.Fatal("grid was guessed from its first tile", result)
+	}
+	policy := DefaultInspectPolicy()
+	policy.MaxPixels = 96*64 - 1
+	limited := inspectFixture(t, avifFixture(t, "grid"), "image.avif", policy)
+	if limited.Status != "invalid" || limited.ErrorCode == nil || *limited.ErrorCode != "MEDIA_LIMIT" || limited.Width != nil {
+		t.Fatal("grid canvas escaped pixel budget", limited)
+	}
+}
+
+func TestAVIFGridRejectsWrongCanvasAndMissingOrRecursiveTiles(t *testing.T) {
+	for name, mutate := range map[string]func(*testing.T, []byte){
+		"missing tile": func(t *testing.T, data []byte) {
+			b := avifTestBox(t, data, "meta", "iref", "dimg")
+			binary.BigEndian.PutUint16(b.body[4:], 99)
+		},
+		"wrong tile count": func(t *testing.T, data []byte) {
+			b := avifTestBox(t, data, "meta", "iloc")
+			offset := binary.BigEndian.Uint32(b.body[14:])
+			data[int(offset)+3] = 3
+		},
+		"wrong canvas": func(t *testing.T, data []byte) {
+			b := avifTestBox(t, data, "meta", "iloc")
+			offset := binary.BigEndian.Uint32(b.body[14:])
+			binary.BigEndian.PutUint16(data[int(offset)+4:], 95)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			data := avifFixture(t, "grid")
+			mutate(t, data)
+			if _, err := parseAVIF(t.Context(), bytes.NewReader(data), int64(len(data)), DefaultInspectPolicy()); err == nil {
+				t.Fatal("invalid grid accepted")
+			}
+		})
+	}
+	data := avifFixture(t, "grid")
+	ref := avifTestBox(t, data, "meta", "iref", "dimg")
+	binary.BigEndian.PutUint16(ref.body[4:], 1)
+	if _, err := parseAVIF(t.Context(), bytes.NewReader(data), int64(len(data)), DefaultInspectPolicy()); !errors.Is(err, errAVIFUnsupported) {
+		t.Fatal("recursive derived items were followed", err)
 	}
 }
 
@@ -236,7 +289,7 @@ func TestAVIFUnknownTimingAndNonessentialPropertiesAreNotGuessed(t *testing.T) {
 }
 
 func FuzzBoundedAVIFMetadata(f *testing.F) {
-	for _, name := range []string{"still", "animated", "exif", "mirrored"} {
+	for _, name := range []string{"still", "animated", "exif", "mirrored", "grid"} {
 		f.Add(avifFixture(f, name))
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {

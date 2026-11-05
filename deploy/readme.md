@@ -75,7 +75,9 @@ same source pins. Enabled consumers schedule active registrations automatically;
 set `scheduler.enabled: false` in every consumer for manual-only scans. Source API
 calls do no synchronous scanning or filesystem creation. The host build supports
 [controlled AVIF/video metadata](../docs/media.md) only when a trusted system FFprobe and
-mandatory Linux isolation are available. This image still lacks that codec package;
+mandatory Linux isolation are available. Static grid/generic AVIF also requires
+the fixed libvips header profile and its trusted HEIF/AV1 dependencies. This image
+still lacks those codec packages;
 affected paths report explicit failed/unsupported work, not successful decoding.
 Do not disable isolation or add a public original-file fallback to make it work.
 

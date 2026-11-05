@@ -91,17 +91,30 @@ func TestMetadataRuntimeEpochCannotChangeWithinAnInspectorVersion(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, _ := json.Marshal(struct {
-		Version      int
-		Policy       media.InspectPolicy
-		CodecRuntime string
-	}{inspectVersion, policy, strings.Repeat("0", 64)})
-	digest := sha256.Sum256(data)
-	if _, err := f.db.Exec(`UPDATE inventory_generations SET inspect_policy_sha256=? WHERE id=?`, hex.EncodeToString(digest[:]), generation.ID); err != nil {
+	pinned, err := policy.PinCodecRuntime(t.Context())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.inventory.ProbeMetadata(t.Context(), lease, generation.ID, policy); !errors.Is(err, ErrGeneration) {
-		t.Fatal("installation epochs mixed inside one metadata generation", err)
+	for _, profile := range []string{"codec", "image"} {
+		codecPin, imagePin := pinned.CodecRuntimePin(), pinned.ImageRuntimePin()
+		if profile == "codec" {
+			codecPin = strings.Repeat("0", 64)
+		} else {
+			imagePin = strings.Repeat("0", 64)
+		}
+		data, _ := json.Marshal(struct {
+			Version      int
+			Policy       media.InspectPolicy
+			CodecRuntime string
+			ImageRuntime string
+		}{inspectVersion, policy, codecPin, imagePin})
+		digest := sha256.Sum256(data)
+		if _, err := f.db.Exec(`UPDATE inventory_generations SET inspect_policy_sha256=? WHERE id=?`, hex.EncodeToString(digest[:]), generation.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.inventory.ProbeMetadata(t.Context(), lease, generation.ID, policy); !errors.Is(err, ErrGeneration) {
+			t.Fatal("installation epochs mixed inside one metadata generation", profile, err)
+		}
 	}
 	after, err := f.queue.Get(t.Context(), lease.Job.ID)
 	if err != nil || before.Counts != after.Counts {

@@ -49,6 +49,23 @@ func TestCompiledPrivateCodecChildNeedsNoConfigAndNeverAcceptsAPath(t *testing.T
 	if err != nil || json.Unmarshal(output, &value) != nil || len(value.Streams) != 1 || value.Streams[0].Width != 12 || value.Streams[0].Height != 7 || bytes.Contains(output, []byte(name)) {
 		t.Fatal("compiled sandbox child failed or leaked a source path", string(output), err)
 	}
+	imagePin, err := sandbox.ImageSignature(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageCommand := exec.CommandContext(t.Context(), binary, sandbox.ImageHeaderCommand, "536870912", "10", "34359738368", imagePin)
+	imageCommand.ExtraFiles = []*os.File{input}
+	imageCommand.Dir = t.TempDir()
+	imageOutput, err := imageCommand.Output()
+	if err != nil || !bytes.HasPrefix(imageOutput, []byte("/proc/self/fd/3: 12x7 ")) || bytes.Contains(imageOutput, []byte(name)) {
+		t.Fatal("compiled image header child used config or leaked input", string(imageOutput), err)
+	}
+	for _, arguments := range [][]string{{sandbox.ImageHeaderCommand}, {sandbox.ImageHeaderCommand, name}, {sandbox.ImageHeaderCommand, "536870912", "10", "34359738368", imagePin}, {sandbox.ImageHeaderCommand, "1", "10", "34359738368", imagePin}, {sandbox.ImageHeaderCommand, "536870912", "10", "34359738368", imagePin, name}} {
+		output, err := exec.CommandContext(t.Context(), binary, arguments...).CombinedOutput()
+		if err == nil || bytes.Contains(output, []byte(name)) {
+			t.Fatal("image child accepted invalid authority", string(output), err)
+		}
+	}
 	for _, arguments := range [][]string{
 		{sandbox.ChildCommand},
 		{sandbox.ChildCommand, name},

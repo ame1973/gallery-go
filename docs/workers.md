@@ -67,7 +67,7 @@ explicit failed work. External image capabilities and variant processing remain
 under development. Video uses the fail-closed [codec sandbox](codec-sandbox.md),
 with strict JSON, codec/geometry/duration checks, orthogonal display transforms
 and explicitly zoned creation tags. Its private trusted-installation epoch joins
-inspector v8/resource policy in immutable staging, with per-child epoch checks and
+inspector v9/resource policy in immutable staging, with per-child epoch checks and
 post-probe source rehashing. Keep trusted codecs immutable while workers run.
 Missing tools/kernel support count as unsupported failed media, not successful or
 silently skipped work; the current container still does not include codecs.
@@ -87,11 +87,12 @@ separate scanner input-file budget is larger. Plain Text/unknown rendering exten
 are explicitly unsupported; metadata success is not LZW decoding or player readiness.
 
 AVIF reads bounded primary-item/sample tables while skipping compressed payloads,
-then cross-checks AV1/encoded dimensions through the sandbox. It validates local
+then cross-checks direct AV1/geometry through FFprobe or validates static grid/
+generic-primary geometry through the fixed isolated image-header profile. It validates local
 extents, ordered transforms and primary-associated EXIF; image timing comes from
-sample tables and declared edit repetition, never FPS. Unknown/unsupported profiles
-stay explicit. Native-only deployments without the probe cannot bless AVIF from
-headers. See [AVIF boundaries](media.md#controlled-avif-metadata).
+sample tables and declared edit repetition, never FPS. Unknown/unsupported profiles stay explicit.
+Missing a required profile cannot bless AVIF from headers; the independent FFprobe
+and image-header runtime pins are collected before database writers. See [AVIF boundaries](media.md#controlled-avif-metadata).
 
 ## Strict YAML policies
 

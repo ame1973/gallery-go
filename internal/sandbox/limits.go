@@ -16,7 +16,17 @@ var (
 	ErrRuntimeChanged = errors.New("codec runtime changed from its pinned installation")
 )
 
-const ChildCommand = "__codec-probe"
+const (
+	ChildCommand       = "__codec-probe"
+	ImageHeaderCommand = "__image-header"
+)
+
+type codecProfile uint8
+
+const (
+	profileProbe codecProfile = iota
+	profileImageHeader
+)
 
 // Limits are trusted worker policy, never command-line options from an API caller.
 // The child independently validates them before establishing irreversible limits.

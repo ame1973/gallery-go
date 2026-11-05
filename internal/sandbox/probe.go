@@ -14,6 +14,16 @@ import (
 // Probe returns only the fixed tool's narrow JSON projection. The caller must
 // still validate that metadata and rehash/bind it to the immutable source revision.
 func Probe(ctx context.Context, input *os.File, limits Limits, expected string) ([]byte, error) {
+	return runProbe(ctx, input, limits, expected, ChildCommand)
+}
+
+// ImageHeader returns only vipsheader's default single-line geometry summary,
+// never its raw all-fields/history/extension output. Callers validate it strictly.
+func ImageHeader(ctx context.Context, input *os.File, limits Limits, expected string) ([]byte, error) {
+	return runProbe(ctx, input, limits, expected, ImageHeaderCommand)
+}
+
+func runProbe(ctx context.Context, input *os.File, limits Limits, expected, child string) ([]byte, error) {
 	if err := limits.Validate(); err != nil {
 		return nil, err
 	}
@@ -37,7 +47,7 @@ func Probe(ctx context.Context, input *os.File, limits Limits, expected string) 
 	runCtx, cancel := context.WithTimeout(ctx, limits.Timeout)
 	defer cancel()
 	// /proc/self/exe pins the executing Go image even if its pathname is replaced.
-	command := exec.CommandContext(runCtx, "/proc/self/exe", ChildCommand,
+	command := exec.CommandContext(runCtx, "/proc/self/exe", child,
 		strconv.FormatUint(limits.MemoryBytes, 10), strconv.FormatUint(limits.CPUSeconds, 10), strconv.FormatInt(limits.InputBytes, 10), expected)
 	command.Env = childEnvironment
 	command.Dir = "/"
@@ -77,6 +87,7 @@ func Probe(ctx context.Context, input *os.File, limits Limits, expected string) 
 var childEnvironment = []string{
 	"LANG=C", "LC_ALL=C", "TZ=UTC", "HOME=/nonexistent",
 	"OMP_NUM_THREADS=1", "OPENBLAS_NUM_THREADS=1", "MKL_NUM_THREADS=1",
+	"VIPS_CONCURRENCY=1", "VIPS_NOVECTOR=1",
 }
 
 type boundedOutput struct {

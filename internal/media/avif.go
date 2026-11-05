@@ -30,11 +30,13 @@ type avifItem struct {
 	properties  []uint32
 	essential   []bool
 	metadataFor []uint64
+	derived     []uint64
 }
 type avifInfo struct {
 	width, height int64
 	animationInfo
 	loopKnown   bool
+	imageHeader bool
 	orientation *int64
 	capture     *time.Time
 }
@@ -170,15 +172,11 @@ func parseAVIF(ctx context.Context, file io.ReaderAt, size int64, policy Inspect
 	if !avifBrand || meta == nil {
 		return avifInfo{}, errAVIF
 	}
-	// The fixed installed MOV demuxer recognizes AVIF image items only under
-	// explicit AVIF major brands. Keep generic HEIF compatibility truthful.
-	if brands[0] != "avif" && brands[0] != "avis" {
-		return avifInfo{}, errAVIFUnsupported
-	}
 	info, err := r.meta(*meta, mediaData, policy)
 	if err != nil {
 		return avifInfo{}, err
 	}
+	info.imageHeader = info.imageHeader || brands[0] != "avif" && brands[0] != "avis"
 	if movie == nil {
 		for _, brand := range brands {
 			if brand == "avis" {
@@ -187,6 +185,9 @@ func parseAVIF(ctx context.Context, file io.ReaderAt, size int64, policy Inspect
 		}
 		info.frames, info.loops, info.loopKnown = 1, 1, true
 	} else {
+		if info.imageHeader {
+			return avifInfo{}, errAVIFUnsupported
+		}
 		animation, known, err := r.sequence(*movie, mediaData, policy)
 		if err != nil {
 			return avifInfo{}, err
@@ -200,6 +201,23 @@ func inspectAVIF(ctx context.Context, file *os.File, size int64, policy InspectP
 	info, err := parseAVIF(ctx, file, size, policy)
 	if err != nil {
 		return avifInfo{}, err
+	}
+	if info.imageHeader {
+		header, err := inspectImageHeader(ctx, file, policy)
+		if err != nil {
+			return avifInfo{}, err
+		}
+		if header.loader != "heifload" {
+			return avifInfo{}, errAVIFUnsupported
+		}
+		matches := header.width == info.width && header.height == info.height
+		if info.orientation != nil && *info.orientation >= 5 {
+			matches = matches || header.width == info.height && header.height == info.width
+		}
+		if !matches {
+			return avifInfo{}, errAVIF
+		}
+		return info, nil
 	}
 	output, err := probeCodec(ctx, file, policy)
 	if err != nil {
@@ -394,7 +412,7 @@ func (r *avifReader) meta(box avifBox, mediaData []avifExtent, policy InspectPol
 	if main == nil || main.kind == "" || !main.located {
 		return avifInfo{}, errAVIF
 	}
-	if main.kind != "av01" || main.hidden {
+	if (main.kind != "av01" && main.kind != "grid") || main.hidden {
 		return avifInfo{}, errAVIFUnsupported
 	}
 	for _, value := range items {
@@ -424,6 +442,12 @@ func (r *avifReader) meta(box avifBox, mediaData []avifExtent, policy InspectPol
 	info, err := avifPrimaryProperties(main, properties, policy)
 	if err != nil {
 		return avifInfo{}, err
+	}
+	if main.kind == "grid" {
+		if err := r.grid(main, items, properties, info, policy); err != nil {
+			return avifInfo{}, err
+		}
+		info.imageHeader = true
 	}
 	var exif *avifItem
 	for _, candidate := range items {
@@ -569,6 +593,8 @@ func (r *avifReader) references(box avifBox, item func(uint64) (*avifItem, error
 			id := entry.number(width)
 			if child.kind == "cdsc" {
 				value.metadataFor = append(value.metadataFor, id)
+			} else if child.kind == "dimg" {
+				value.derived = append(value.derived, id)
 			}
 		}
 		if err := entry.done(); err != nil {
@@ -697,7 +723,7 @@ func avifPrimaryProperties(item *avifItem, properties []avifBox, policy InspectP
 			transformed = true
 		}
 	}
-	if !seen["ispe"] || !seen["av1C"] || result.width < 1 || result.height < 1 {
+	if !seen["ispe"] || item.kind != "grid" && !seen["av1C"] || result.width < 1 || result.height < 1 {
 		return avifInfo{}, errAVIF
 	}
 	if result.width > int64(policy.MaxDimension) || result.height > int64(policy.MaxDimension) || result.width > policy.MaxPixels/result.height {

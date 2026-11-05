@@ -77,27 +77,50 @@ func (policy InspectPolicy) PinCodecRuntime(ctx context.Context) (InspectPolicy,
 		pin = "unavailable"
 	}
 	policy.codecRuntime = pin
+	imagePin, imageErr := sandbox.ImageSignature(ctx)
+	if imageErr != nil {
+		if ctx.Err() != nil {
+			return InspectPolicy{}, ctx.Err()
+		}
+		imagePin = "unavailable"
+	}
+	policy.imageRuntime = imagePin
 	return policy, nil
 }
 
 // CodecRuntimePin is private processing evidence, never a public configuration,
 // filesystem path, capability claim or metadata API field.
 func (policy InspectPolicy) CodecRuntimePin() string { return policy.codecRuntime }
+func (policy InspectPolicy) ImageRuntimePin() string { return policy.imageRuntime }
 
 func probeCodec(ctx context.Context, input *os.File, policy InspectPolicy) ([]byte, error) {
-	if policy.codecRuntime == "" {
+	return probeCodecProfile(ctx, input, policy, false)
+}
+
+func probeCodecProfile(ctx context.Context, input *os.File, policy InspectPolicy, imageHeader bool) ([]byte, error) {
+	if policy.codecRuntime == "" || imageHeader && policy.imageRuntime == "" {
 		var err error
 		policy, err = policy.PinCodecRuntime(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if policy.codecRuntime == "unavailable" {
+	pin := policy.codecRuntime
+	if imageHeader {
+		pin = policy.imageRuntime
+	}
+	if pin == "unavailable" {
 		return nil, errVideoUnsupported
 	}
 	limits := sandbox.DefaultLimits()
 	limits.Timeout = policy.Timeout
-	output, err := sandbox.Probe(ctx, input, limits, policy.codecRuntime)
+	var output []byte
+	var err error
+	if imageHeader {
+		output, err = sandbox.ImageHeader(ctx, input, limits, pin)
+	} else {
+		output, err = sandbox.Probe(ctx, input, limits, pin)
+	}
 	switch {
 	case errors.Is(err, sandbox.ErrRuntimeChanged):
 		return nil, ErrContentChanged

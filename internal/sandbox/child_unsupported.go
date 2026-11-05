@@ -9,7 +9,9 @@ import (
 )
 
 // No unsupported platform silently falls back to unrestricted execution.
-func Signature(_ context.Context) (string, error) { return "", ErrUnavailable }
-func RunChild(_ []string) int                     { return 70 }
-func childAttributes() *syscall.SysProcAttr       { return nil }
-func killChild(process *os.Process) error         { return process.Kill() }
+func ImageSignature(_ context.Context) (string, error) { return "", ErrUnavailable }
+func RunImageChild(_ []string) int                     { return 70 }
+func Signature(_ context.Context) (string, error)      { return "", ErrUnavailable }
+func RunChild(_ []string) int                          { return 70 }
+func childAttributes() *syscall.SysProcAttr            { return nil }
+func killChild(process *os.Process) error              { return process.Kill() }

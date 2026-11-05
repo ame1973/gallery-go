@@ -23,6 +23,9 @@ import (
 )
 
 func init() {
+	if len(os.Args) > 1 && os.Args[1] == ImageHeaderCommand {
+		os.Exit(RunImageChild(os.Args[2:]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == ChildCommand {
 		if status := supervisionTestChild(); status >= 0 {
 			os.Exit(status)
@@ -34,6 +37,9 @@ func init() {
 	}
 	if len(os.Args) > 2 && os.Args[1] == "__sandbox-unavailable-test" {
 		exitRestrictedTest(unavailableIsolationTest(os.Args[2]))
+	}
+	if len(os.Args) > 3 && os.Args[1] == "__sandbox-image-self-test" {
+		os.Exit(sandboxSelfTestFor(os.Args[2], profileImageHeader))
 	}
 	if len(os.Args) > 2 && os.Args[1] == "__sandbox-self-test" {
 		os.Exit(sandboxSelfTest(os.Args[2]))
@@ -152,11 +158,16 @@ func TestLandlockAndSeccompActuallyDenySiblingReadWritesNetworkAndProcesses(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.CommandContext(t.Context(), binary, "__sandbox-self-test", outside)
-	command.ExtraFiles = []*os.File{input}
-	command.Env = childEnvironment
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("actual confinement assertions failed: %v\n%s", err, output)
+	if err := os.Chmod(input.Name(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"__sandbox-self-test", "__sandbox-image-self-test"} {
+		command := exec.CommandContext(t.Context(), binary, mode, outside, "assert")
+		command.ExtraFiles = []*os.File{input}
+		command.Env = childEnvironment
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("actual confinement assertions failed (%s): %v\n%s", mode, err, output)
+		}
 	}
 	data, err := os.ReadFile(outside)
 	if err != nil || string(data) != "private sibling canary" {
@@ -164,16 +175,34 @@ func TestLandlockAndSeccompActuallyDenySiblingReadWritesNetworkAndProcesses(t *t
 	}
 }
 
-func sandboxSelfTest(outside string) int {
-	pin, err := Signature(context.Background())
+func sandboxSelfTest(outside string) int { return sandboxSelfTestFor(outside, profileProbe) }
+
+func sandboxSelfTestFor(outside string, profile codecProfile) int {
+	pin, err := signatureFor(context.Background(), profile)
 	if err != nil {
 		return 70
+	}
+	unusedModule := ""
+	if profile == profileImageHeader {
+		for _, directory := range libraryDirectories {
+			matches, _ := filepath.Glob(filepath.Join(directory, "vips-modules-*/vips-magick.so"))
+			if len(matches) > 0 {
+				unusedModule = matches[0]
+				break
+			}
+		}
 	}
 	parent := os.Getppid()
 	runtime.LockOSThread()
 	input := os.NewFile(3, "input")
-	if restrictFilesystem(input, pin) != nil || restrictSyscalls() != nil {
+	if restrictFilesystemFor(input, pin, profile) != nil || restrictSyscalls() != nil {
 		return 70
+	}
+	if unusedModule != "" {
+		if fd, err := unix.Open(unusedModule, unix.O_RDONLY, 0); err == nil {
+			unix.Close(fd)
+			return 94
+		}
 	}
 	if fd, err := unix.Open(outside, unix.O_RDONLY, 0); err == nil {
 		unix.Close(fd)

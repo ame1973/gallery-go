@@ -20,11 +20,16 @@ import (
 // Signature identifies the fixed installed runtime outside database transactions.
 // Trusted system files are pinned by canonical path, inode, size, mode and both
 // timestamps; unlike source media, they are not attacker-writable NAS inputs.
-func Signature(ctx context.Context) (string, error) {
+func Signature(ctx context.Context) (string, error) { return signatureFor(ctx, profileProbe) }
+func ImageSignature(ctx context.Context) (string, error) {
+	return signatureFor(ctx, profileImageHeader)
+}
+
+func signatureFor(ctx context.Context, profile codecProfile) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	files, err := runtimeFiles()
+	files, err := runtimeFilesFor(profile)
 	if err == nil {
 		var pin string
 		pin, err = runtimeFingerprint(ctx, files, nil)
@@ -75,8 +80,21 @@ func runtimeFingerprint(ctx context.Context, files []string, grant func(string, 
 // runtimeFiles resolves only the fixed trusted tool's ELF dependencies and loader
 // cache. File rules, not broad /usr/lib grants, prevent unrelated source mounts
 // beneath system directories from becoming readable by a malicious media file.
-func runtimeFiles() ([]string, error) {
-	queue := []string{probeBinary, dynamicLoader}
+func runtimeFiles() ([]string, error) { return runtimeFilesFor(profileProbe) }
+
+func runtimeFilesFor(profile codecProfile) ([]string, error) {
+	queue := []string{profileBinary(profile), dynamicLoader}
+	if profile == profileImageHeader {
+		for _, root := range libraryDirectories {
+			for _, suffix := range []string{"vips-modules-*/vips-heif.so", "libheif/plugins/libheif-aomdec.so", "libheif/plugins/libheif-libde265.so"} {
+				matches, err := filepath.Glob(filepath.Join(root, suffix))
+				if err != nil || len(matches) > 64 {
+					return nil, ErrUnavailable
+				}
+				queue = append(queue, matches...)
+			}
+		}
+	}
 	seen := make(map[string]bool)
 	result := make([]string, 0, 128)
 	for len(queue) > 0 {

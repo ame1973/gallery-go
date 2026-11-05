@@ -138,12 +138,13 @@ not grant preview/original access or establish player/offline readiness.
 
 ## Controlled AVIF metadata
 
-Directly coded AV1 primary items and AVIF image sequences use a bounded ISO-BMFF
-metadata reader plus the same mandatory [FFprobe sandbox](codec-sandbox.md).
-The reader proves local item/sample relationships first; the tool must independently
-report AV1 and matching encoded dimensions. A tool name, extension or `avif` brand
-alone cannot establish a successful inspection. Missing isolation/codec capability
-remains explicit `CODEC_UNAVAILABLE`, never a header-only success fallback.
+AVIF uses a bounded ISO-BMFF reader plus the [mandatory codec sandbox](codec-sandbox.md).
+Directly coded primary items/sequences cross-check AV1 and encoded geometry through
+FFprobe. Generic-major-brand and tiled-grid stills use a finite fixed libvips header
+profile; their primary/AV1 tile declarations and native geometry are validated
+before comparing the exact one-line header. A tool name, extension or brand alone
+cannot establish success. Missing isolation/tool capability remains explicit
+`CODEC_UNAVAILABLE`, never a header-only fallback.
 
 - The primary item is selected through `pitm`, `iinf`/`infe`, `iloc` and `ipma`/`ipco`,
   not whichever thumbnail or metadata item appears first. Local file/`idat` extents
@@ -153,6 +154,12 @@ remains explicit `CODEC_UNAVAILABLE`, never a header-only success fallback.
   controlled probe. `irot` and `imir` properties compose in association order and
   normalize to EXIF `1..8`; explicitly signaled item transforms precede EXIF fallback.
   Encoded width/height are not swapped and source pixels are not rewritten.
+- Grid primary items require a matching bounded canvas descriptor, exact tile count,
+  direct compatible AV1 inputs and complete canvas coverage. Tile size/configuration
+  must agree; recursive derived items and per-tile transforms are unsupported.
+  A grid remains one image/frame, not one frame per tile. The protected original is
+  unchanged; the API keeps native encoded canvas dimensions even if the header
+  decoder applies a declared quarter-turn before reporting display dimensions.
 - Only a primary-associated `Exif` item is considered. Its bounded offset/profile
   uses the same classic-TIFF whitelist for original date/explicit timezone/subseconds.
   Capture is truncated to UTC milliseconds; GPS, raw fields, MakerNote, thumbnails,
@@ -172,12 +179,13 @@ The byte budget limits metadata reads, not the size of a copied `mdat`: compress
 payloads are skipped/extent-checked and later source hashing is streamed. Independent
 caps include 4,096 boxes, 256 items, 16 extents per item, 64 associations per item,
 64 tracks, configured dimensions/pixels/frames/cycle duration and a 64 KiB EXIF item.
-The current profile explicitly rejects generic HEIF major brands, derived-grid primary items, protected or
-external data, ambiguous color tracks and unknown essential properties rather than
-guessing. These profiles and other image formats remain complete-codec/variant
-acceptance work, not an unrestricted fallback.
+Protected/external data, recursive or incompatible grid inputs, ambiguous color
+tracks, unknown essential properties and generic-major image sequences still
+remain unsupported rather than guessed. Other image formats and complete codec/
+variant acceptance remain required; no unrestricted fallback is enabled.
 
-Inspector v8 rejects historical v1..v7 policy pins. Source hash/configuration and
+Inspector v9 pins the two tool runtimes independently and rejects historical
+v1..v8 policy pins. Source hash/configuration and
 live publication fences are unchanged. Owned still/finite/infinite/EXIF/transform
 fixtures exercise actual probing, immutable SQLite publication, source rewrites and
 compiled consumers. This is metadata evidence, not validation of every compressed

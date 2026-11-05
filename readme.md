@@ -16,7 +16,9 @@ and bounded GIF/APNG/WebP frame/cycle/loop metadata. With a trusted system FFpro
 and mandatory Linux isolation they also publish MP4/MOV/MKV/WebM codec, dimensions,
 declared duration, orthogonal display transforms and explicitly zoned creation
 metadata. The same sandbox also cross-checks bounded AVIF primary-item/sequence
-metadata with ordered transforms, EXIF and declared image timing/plays. GPS/raw tags
+metadata with ordered transforms, EXIF and declared image timing/plays. An additional
+fixed libvips header profile supports generic-brand and compatible grid stills.
+GPS/raw tags
 are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and
@@ -228,7 +230,8 @@ checks every registered API operation against the schema. Never hand-edit
 ## Testing
 
 The codec sandbox regressions additionally require Linux amd64/arm64, Landlock
-ABI 3+, unprivileged seccomp filters, and a trusted `/usr/bin/ffprobe`. They fail
+ABI 3+, unprivileged seccomp filters, trusted `/usr/bin/ffprobe` and
+`/usr/bin/vipsheader` with HEIF/AV1 loader dependencies. They fail
 closed when mandatory isolation is unavailable; they never skip to unrestricted
 execution. See [codec sandbox boundaries](docs/codec-sandbox.md). The scan inspector
 uses it for video metadata; the current container still does not bundle FFprobe.
@@ -261,7 +264,7 @@ explicitly disable the embedded consumer using supported configuration. A separa
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
 both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs, APNGs,
 WebP, AVIF and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
-cases verify 33 work units, image animation, video codec/geometry/duration/display
+cases verify 39 work units, image animation, video codec/geometry/duration/display
 transforms, UTC milliseconds, unknown-null semantics, protected original/Range and
 anonymous denial, stable complete metadata/revisions on rescan, outage retention
 and graceful shutdown. Video fixtures need no runtime encoder and do not establish

@@ -509,6 +509,13 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 						if *item.Animated || *item.FrameCount != 1 || *item.LoopCount != 1 || item.DurationMS != nil || item.Orientation == nil || *item.Orientation != 5 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != "2026-11-05T04:34:56.123Z" {
 							t.Fatal("AVIF ordered transforms/EXIF were not published", item)
 						}
+					} else if item.FileName == "generic.avif" || item.FileName == "grid.avif" {
+						if item.FileName == "grid.avif" {
+							width, height = 96, 64
+						}
+						if *item.Animated || *item.FrameCount != 1 || *item.LoopCount != 1 || item.DurationMS != nil || item.Orientation != nil || item.CaptureAt != nil {
+							t.Fatal("image-header profile fabricated static AVIF metadata", item)
+						}
 					} else if !*item.Animated || *item.FrameCount != 2 || *item.LoopCount != 2 || item.DurationMS == nil || *item.DurationMS != 400 || item.Orientation != nil || item.CaptureAt != nil {
 						t.Fatal("AVIF total plays/cycle were guessed", item)
 					}

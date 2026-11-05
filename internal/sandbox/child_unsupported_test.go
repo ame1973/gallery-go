@@ -23,6 +23,15 @@ func TestUnsupportedPlatformsNeverLaunchAnUnrestrictedChild(t *testing.T) {
 	if output, err := Probe(t.Context(), input, DefaultLimits(), strings.Repeat("0", 64)); !errors.Is(err, ErrUnavailable) || len(output) != 0 {
 		t.Fatal("unsupported platform did not fail closed", err)
 	}
+	if code := RunImageChild(nil); code != 70 {
+		t.Fatal("unsupported image child did not reject execution", code)
+	}
+	if output, err := ImageHeader(t.Context(), input, DefaultLimits(), strings.Repeat("0", 64)); !errors.Is(err, ErrUnavailable) || len(output) != 0 {
+		t.Fatal("unsupported image platform failed open", err)
+	}
+	if _, err := ImageSignature(t.Context()); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("unsupported image signature claimed capability", err)
+	}
 	if code := RunChild(nil); code != 70 {
 		t.Fatal("unsupported child did not reject execution", code)
 	}

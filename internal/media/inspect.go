@@ -26,6 +26,7 @@ type InspectPolicy struct {
 	HeaderBytes  int64         `yaml:"header_bytes"`
 	Timeout      time.Duration `yaml:"timeout"`
 	codecRuntime string
+	imageRuntime string
 }
 
 func DefaultInspectPolicy() InspectPolicy {

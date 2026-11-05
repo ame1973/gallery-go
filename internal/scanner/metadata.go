@@ -16,7 +16,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-const inspectVersion = 8
+const inspectVersion = 9
 
 type inspectedFile struct {
 	file       File
@@ -84,7 +84,7 @@ func (s *Inventory) ProbeMetadata(ctx context.Context, lease jobs.Lease, id stri
 // Pin the inspector version and limits so a resumed generation cannot mix results
 // from different processing policies. A changed policy requires a new generation.
 func (s *Inventory) beginMetadata(ctx context.Context, lease jobs.Lease, id string, policy media.InspectPolicy) (Generation, media.SourceRoot, error) {
-	if policy.CodecRuntimePin() == "" {
+	if policy.CodecRuntimePin() == "" || policy.ImageRuntimePin() == "" {
 		return Generation{}, media.SourceRoot{}, ErrGeneration
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -100,7 +100,8 @@ func (s *Inventory) beginMetadata(ctx context.Context, lease jobs.Lease, id stri
 		Version      int
 		Policy       media.InspectPolicy
 		CodecRuntime string
-	}{inspectVersion, policy, policy.CodecRuntimePin()})
+		ImageRuntime string
+	}{inspectVersion, policy, policy.CodecRuntimePin(), policy.ImageRuntimePin()})
 	digest := sha256.Sum256(data)
 	pin := hex.EncodeToString(digest[:])
 	if generation.inspectionPolicy != "" {

@@ -29,6 +29,14 @@ build did not recognize the valid sequence vectors, so tests do not equate a
 single tool's file-recognition list with complete codec support. Runtime tests
 need only the fixed isolated FFprobe and checked-in vectors, not an encoder.
 
+The additional `grid` vector declares a 96-by-64 canvas from two distinct owned
+64-by-64 AV1 tiles. Local derived references, tile configuration and canvas crop
+are explicit. System libvips independently decoded all 18,432 RGB bytes and both
+edge colors during generation. The original seven vectors are unchanged. Generic
+HEIF-major tests change only the owned still's major brand, not private media.
+The isolated image-header profile is tested separately from that trusted-input
+fixture-generation decode; metadata success is not full AV1 pixel acceptance.
+
 ## Owned video vectors
 
 `video.json` contains tiny complete containers generated with system FFmpeg 6.1.1

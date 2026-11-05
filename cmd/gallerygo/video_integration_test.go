@@ -57,13 +57,19 @@ func scanAVIFFixtures(t *testing.T) map[string][]byte {
 		t.Fatal("invalid owned AVIF vectors")
 	}
 	result := make(map[string][]byte)
-	for name, key := range map[string]string{"still.avif": "mirrored", "motion.avif": "animated"} {
+	for name, key := range map[string]string{"still.avif": "mirrored", "motion.avif": "animated", "grid.avif": "grid"} {
 		data, err := base64.StdEncoding.DecodeString(encoded[key])
 		if err != nil || len(data) == 0 {
 			t.Fatal("missing owned AVIF vector", key, err)
 		}
 		result[name] = data
 	}
+	generic, err := base64.StdEncoding.DecodeString(encoded["still"])
+	if err != nil || len(generic) < 12 {
+		t.Fatal("missing generic AVIF input", err)
+	}
+	copy(generic[8:12], "mif1")
+	result["generic.avif"] = generic
 	return result
 }
 

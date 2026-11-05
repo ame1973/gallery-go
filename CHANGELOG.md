@@ -16,13 +16,26 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A second finite Linux codec profile using only fixed `vipsheader` geometry output,
+  independent runtime pins and exact trusted HEIF/decoder files. Module-folder
+  enumeration does not grant unselected module contents; both profiles retain
+  Landlock/seccomp/resource/process-group boundaries. No raw metadata selector,
+  arbitrary command/path or unrestricted fallback exists.
+- AVIF generic-major and compatible tiled-grid still metadata with declared canvas,
+  direct AV1 tile/configuration/coverage checks and isolated image-header geometry.
+  Inspector v9 pins both runtimes and rejects older epochs. Owned grid pixels were
+  independently decoded; real SQLite and four39-unit CLI modes verify stable
+  metadata/revisions, protected originals/Range and source-outage retention. Other
+  image profiles, full decoding/variants and container packaging remain pending.
+
 - Controlled AVIF primary-item/sequence metadata with bounded ISO-BMFF item,
   property, local-extent and sample-table validation plus isolated AV1/dimension
   cross-checks. Ordered rotation/mirroring, primary-associated whitelisted EXIF,
   exact one-cycle timing and total edit-list playthroughs retain unknown-null
   semantics. Inspector v8 rejects older policy pins. Owned still/finite/infinite/
   EXIF/transform vectors, malformed/resource/fuzz tests, SQLite rewrite/publication
-  and actual 33-unit CLI/HTTPS modes cover the new path. Generic-major-brand/derived/protected/external/
+  and actual 33-unit CLI/HTTPS modes cover the initial path. Additional static
+  generic-major/grid coverage is listed above; protected/external/
   ambiguous/unknown-essential layouts remain explicit unsupported work; this is not
   full AV1 pixel validation, READY variants or container codec packaging.
 

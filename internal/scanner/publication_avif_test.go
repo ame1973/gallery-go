@@ -37,9 +37,14 @@ func TestAVIFPublicationRetainsIdentityAndClearsStaleContainerEvidence(t *testin
 	animation := publicationAVIF(t, "infinite")
 	stillPath := writeInput(t, root, "Album/still.jpg", still)
 	animationPath := writeInput(t, root, "Album/motion.png", animation)
+	grid := publicationAVIF(t, "grid")
+	gridPath := writeInput(t, root, "Album/grid.jpg", grid)
+	generic := publicationAVIF(t, "still")
+	copy(generic[8:12], "mif1")
+	genericPath := writeInput(t, root, "Album/generic.png", generic)
 	generation := f.publish(t, "full", ".")
 	job, err := f.queue.Get(t.Context(), generation.JobID)
-	if err != nil || job.Status != "succeeded" || job.Succeeded != 6 || job.Total != 6 || !job.TotalKnown {
+	if err != nil || job.Status != "succeeded" || job.Succeeded != 12 || job.Total != 12 || !job.TotalKnown {
 		t.Fatal("AVIF work counters were invented", job, err)
 	}
 	service := media.New(f.db, f.auth, t.TempDir(), map[string]media.SourceRoot{"fixture": root})
@@ -63,16 +68,24 @@ func TestAVIFPublicationRetainsIdentityAndClearsStaleContainerEvidence(t *testin
 		t.Fatal(err)
 	}
 	items, err := service.AlbumMedia(t.Context(), f.owner, album, "", 30)
-	if err != nil || len(items) != 2 {
+	if err != nil || len(items) != 4 {
 		t.Fatal("AVIF list visibility diverged", items, err)
 	}
 	for _, item := range items {
-		if item.Kind != "image" || item.Codec == nil || *item.Codec != "av1" || item.Width == nil || *item.Width != 16 || item.Height == nil || *item.Height != 12 || item.FrameCount == nil || item.LoopCount == nil || item.Animated == nil {
+		width, height := int64(16), int64(12)
+		if item.FileName == "grid.jpg" {
+			width, height = 96, 64
+		}
+		if item.Kind != "image" || item.Codec == nil || *item.Codec != "av1" || item.Width == nil || *item.Width != width || item.Height == nil || *item.Height != height || item.FrameCount == nil || item.LoopCount == nil || item.Animated == nil {
 			t.Fatal("AVIF metadata was not source-bound", item)
 		}
 		if item.FileName == "still.jpg" {
 			if *item.Animated || *item.FrameCount != 1 || *item.LoopCount != 1 || item.Orientation == nil || *item.Orientation != 5 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != "2026-11-05T04:34:56.123Z" || item.DurationMS != nil {
 				t.Fatal("AVIF transform/EXIF was lost", item)
+			}
+		} else if item.FileName == "grid.jpg" || item.FileName == "generic.png" {
+			if *item.Animated || *item.FrameCount != 1 || *item.LoopCount != 1 || item.Orientation != nil || item.CaptureAt != nil || item.DurationMS != nil {
+				t.Fatal("image profile invented source metadata", item)
 			}
 		} else if !*item.Animated || *item.FrameCount != 2 || *item.LoopCount != 0 || item.DurationMS == nil || *item.DurationMS != 400 || item.Orientation != nil || item.CaptureAt != nil {
 			t.Fatal("AVIF loop normalization was guessed", item)
@@ -88,7 +101,7 @@ func TestAVIFPublicationRetainsIdentityAndClearsStaleContainerEvidence(t *testin
 			t.Fatal("unchanged AVIF revised metadata or identity", item, err)
 		}
 	}
-	for path, expected := range map[string][]byte{stillPath: still, animationPath: animation} {
+	for path, expected := range map[string][]byte{stillPath: still, animationPath: animation, gridPath: grid, genericPath: generic} {
 		if data, err := os.ReadFile(path); err != nil || !bytes.Equal(data, expected) {
 			t.Fatal("AVIF inspector rewrote source", err)
 		}
