@@ -16,7 +16,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-const inspectVersion = 6
+const inspectVersion = 7
 
 type inspectedFile struct {
 	file       File
@@ -32,6 +32,10 @@ func (s *Inventory) ProbeMetadata(ctx context.Context, lease jobs.Lease, id stri
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.policy.Timeout)
 	defer cancel()
+	policy, err := policy.PinCodecRuntime(ctx)
+	if err != nil {
+		return Generation{}, err
+	}
 	generation, configured, err := s.beginMetadata(ctx, lease, id, policy)
 	if err != nil {
 		return Generation{}, err
@@ -80,6 +84,9 @@ func (s *Inventory) ProbeMetadata(ctx context.Context, lease jobs.Lease, id stri
 // Pin the inspector version and limits so a resumed generation cannot mix results
 // from different processing policies. A changed policy requires a new generation.
 func (s *Inventory) beginMetadata(ctx context.Context, lease jobs.Lease, id string, policy media.InspectPolicy) (Generation, media.SourceRoot, error) {
+	if policy.CodecRuntimePin() == "" {
+		return Generation{}, media.SourceRoot{}, ErrGeneration
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Generation{}, media.SourceRoot{}, err
@@ -90,9 +97,10 @@ func (s *Inventory) beginMetadata(ctx context.Context, lease jobs.Lease, id stri
 		return Generation{}, media.SourceRoot{}, err
 	}
 	data, _ := json.Marshal(struct {
-		Version int
-		Policy  media.InspectPolicy
-	}{inspectVersion, policy})
+		Version      int
+		Policy       media.InspectPolicy
+		CodecRuntime string
+	}{inspectVersion, policy, policy.CodecRuntimePin()})
 	digest := sha256.Sum256(data)
 	pin := hex.EncodeToString(digest[:])
 	if generation.inspectionPolicy != "" {
@@ -162,6 +170,9 @@ func validInspection(result media.Inspection) bool {
 	if result.Kind != "" && result.Kind != "image" && result.Kind != "video" {
 		return false
 	}
+	if result.Codec != nil && (result.Status != "ok" || !media.ValidCodec(*result.Codec)) {
+		return false
+	}
 	if result.Width != nil && (*result.Width < 1 || result.Height == nil || *result.Height < 1) {
 		return false
 	}
@@ -191,7 +202,7 @@ func validInspection(result media.Inspection) bool {
 	}
 	switch result.Status {
 	case "ok":
-		return result.Kind != "" && result.MIME != "application/octet-stream" && result.Width != nil && result.ErrorCode == nil
+		return result.Kind != "" && result.MIME != "application/octet-stream" && result.Width != nil && result.Codec != nil && result.ErrorCode == nil
 	case "unsupported":
 		return result.Kind != "" && result.ErrorCode != nil && *result.ErrorCode == "CODEC_UNAVAILABLE" && result.Width == nil && result.Height == nil
 	case "invalid":

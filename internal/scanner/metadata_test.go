@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -55,7 +56,7 @@ func TestMetadataStagesEveryPathAndExplicitFailuresWithoutPublishing(t *testing.
 	if err != nil || job.Done != 8 || job.Total != 8 || job.Succeeded != 5 || job.Failed != 2 || job.Skipped != 1 || job.TotalKnown || job.Status != "running" {
 		t.Fatal("metadata progress did not retain explicit outcomes", job, err)
 	}
-	for path, status := range map[string]string{"a.mp4": "ok", "b.jpg": "invalid", "c.webm": "unsupported", "d.txt": "not_media"} {
+	for path, status := range map[string]string{"a.mp4": "ok", "b.jpg": "invalid", "c.webm": "invalid", "d.txt": "not_media"} {
 		result, err := readInspection(f.db.QueryRow(`SELECT inspection_json FROM inventory_media WHERE generation_id=? AND relative_path=?`, ready.ID, path))
 		if err != nil || result.Status != status {
 			t.Fatal(path, result, err)
@@ -176,7 +177,10 @@ func TestMetadataProgressAndCompletionFailuresRollBackWithoutDoubleCounting(t *t
 	writeInput(t, root, "a.jpg", []byte("invalid"))
 	writeInput(t, root, "b.png", metadataPNG(t))
 	lease, generation := f.ready(t)
-	policy := media.DefaultInspectPolicy()
+	policy, err := media.DefaultInspectPolicy().PinCodecRuntime(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
 	pinned, _, err := f.inventory.beginMetadata(t.Context(), lease, generation.ID, policy)
 	if err != nil {
 		t.Fatal(err)
@@ -369,10 +373,18 @@ func TestMetadataRejectsIncompleteInvalidAndUnboundResults(t *testing.T) {
 		t.Fatal(files, err)
 	}
 	width, height := int64(12), int64(7)
-	result := media.Inspection{Kind: "image", MIME: "image/png", Format: "png", Width: &width, Height: &height, Status: "ok"}
+	codec := "png"
+	result := media.Inspection{Kind: "image", MIME: "image/png", Format: "png", Codec: &codec, Width: &width, Height: &height, Status: "ok"}
 	_, err = f.inventory.recordMetadata(t.Context(), lease, generation.ID, []inspectedFile{{files[0], result}})
 	walkError(t, err, ErrGeneration)
-	if _, _, err := f.inventory.beginMetadata(t.Context(), lease, generation.ID, media.DefaultInspectPolicy()); err != nil {
+	if _, _, err := f.inventory.beginMetadata(t.Context(), lease, generation.ID, media.DefaultInspectPolicy()); !errors.Is(err, ErrGeneration) {
+		t.Fatal("metadata accepted an unfrozen codec policy", err)
+	}
+	policy, err := media.DefaultInspectPolicy().PinCodecRuntime(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.inventory.beginMetadata(t.Context(), lease, generation.ID, policy); err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.inventory.completeMetadata(t.Context(), lease, generation.ID)

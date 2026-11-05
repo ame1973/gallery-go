@@ -1061,11 +1061,13 @@ export interface components {
             album_id: string;
             /** @enum {string} */
             kind: "image" | "video";
+            /** @description Validated native image or primary non-attached video codec identifier. Null for unknown or uninspected metadata; never a raw tag or diagnostic. */
+            codec: string | null;
             /** @description Display basename only; never a filesystem path. */
             file_name: string;
             width: number | null;
             height: number | null;
-            /** @description Source duration. Image animation uses one cycle of declared positive delays; APNG exact rational delays are rounded upward once to milliseconds. Null for zero/missing timing or GIF user input. Never multiplied by loop_count or guessed from browser delay clamping. */
+            /** @description Declared source duration rounded upward once to milliseconds. Video uses the primary non-attached track with container fallback only for unknown track timing. Image animation uses one declared cycle; zero/missing timing or GIF user input stays null. Never inferred from frame rate or multiplied by loop_count. */
             duration_ms: number | null;
             /** @description Known image animation state; true for multiple PNG/APNG, GIF or WebP image frames. Null when the format has not been inspected for animation. */
             animated: boolean | null;
@@ -1073,11 +1075,11 @@ export interface components {
             frame_count: number | null;
             /** @description Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts add the initial playthrough; APNG num_plays and WebP loop counts are already totals and are unchanged. */
             loop_count: number | null;
-            /** @description Validated source EXIF orientation; dimensions remain encoded source dimensions. */
+            /** @description Validated EXIF orientation or equivalent orthogonal video display-matrix transform. Unknown or arbitrary video transforms remain null; dimensions remain encoded source dimensions. */
             orientation: number | null;
             /**
              * Format: date-time
-             * @description UTC instant only for validated DateTimeOriginal with explicit OffsetTimeOriginal; optional SubSecTimeOriginal is truncated to millisecond precision before staging. Null for absent or unzoned camera time; never inferred from file mtime. No GPS/raw EXIF is exposed.
+             * @description UTC instant truncated to milliseconds from validated original EXIF date/offset/subseconds or explicitly zoned whitelisted video creation tags. More specific video capture-date evidence takes precedence; conflicting or unzoned evidence stays null. Never inferred from mtime or host timezone. No GPS/raw tags are exposed.
              */
             capture_at: string | null;
             /** @description Current owned revision ID; null while not yet available. */

@@ -66,6 +66,7 @@ type Metadata struct {
 	ID             string     `json:"id"`
 	AlbumID        string     `json:"album_id"`
 	Kind           string     `json:"kind"`
+	Codec          *string    `json:"codec"`
 	FileName       string     `json:"file_name"`
 	Width          *int64     `json:"width"`
 	Height         *int64     `json:"height"`
@@ -80,19 +81,22 @@ type Metadata struct {
 }
 
 const mediaSelect = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id,m.orientation,m.capture_at,
- json_extract(m.metadata_json,'$.animated'),json_extract(m.metadata_json,'$.frame_count'),json_extract(m.metadata_json,'$.loop_count')
+ json_extract(m.metadata_json,'$.animated'),json_extract(m.metadata_json,'$.frame_count'),json_extract(m.metadata_json,'$.loop_count'),json_extract(m.metadata_json,'$.codec')
  FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
  LEFT JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id`
 
 func scanMedia(row interface{ Scan(...any) error }) (Metadata, error) {
 	var value Metadata
 	var captured sql.NullInt64
-	err := row.Scan(&value.ID, &value.AlbumID, &value.Kind, &value.FileName, &value.Width, &value.Height, &value.DurationMS, &value.Revision, &value.Orientation, &captured, &value.Animated, &value.FrameCount, &value.LoopCount)
+	err := row.Scan(&value.ID, &value.AlbumID, &value.Kind, &value.FileName, &value.Width, &value.Height, &value.DurationMS, &value.Revision, &value.Orientation, &captured, &value.Animated, &value.FrameCount, &value.LoopCount, &value.Codec)
 	if captured.Valid {
 		instant := time.UnixMilli(captured.Int64).UTC()
 		value.CaptureAt = &instant
 	}
 	value.FileName = baseName(value.FileName)
+	if value.Codec != nil && !ValidCodec(*value.Codec) {
+		value.Codec = nil
+	}
 	// Offline capability stays false until scoped download manifests are enabled.
 	return value, err
 }

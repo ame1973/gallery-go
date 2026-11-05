@@ -119,7 +119,7 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 		HeaderBytes  int64
 		Timeout      time.Duration
 	}{policy.MaxPixels, policy.MaxDimension, policy.HeaderBytes, policy.Timeout}
-	for _, older := range []int{1, 2, 3, 4, 5} {
+	for _, older := range []int{1, 2, 3, 4, 5, 6} {
 		legacyPolicy := any(oldPolicy)
 		if older >= 3 {
 			legacyPolicy = policy
@@ -150,7 +150,8 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 
 func TestMetadataRejectsUntrustedOrientationAndNonUTCInstants(t *testing.T) {
 	width, height := int64(12), int64(7)
-	valid := media.Inspection{Kind: "image", MIME: "image/jpeg", Format: "jpeg", Width: &width, Height: &height, Status: "ok"}
+	codec := "jpeg"
+	valid := media.Inspection{Kind: "image", MIME: "image/jpeg", Format: "jpeg", Codec: &codec, Width: &width, Height: &height, Status: "ok"}
 	for _, orientation := range []int64{0, 9} {
 		result := valid
 		result.Orientation = &orientation

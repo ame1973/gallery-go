@@ -12,7 +12,9 @@ configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
 publish read-only inventories, native JPEG/PNG/GIF/WebP dimensions, whitelisted
 JPEG/PNG/WebP EXIF orientation/explicitly zoned capture time normalized to milliseconds,
-and bounded GIF/APNG/WebP frame/cycle/loop
+and bounded GIF/APNG/WebP frame/cycle/loop metadata. With a trusted system FFprobe
+and mandatory Linux isolation they also publish MP4/MOV/MKV/WebM codec, dimensions,
+declared duration, orthogonal display transforms and explicitly zoned creation
 metadata. GPS/raw tags are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and
@@ -81,7 +83,7 @@ library grants, and the last active administrator cannot be removed or disabled.
 [Job controls](docs/jobs.md) describe administrator-only source/all-source/album
 scan enqueue, durable history, truthful attempt counts, versioned cancellation, and
 safe retries. Enqueue returns durable queued acceptance, not ingestion. `serve`
-starts a native consumer by default; [worker operation](docs/workers.md) describes
+starts a scan consumer by default; [worker operation](docs/workers.md) describes
 standalone execution, validated limits, real status, and the remaining codec gates.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another
@@ -134,10 +136,10 @@ Declare roots in YAML, then use the [source API](docs/sources.md) to register a
 library/mapping, inspect reachability, or deactivate a source. These operations do
 not scan or purge files synchronously. Enabled consumers automatically schedule
 active registered sources for initial/periodic full scans and intervening polls.
-Native publication still requires healthy manifest/metadata/configuration/lease
+Publication still requires healthy manifest/metadata/configuration/lease
 validation. Set `scheduler.enabled: false` in every consumer for manual-only operation.
 See [workers and resource limits](docs/workers.md) for `worker`, `scanner`,
-`inspection`, and `scheduler` YAML settings and supported native capabilities.
+`inspection`, and `scheduler` YAML settings and supported native/video capabilities.
 `.env.example` contains only a Compose port setting. The application reads YAML,
 not arbitrary environment variables.
 
@@ -226,8 +228,8 @@ checks every registered API operation against the schema. Never hand-edit
 The codec sandbox regressions additionally require Linux amd64/arm64, Landlock
 ABI 3+, unprivileged seccomp filters, and a trusted `/usr/bin/ffprobe`. They fail
 closed when mandatory isolation is unavailable; they never skip to unrestricted
-execution. See [codec sandbox boundaries](docs/codec-sandbox.md). This internal
-primitive is not yet connected to scan ingestion or bundled in the container.
+execution. See [codec sandbox boundaries](docs/codec-sandbox.md). The scan inspector
+uses it for video metadata; the current container still does not bundle FFprobe.
 
 ```sh
 make check                         # Go race/vet, formatting, API, TS, lint, unit tests, build
@@ -255,10 +257,13 @@ Screenshots/traces live in ignored test-output directories. Tests never use priv
 source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
-both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs, APNGs and
-WebP, including EXIF, encoded dimensions, UTC capture/orientation, frame/cycle/total
-loop counts, null unknown metadata, unchanged protected originals, repeat identity,
-safe source outage and graceful process shutdown.
+both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs, APNGs,
+WebP and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
+cases verify 27 work units, image animation, video codec/geometry/duration/display
+transforms, UTC milliseconds, unknown-null semantics, protected original/Range and
+anonymous denial, stable complete metadata/revisions on rescan, outage retention
+and graceful shutdown. Video fixtures need no runtime encoder and do not establish
+complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published
 multi-source ingestion, closes all original DB handles, then reopens the server and
 worker. It verifies expired-attempt history, live replacement ownership, unchanged

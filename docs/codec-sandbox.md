@@ -2,16 +2,19 @@
 
 ## Current scope
 
-GalleryGo contains a Linux isolation primitive for **one fixed metadata command**:
-`/usr/bin/ffprobe`. It is not yet connected to the scan inspector. Existing scan
-workers still use the [native metadata inspector](media.md); this primitive does
-not add video/HEIF/AVIF/TIFF acceptance, decoding, generated variants, a new API,
-or a configurable command runner. The current container does not bundle FFprobe.
+GalleryGo executes **one fixed metadata command**, `/usr/bin/ffprobe`, inside a
+mandatory Linux boundary. The scan inspector uses it for [controlled video
+metadata](media.md); native images keep their separate bounded parser. This does
+not establish HEIF/AVIF/TIFF capability, complete decoding, generated variants, a
+new API or a configurable command runner. The current container does not bundle
+FFprobe.
 
 The caller supplies an already-confined, read-only regular file descriptor, not a
 source path. A private self-exec child starts before configuration, database,
 listener, or web-asset initialization. It accepts only three bounded numeric
-resource limits and inherited descriptor 3. It never accepts a shell, executable,
+resource limits, a private trusted-installation epoch and inherited descriptor 3.
+The parent self-execs `/proc/self/exe`, so replacing its pathname cannot switch the
+Go helper image mid-generation. It never accepts a shell, executable,
 URL, filename, environment override, or arbitrary FFprobe option from an API caller.
 
 ## Mandatory isolation
@@ -50,10 +53,23 @@ or failed limit installation stop execution. Do not disable seccomp, grant
 privileged mode, or run an unrestricted fallback to make an unsupported runtime
 appear functional. Read-only source mounts remain mandatory defense in depth.
 
+## Trusted runtime epoch
+
+Before opening a metadata writer, the scanner pins canonical tool/loader/ELF/cache
+file identities, sizes, modes and modification/change times. The child calculates
+that private epoch from the same `O_PATH` descriptors that receive Landlock grants.
+A replaced installation cannot be used under an old generation policy. This is
+an installation-identity fence for **trusted immutable system files**, not a full
+content hash or permission to load libraries from a NAS. Stop/restart workers
+around system tool/library upgrades; in-place modification of a supposedly
+immutable trusted runtime is not a supported deployment workflow. Source media
+still requires its independent full SHA-256 recheck after probing.
+
 ## Resource policy
 
-These are internal metadata-probe limits, not public YAML/API options or the future
-transcoding policy:
+These are trusted metadata-probe limits, separate from future transcoding policy.
+The scan inspector uses the default budgets and its existing `inspection.timeout`
+for wall time; other sandbox budgets are not public YAML/API options:
 
 | Limit                         | Default               | Accepted bounds                  |
 | ----------------------------- | --------------------- | -------------------------------- |
@@ -67,10 +83,15 @@ transcoding policy:
 | Core / regular-file output    | 0 bytes               | Fixed                            |
 | FFprobe individual allocation | 64 MiB                | Fixed                            |
 
+FFprobe additionally caps demuxer probe size at 8 MiB, analysis time at 5 seconds,
+stream count at 64, per-stream probe packets at 256 and decoder pixels at one
+billion. The inspector may impose a lower dimension/pixel/duration policy.
+
 Address space includes the codec and shared-library mappings, not just image
 pixels or resident memory. A syntactically valid smaller budget need not fit every
 installed codec build. Budget exhaustion is failure, never partial acceptance.
-The eventual inspector must also enforce its own pixel/frame/duration limits.
+The video inspector additionally enforces dimension/pixel/duration limits. Native
+image frame/header limits are not an estimate of the number of video frames.
 
 Parent cancellation, wall expiry, or pipe overflow kills the isolated process
 group and waits for cleanup. Parent death requests `SIGKILL`. Process creation is
@@ -81,17 +102,17 @@ is not a promise of immediate cancellation of uninterruptible kernel I/O.
 ## Output and publication boundary
 
 Only a narrow JSON projection is requested: stream identity/type/codec, encoded
-geometry, duration/frame-rate/count, whitelisted rotation/capture tags, and format
-identity/duration. Raw diagnostics are bounded and discarded, not returned or
-logged as API details. Failure returns no partial metadata.
+geometry/duration, attached-picture disposition, whitelisted rotation/display-matrix/
+capture tags and format identity/duration. The fixed `V:0` selector excludes covers
+and chooses only the first real video stream. Raw diagnostics are bounded and
+discarded, not returned or logged as API details. Failure returns no partial metadata.
 
-Sandbox output is still **untrusted**. Before scan integration can publish it, the
-inspector must validate this projection, normalize capture times to UTC
-milliseconds without guessing timezones, enforce type/resource limits, rehash the
-source, and bind the result to inspector policy, source configuration, generation,
-revision, and live job ownership. No codec or filesystem work may enter a SQLite
-writer transaction. The existing atomic authorization/outbox/publication fences
-remain mandatory.
+Sandbox output is still **untrusted**. Before publication, the scan inspector
+validates this projection, normalizes capture times to UTC milliseconds without
+guessing timezones, enforces type/resource limits, rehashes the source, and binds
+results to inspector/runtime policy, source configuration, generation, revision
+and live job ownership. No codec or filesystem work may enter a SQLite writer.
+The existing atomic authorization/outbox/publication fences remain mandatory.
 
 ## Regression checks
 
@@ -100,7 +121,7 @@ a kernel/runtime that permits Landlock ABI 3+ and unprivileged seccomp filters:
 
 ```sh
 go test -race ./internal/sandbox -count=3
-go test -race ./cmd/gallerygo -run '^TestCompiledPrivateCodecChild' -count=1
+go test -race ./cmd/gallerygo -run '^TestCompiled(PrivateCodecChild|CLIHTTPS)' -count=1
 ```
 
 The tests use generated read-only PNGs, isolated canaries, actual FFprobe, actual

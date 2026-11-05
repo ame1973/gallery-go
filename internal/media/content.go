@@ -37,6 +37,16 @@ func safeMIME(value string) string {
 	return kind
 }
 
+// Original-only containers keep their detected MIME behind the additional grant
+// and forced attachment policy; this never expands the inline READY preset list.
+func originalMIME(value string) string {
+	kind, _, err := mime.ParseMediaType(value)
+	if err == nil && (mediaExtensions[kind] != "" || kind == "video/quicktime" || kind == "video/x-matroska") {
+		return kind
+	}
+	return "application/octet-stream"
+}
+
 func validHash(value string) bool {
 	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
 		return false
@@ -236,8 +246,6 @@ func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaI
 		file.Close()
 		return nil, ErrSourceUnavailable
 	}
-	if contentType = safeMIME(contentType); contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	contentType = originalMIME(contentType)
 	return &Content{MIME: contentType, Filename: baseName(name), ETag: `"sha256-` + hash + `"`, Size: size, Attachment: true, file: file, info: info, ctx: ctx}, nil
 }

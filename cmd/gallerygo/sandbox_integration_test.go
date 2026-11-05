@@ -33,7 +33,11 @@ func TestCompiledPrivateCodecChildNeedsNoConfigAndNeverAcceptsAPath(t *testing.T
 		t.Fatal(err)
 	}
 	defer input.Close()
-	command := exec.CommandContext(t.Context(), binary, sandbox.ChildCommand, "536870912", "10", "34359738368")
+	pin, err := sandbox.Signature(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), binary, sandbox.ChildCommand, "536870912", "10", "34359738368", pin)
 	command.ExtraFiles = []*os.File{input}
 	command.Dir = t.TempDir() // No config, web asset, database or source-root registry.
 	output, err := command.Output()
@@ -48,12 +52,14 @@ func TestCompiledPrivateCodecChildNeedsNoConfigAndNeverAcceptsAPath(t *testing.T
 	for _, arguments := range [][]string{
 		{sandbox.ChildCommand},
 		{sandbox.ChildCommand, name},
-		{sandbox.ChildCommand, "536870912", "10", "34359738368"}, // Missing input descriptor.
-		{sandbox.ChildCommand, "1", "10", "34359738368"},
-		{sandbox.ChildCommand, "536870912", "0", "34359738368"},
-		{sandbox.ChildCommand, "536870912", "10", "-1"},
-		{sandbox.ChildCommand, "18446744073709551616", "10", "34359738368"},
+		{sandbox.ChildCommand, "536870912", "10", "34359738368", pin}, // Missing input descriptor.
+		{sandbox.ChildCommand, "1", "10", "34359738368", pin},
+		{sandbox.ChildCommand, "536870912", "0", "34359738368", pin},
+		{sandbox.ChildCommand, "536870912", "10", "-1", pin},
+		{sandbox.ChildCommand, "18446744073709551616", "10", "34359738368", pin},
+		{sandbox.ChildCommand, "536870912", "10", "34359738368"}, // Missing installation pin.
 		{sandbox.ChildCommand, "536870912", "10", "34359738368", name},
+		{sandbox.ChildCommand, "536870912", "10", "34359738368", pin, name},
 	} {
 		output, err := exec.CommandContext(t.Context(), binary, arguments...).CombinedOutput()
 		if err == nil || bytes.Contains(output, []byte(name)) {

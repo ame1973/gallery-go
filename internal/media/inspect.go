@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"image"
 	_ "image/gif"
@@ -24,6 +25,7 @@ type InspectPolicy struct {
 	MaxDuration  time.Duration `yaml:"max_duration"`
 	HeaderBytes  int64         `yaml:"header_bytes"`
 	Timeout      time.Duration `yaml:"timeout"`
+	codecRuntime string
 }
 
 func DefaultInspectPolicy() InspectPolicy {
@@ -40,15 +42,16 @@ func (policy InspectPolicy) Validate() error {
 }
 
 // Inspection is bounded metadata, not a decoded/READY derivative or a claim that
-// every codec/frame is valid. Unsupported formats keep an explicit capability
-// error until the controlled external codec adapter is implemented and verified.
-// No GPS/raw EXIF tags, paths, stderr, or worker capabilities enter this DTO.
-// CaptureAt is UTC only for explicit DateTimeOriginal+OffsetTimeOriginal evidence;
-// an unzoned camera clock stays unknown rather than assuming the server timezone.
+// every codec/frame is valid. Native images and sandboxed video have distinct
+// bounded paths; other formats retain an explicit unavailable-capability result.
+// No GPS/raw tags, paths, stderr, or worker capabilities enter this DTO.
+// CaptureAt requires explicitly zoned whitelisted EXIF/container evidence; an
+// unzoned camera clock never assumes the server timezone.
 type Inspection struct {
 	Kind        string     `json:"kind"`
 	MIME        string     `json:"mime"`
 	Format      string     `json:"format"`
+	Codec       *string    `json:"codec"`
 	Width       *int64     `json:"width"`
 	Height      *int64     `json:"height"`
 	DurationMS  *int64     `json:"duration_ms"`
@@ -71,6 +74,7 @@ func inspectionFailure(result Inspection, status, code string) Inspection {
 	result.ErrorCode = &code
 	result.Width, result.Height, result.DurationMS, result.Orientation = nil, nil, nil, nil
 	result.CaptureAt, result.Animated, result.FrameCount, result.LoopCount = nil, nil, nil, nil
+	result.Codec = nil
 	return result
 }
 
@@ -92,7 +96,8 @@ func (r inspectReader) Read(buffer []byte) (int, error) {
 
 // Inspect uses an already confined read-only regular descriptor. Its caller must
 // bind this stat/hash to the staged source revision and recheck the root path
-// afterwards. No image pixels are allocated: native formats use DecodeConfig.
+// afterwards. Native formats use DecodeConfig without allocating image pixels;
+// video decoder analysis is confined to the mandatory bounded external sandbox.
 func Inspect(ctx context.Context, file *os.File, name string, policy InspectPolicy) (Inspection, error) {
 	if err := policy.Validate(); err != nil {
 		return Inspection{}, err
@@ -135,6 +140,14 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 			animated := metadata.frames > 1
 			result.Status, result.Width, result.Height = "ok", &metadata.width, &metadata.height
 			result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &metadata.frames, &metadata.loops, metadata.duration
+			result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
+		}
+	} else if kind == "video" {
+		var metadata videoInfo
+		metadata, metadataErr = inspectVideo(ctx, file, codec, policy)
+		if metadataErr == nil {
+			result.Status, result.Width, result.Height = "ok", &metadata.width, &metadata.height
+			result.Codec, result.DurationMS = &metadata.codec, metadata.duration
 			result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
 		}
 	} else if codec != "jpeg" && codec != "png" && codec != "gif" {
@@ -188,12 +201,16 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 	switch {
 	case errors.Is(metadataErr, errMetadataLimit):
 		result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
-	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported):
+	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported), errors.Is(metadataErr, errVideoUnsupported):
 		result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
-	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, errVideoMetadata), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
 		result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
 	case metadataErr != nil:
 		return Inspection{}, metadataErr
+	}
+	if result.Status == "ok" && result.Kind == "image" {
+		nativeCodec := result.Format
+		result.Codec = &nativeCodec
 	}
 	after, err := file.Stat()
 	if err != nil {
@@ -210,6 +227,22 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 
 func sniffMedia(header []byte) (kind, mime, codec string) {
 	mime = http.DetectContentType(header)
+	// Classic QuickTime has no ftyp. Only skip complete bounded padding atoms;
+	// the controlled demuxer must still prove the movie before metadata is trusted.
+	for offset := 0; offset+8 <= len(header); {
+		length := uint64(binary.BigEndian.Uint32(header[offset : offset+4]))
+		atom := string(header[offset+4 : offset+8])
+		if atom == "ftyp" && offset > 0 {
+			return sniffMedia(header[offset:])
+		}
+		if (atom == "moov" || atom == "mdat") && (length == 0 || length >= 8 || length == 1 && len(header)-offset >= 16) {
+			return "video", "video/quicktime", "quicktime"
+		}
+		if (atom != "wide" && atom != "free" && atom != "skip") || length < 8 || length > uint64(len(header)-offset) {
+			break
+		}
+		offset += int(length)
+	}
 	// Inspect the primary ISO BMFF brand before generic compatible-brand sniffing.
 	if len(header) >= 16 && string(header[4:8]) == "ftyp" {
 		brand := string(header[8:12])

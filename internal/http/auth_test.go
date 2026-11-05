@@ -295,19 +295,6 @@ func TestAuthHTTPDisabledExpiredRateLimitAndPrivacy(t *testing.T) {
 	}
 }
 
-func TestUnambiguousJSON(t *testing.T) {
-	for _, data := range []string{`{"a":{"b":1,"b":2}}`, `{"a":1} trailing`, `{"a":[1,]}`, strings.Repeat("[", 18) + "0" + strings.Repeat("]", 18)} {
-		if unambiguousJSON([]byte(data)) == nil {
-			t.Fatalf("ambiguous JSON accepted: %s", data)
-		}
-	}
-	for _, data := range []string{`{"a":[{"b":1},{"b":2}],"c":true}`, `{"x":null}`, `{"num":123456789012345678901234567890}`} {
-		if err := unambiguousJSON([]byte(data)); err != nil {
-			t.Fatalf("valid JSON %s: %v", data, err)
-		}
-	}
-}
-
 func TestAuthHTTPRevokeEndpoint(t *testing.T) {
 	_, h := authFixture(t)
 	cookie, csrf, _ := loginHTTP(t, h)

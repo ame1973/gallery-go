@@ -49,10 +49,10 @@ A worker claims only supported `scan` jobs. It rejects legacy or malformed priva
 intents rather than guessing roots or scopes. Queued work cannot progress without
 a compatible embedded or standalone consumer.
 
-The native pipeline performs bounded manifests and streamed hashes, JPEG/PNG/GIF/WebP
-header metadata, whitelisted JPEG/PNG/WebP EXIF, bounded GIF/APNG/WebP frame/cycle/loop metadata,
-and fenced indexed publication. Indexed resources and authorized original downloads
-become available after publication.
+The pipeline performs bounded manifests and streamed hashes, native JPEG/PNG/GIF/WebP
+metadata, whitelisted image EXIF/animation and controlled MP4/MOV/MKV/WebM metadata,
+then fenced indexed publication. Indexed resources and authorized originals become
+available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
 timezone from the host or mtime. JPEG header parsing uses bounded input passes and
 at most 512 entries in each of two permitted EXIF directories; it never follows
@@ -62,10 +62,14 @@ that storage contract. Inspector version and resource policy are pinned
 to immutable staging. A changed inspector cannot resume a differently pinned generation.
 Header/EXIF metadata is not full pixel/frame decoding, complete EXIF/animation
 support, a generated preview, or a READY variant. Unsupported/corrupt media remains
-explicit failed work. External codecs and variant processing are still under development.
-The [codec sandbox](codec-sandbox.md) implements a separately tested, fail-closed
-Linux FFprobe execution boundary; it is not yet connected to this inspector and
-does not change supported scan formats or the current container's codec contents.
+explicit failed work. External image capabilities and variant processing remain
+under development. Video uses the fail-closed [codec sandbox](codec-sandbox.md),
+with strict JSON, codec/geometry/duration checks, orthogonal display transforms
+and explicitly zoned creation tags. Its private trusted-installation epoch joins
+inspector v7/resource policy in immutable staging, with per-child epoch checks and
+post-probe source rehashing. Keep trusted codecs immutable while workers run.
+Missing tools/kernel support count as unsupported failed media, not successful or
+silently skipped work; the current container still does not include codecs.
 PNG/GIF/WebP inspection streams each complete file without allocating frame pixels or
 decoding zlib/LZW/VP8 pixels. It is bounded by `inspection.header_bytes`, `max_frames`,
 `max_duration` and `timeout`. PNG eXIf/WebP EXIF separately have fixed 64 KiB bounds; APNG uses
@@ -135,14 +139,19 @@ scheduler:
 | `scanner.max_file_bytes`   | 1 byte..1 TiB per input; default 32 GiB. Oversize fails closed.                                  |
 | `scanner.batch_size`       | 1..256 staged paths per batch; memory stays bounded.                                             |
 | `scanner.timeout`          | 1s..24h for one source's complete pipeline, including ownership waiting.                         |
-| `inspection.max_pixels`    | 1..1,000,000,000 image pixels. No native pixel allocation.                                       |
+| `inspection.max_pixels`    | 1..1,000,000,000 encoded image/video pixels; no native image pixel allocation.                   |
 | `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                                               |
 | `inspection.max_frames`    | 1..100,000 image-animation frames; default 10,000.                                               |
-| `inspection.max_duration`  | 1ms..24h declared animation cycle duration; default 24h, not total loop time.                    |
-| `inspection.header_bytes`  | 512 bytes..32 MiB per metadata input pass; PNG/GIF/WebP require complete files.                  |
-| `inspection.timeout`       | 1s..1m per file's native header/EXIF/GIF inspection across all passes.                           |
+| `inspection.max_duration`  | 1ms..24h declared image cycle or video track/container duration; not loop time.                  |
+| `inspection.header_bytes`  | 512 bytes..32 MiB per native metadata input pass; PNG/GIF/WebP require complete files.           |
+| `inspection.timeout`       | 1s..1m per file across native passes or the sandboxed video probe.                               |
 | `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.                                  |
 | `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.                           |
+
+Video also has the [sandbox's fixed budgets](codec-sandbox.md), including a 32 GiB
+input-file ceiling and an 8 MiB demuxer probe budget. `header_bytes` and `max_frames`
+limit native image inspection, not a guessed video frame count. Do not assume a
+larger scanner file limit overrides codec limits.
 
 Source-specific mapping, minimum-file and scheduling policies remain API resources,
 not arbitrary filesystem paths or commands in job payloads. Target/incremental

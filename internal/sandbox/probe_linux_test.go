@@ -40,6 +40,20 @@ func init() {
 	}
 }
 
+func testSignature(t *testing.T) string {
+	t.Helper()
+	pin, err := Signature(t.Context())
+	if err != nil {
+		t.Fatal("fixed codec runtime cannot be pinned", err)
+	}
+	return pin
+}
+
+func testProbe(t *testing.T, ctx context.Context, input *os.File, limits Limits) ([]byte, error) {
+	t.Helper()
+	return Probe(ctx, input, limits, testSignature(t))
+}
+
 func probeInput(t *testing.T) *os.File {
 	t.Helper()
 	var encoded bytes.Buffer
@@ -60,10 +74,10 @@ func probeInput(t *testing.T) *os.File {
 
 func TestFixedFFprobeIsActuallyConfinedAndReturnsOnlyProjectedMetadata(t *testing.T) {
 	input := probeInput(t)
-	output, err := Probe(t.Context(), input, DefaultLimits())
+	output, err := testProbe(t, t.Context(), input, DefaultLimits())
 	if err != nil {
 		binary, _ := os.Executable()
-		command := exec.CommandContext(t.Context(), binary, ChildCommand, "536870912", "10", "34359738368")
+		command := exec.CommandContext(t.Context(), binary, ChildCommand, "536870912", "10", "34359738368", testSignature(t))
 		command.ExtraFiles, command.Env = []*os.File{input}, childEnvironment
 		diagnostic, failure := command.CombinedOutput()
 		t.Fatalf("actual required fixed codec sandbox failed: %v; child=%v\n%s", err, failure, diagnostic)
@@ -84,12 +98,12 @@ func TestSandboxInputLimitsAndCancellationFailClosed(t *testing.T) {
 	input := probeInput(t)
 	limits := DefaultLimits()
 	limits.InputBytes = 1
-	if _, err := Probe(t.Context(), input, limits); !errors.Is(err, ErrInput) {
+	if _, err := testProbe(t, t.Context(), input, limits); !errors.Is(err, ErrInput) {
 		t.Fatal("oversize input accepted", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := Probe(ctx, input, DefaultLimits()); !errors.Is(err, context.Canceled) {
+	if _, err := testProbe(t, ctx, input, DefaultLimits()); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled probe started", err)
 	}
 	writable, err := os.OpenFile(filepath.Join(t.TempDir(), "writable"), os.O_CREATE|os.O_RDWR, 0o600)
@@ -100,7 +114,7 @@ func TestSandboxInputLimitsAndCancellationFailClosed(t *testing.T) {
 	if _, err := writable.WriteString("not readonly"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Probe(t.Context(), writable, DefaultLimits()); !errors.Is(err, ErrInput) {
+	if _, err := testProbe(t, t.Context(), writable, DefaultLimits()); !errors.Is(err, ErrInput) {
 		t.Fatal("writable descriptor accepted", err)
 	}
 	pathFD, err := unix.Open(input.Name(), unix.O_PATH|unix.O_CLOEXEC, 0)
@@ -122,7 +136,7 @@ func TestSandboxInputLimitsAndCancellationFailClosed(t *testing.T) {
 	closed := probeInput(t)
 	_ = closed.Close()
 	for _, candidate := range []*os.File{nil, pathOnly, directory, empty, closed} {
-		if _, err := Probe(t.Context(), candidate, DefaultLimits()); !errors.Is(err, ErrInput) {
+		if _, err := testProbe(t, t.Context(), candidate, DefaultLimits()); !errors.Is(err, ErrInput) {
 			t.Fatal("invalid input authority accepted", candidate, err)
 		}
 	}
@@ -151,10 +165,14 @@ func TestLandlockAndSeccompActuallyDenySiblingReadWritesNetworkAndProcesses(t *t
 }
 
 func sandboxSelfTest(outside string) int {
+	pin, err := Signature(context.Background())
+	if err != nil {
+		return 70
+	}
 	parent := os.Getppid()
 	runtime.LockOSThread()
 	input := os.NewFile(3, "input")
-	if restrictFilesystem(input) != nil || restrictSyscalls() != nil {
+	if restrictFilesystem(input, pin) != nil || restrictSyscalls() != nil {
 		return 70
 	}
 	if fd, err := unix.Open(outside, unix.O_RDONLY, 0); err == nil {
@@ -265,7 +283,7 @@ func TestParentBoundsBothPipesAndMapsFailuresWithoutPrivateOutput(t *testing.T) 
 		t.Run(mode, func(t *testing.T) {
 			limits := DefaultLimits()
 			limits.OutputBytes = 1024
-			output, err := Probe(t.Context(), supervisionInput(t, mode, ""), limits)
+			output, err := testProbe(t, t.Context(), supervisionInput(t, mode, ""), limits)
 			if !errors.Is(err, expected) || len(output) != 0 {
 				t.Fatal("failed child leaked output or returned incorrect error", len(output), err)
 			}
@@ -284,7 +302,7 @@ func TestParentCancelsAnAlreadyRunningChildAndEnforcesWallDeadline(t *testing.T)
 			input := supervisionInput(t, "wait", marker)
 			result := make(chan error, 1)
 			go func() {
-				_, err := Probe(ctx, input, limits)
+				_, err := testProbe(t, ctx, input, limits)
 				result <- err
 			}()
 			ticker := time.NewTicker(time.Millisecond)
@@ -357,6 +375,10 @@ func TestActualChildResourceLimitsDoNotChangeTheParent(t *testing.T) {
 }
 
 func sandboxBudgetTest(mode string) int {
+	pin, err := Signature(context.Background())
+	if err != nil {
+		return 70
+	}
 	input := os.NewFile(3, "input")
 	limits := DefaultLimits()
 	limits.CPUSeconds = 1
@@ -371,7 +393,7 @@ func sandboxBudgetTest(mode string) int {
 		limits.MemoryBytes = current.Cur
 	}
 	runtime.LockOSThread()
-	if restrictFilesystem(input) != nil || applyLimits(limits) != nil || restrictSyscalls() != nil {
+	if restrictFilesystem(input, pin) != nil || applyLimits(limits) != nil || restrictSyscalls() != nil {
 		return 70
 	}
 	for resource, expected := range map[int]unix.Rlimit{
@@ -435,6 +457,10 @@ func TestMissingMandatoryKernelIsolationNeverRunsTheTool(t *testing.T) {
 }
 
 func unavailableIsolationTest(mode string) int {
+	pin, err := Signature(context.Background())
+	if err != nil {
+		return 80
+	}
 	denied := uint32(unix.SYS_LANDLOCK_CREATE_RULESET)
 	if mode == "seccomp" {
 		denied = unix.SYS_SECCOMP
@@ -455,5 +481,5 @@ func unavailableIsolationTest(mode string) int {
 	if errno != 0 {
 		return 81
 	}
-	return RunChild([]string{"536870912", "10", "34359738368"})
+	return RunChild([]string{"536870912", "10", "34359738368", pin})
 }

@@ -16,12 +16,28 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Controlled MP4/MOV/MKV/WebM metadata through the fixed Linux FFprobe sandbox:
+  primary non-attached video codec, encoded geometry, exact declared duration,
+  orthogonal display-matrix orientation and explicitly zoned creation evidence
+  normalized to UTC milliseconds. Inspector v7 pins trusted-runtime installation
+  epochs and refuses older/mixed policy generations. Native image codecs also
+  appear as nullable authorized metadata; raw tags and diagnostics remain private.
+  Owned vectors include classic MOV, multiple tracks and attached-cover negatives.
+  Actual CLI/HTTPS modes verify stable publication, protected video Range and
+  source-outage retention. Full decoding, external images, variants and container
+  codec packaging remain pending.
+
+- Shared strict JSON validation for HTTP requests and untrusted codec projections,
+  preserving recursive duplicate/case/null/type/UTF-8/nesting rejection without
+  introducing an HTTP dependency into the media worker.
+
 - Fail-closed Linux amd64/arm64 FFprobe isolation primitive with a fixed command,
   read-only descriptor input, exact-file Landlock rules, argument-restricted
   seccomp, child-only resource budgets, bounded private output and process-group
   cancellation. Actual kernel/FFprobe and compiled-child regressions are separate
-  from test-only supervision stubs. Scan integration, complete external metadata
-  and container codec packaging remain pending; no unrestricted fallback exists.
+  from test-only supervision stubs. Video scan integration is listed above;
+  complete external metadata and container codec packaging remain pending. No
+  unrestricted fallback exists.
 
 - Bounded original EXIF subseconds in the shared JPEG/PNG/WebP whitelist, with
   inline/offset ASCII handling, ambiguity/resource checks and UTC millisecond

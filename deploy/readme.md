@@ -73,8 +73,11 @@ assets. See [worker operation](../docs/workers.md) for limits and a dedicated-pr
 configuration. Keep the DB on the same host and configure every process with the
 same source pins. Enabled consumers schedule active registrations automatically;
 set `scheduler.enabled: false` in every consumer for manual-only scans. Source API
-calls do no synchronous scanning or filesystem creation. Complete external media
-codec tooling is not available yet.
+calls do no synchronous scanning or filesystem creation. The host build supports
+[controlled video metadata](../docs/media.md) only when a trusted system FFprobe and
+mandatory Linux isolation are available. This image still lacks that codec package;
+affected paths report explicit failed/unsupported work, not successful decoding.
+Do not disable isolation or add a public original-file fallback to make it work.
 
 For a port change, use the provided non-secret environment example:
 

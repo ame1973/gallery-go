@@ -1,15 +1,14 @@
 package httpapi
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"mime"
 	"net/http"
-	"reflect"
 	"strings"
 	"unicode/utf8"
+
+	"gallerygo/internal/strictjson"
 )
 
 // decodeJSON rejects oversized, ambiguous, unknown-field, and non-object inputs.
@@ -36,84 +35,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 		problem(w, 400, "INVALID_JSON", "The JSON body must contain valid UTF-8.")
 		return false
 	}
-	if err := unambiguousJSON(data); err != nil {
-		problem(w, 400, "INVALID_JSON", "Send one JSON object without duplicate keys or excessive nesting.")
+	if err := strictjson.Decode(data, destination); err != nil {
+		problem(w, 400, "INVALID_JSON", "Send one JSON object with unambiguous values, exact known field names and valid types.")
 		return false
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
-		problem(w, 400, "INVALID_JSON", "Send a JSON object.")
-		return false
-	}
-	if !exactJSONFields(data, reflect.TypeOf(destination).Elem()) {
-		problem(w, 400, "INVALID_JSON", "Use exact known field names; only explicitly nullable fields may be null.")
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		problem(w, 400, "INVALID_JSON", "The JSON fields have invalid types or names.")
-		return false
-	}
-	return true
-}
-
-// encoding/json silently accepts null for scalar/struct fields and case-folds
-// nested names. Validate declared shapes recursively. Only an explicitly tagged
-// nullable pointer field accepts null; all other null-to-zero fallbacks stay denied.
-func exactJSONFields(data []byte, kind reflect.Type) bool {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return false
-	}
-	for kind.Kind() == reflect.Pointer {
-		kind = kind.Elem()
-	}
-	switch kind.Kind() {
-	case reflect.Struct:
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(data, &fields) != nil || fields == nil {
-			return false
-		}
-		known := make(map[string]reflect.StructField, kind.NumField())
-		for index := 0; index < kind.NumField(); index++ {
-			field := kind.Field(index)
-			name := strings.Split(field.Tag.Get("json"), ",")[0]
-			if field.PkgPath == "" && name != "" && name != "-" {
-				known[name] = field
-			}
-		}
-		for name, value := range fields {
-			field, ok := known[name]
-			if !ok {
-				return false
-			}
-			if field.Type.Kind() == reflect.Pointer && field.Tag.Get("nullable") == "true" && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-				continue
-			}
-			if !exactJSONFields(value, field.Type) {
-				return false
-			}
-		}
-	case reflect.Slice, reflect.Array:
-		var values []json.RawMessage
-		if json.Unmarshal(data, &values) != nil {
-			return false
-		}
-		for _, value := range values {
-			if !exactJSONFields(value, kind.Elem()) {
-				return false
-			}
-		}
-	case reflect.Map:
-		var values map[string]json.RawMessage
-		if kind.Key().Kind() != reflect.String || json.Unmarshal(data, &values) != nil {
-			return false
-		}
-		for _, value := range values {
-			if !exactJSONFields(value, kind.Elem()) {
-				return false
-			}
-		}
 	}
 	return true
 }
@@ -127,52 +51,4 @@ func requireEmptyBody(w http.ResponseWriter, r *http.Request) bool {
 		}
 	}
 	return true
-}
-
-func unambiguousJSON(data []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var value func(int) error
-	value = func(depth int) error {
-		if depth > 16 {
-			return errors.New("too deeply nested")
-		}
-		token, err := decoder.Token()
-		if err != nil {
-			return err
-		}
-		delimiter, ok := token.(json.Delim)
-		if !ok {
-			return nil
-		}
-		if delimiter != '{' && delimiter != '[' {
-			return errors.New("unexpected delimiter")
-		}
-		keys := map[string]bool{}
-		for decoder.More() {
-			if delimiter == '{' {
-				key, err := decoder.Token()
-				if err != nil {
-					return err
-				}
-				name, ok := key.(string)
-				if !ok || keys[name] {
-					return errors.New("duplicate object key")
-				}
-				keys[name] = true
-			}
-			if err := value(depth + 1); err != nil {
-				return err
-			}
-		}
-		_, err = decoder.Token()
-		return err
-	}
-	if err := value(0); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	return nil
 }

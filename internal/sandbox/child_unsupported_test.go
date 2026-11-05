@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestUnsupportedPlatformsNeverLaunchAnUnrestrictedChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer input.Close()
-	if output, err := Probe(t.Context(), input, DefaultLimits()); !errors.Is(err, ErrUnavailable) || len(output) != 0 {
+	if output, err := Probe(t.Context(), input, DefaultLimits(), strings.Repeat("0", 64)); !errors.Is(err, ErrUnavailable) || len(output) != 0 {
 		t.Fatal("unsupported platform did not fail closed", err)
 	}
 	if code := RunChild(nil); code != 70 {

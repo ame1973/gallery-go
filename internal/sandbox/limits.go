@@ -8,11 +8,12 @@ import (
 )
 
 var (
-	ErrUnavailable = errors.New("required codec isolation is unavailable")
-	ErrLimits      = errors.New("invalid codec resource limits")
-	ErrInput       = errors.New("codec input is not a bounded read-only regular file")
-	ErrResource    = errors.New("codec processing exceeded its resource budget")
-	ErrProbe       = errors.New("codec metadata could not be inspected")
+	ErrUnavailable    = errors.New("required codec isolation is unavailable")
+	ErrLimits         = errors.New("invalid codec resource limits")
+	ErrInput          = errors.New("codec input is not a bounded read-only regular file")
+	ErrResource       = errors.New("codec processing exceeded its resource budget")
+	ErrProbe          = errors.New("codec metadata could not be inspected")
+	ErrRuntimeChanged = errors.New("codec runtime changed from its pinned installation")
 )
 
 const ChildCommand = "__codec-probe"
@@ -29,6 +30,18 @@ type Limits struct {
 
 func DefaultLimits() Limits {
 	return Limits{512 << 20, 10, 32 << 30, 1 << 20, 15 * time.Second}
+}
+
+func validRuntimeSignature(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, digit := range value {
+		if !((digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (limits Limits) Validate() error {

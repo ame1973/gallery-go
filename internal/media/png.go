@@ -211,12 +211,7 @@ func inspectPNG(ctx context.Context, input io.Reader, size int64, policy Inspect
 				result.frames = frames
 				if timingKnown {
 					// Round the exact rational cycle once, not every individual frame.
-					var quotient, remainder big.Int
-					quotient.QuoRem(duration.Num(), duration.Denom(), &remainder)
-					if remainder.Sign() != 0 {
-						quotient.Add(&quotient, big.NewInt(1))
-					}
-					milliseconds := quotient.Int64()
+					milliseconds := ceilRationalMS(&duration)
 					result.duration = &milliseconds
 				}
 			}

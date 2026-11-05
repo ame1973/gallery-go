@@ -305,6 +305,14 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if err := os.WriteFile(webpName, webpInput, 0o400); err != nil {
 				t.Fatal(err)
 			}
+			videos := scanVideoFixtures(t)
+			for name, fixture := range videos {
+				if err := os.WriteFile(filepath.Join(root, "Album", name), fixture.data, 0o400); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mediaCount := 5 + len(videos)
+			workUnits := int64(mediaCount * 3)
 			assets := filepath.Join(directory, "web")
 			if err := os.Mkdir(assets, 0o700); err != nil {
 				t.Fatal(err)
@@ -440,7 +448,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			initialID := accepted.ID
 			result := api.waitJob(accepted.ID)
-			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 15 || result.Done != 15 || !result.TotalKnown {
+			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != workUnits || result.Done != workUnits || !result.TotalKnown {
 				t.Fatal("compiled native execution failed", result, result.Counts)
 			}
 			var readiness health.Readiness
@@ -470,15 +478,28 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				Items []media.Metadata `json:"items"`
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 5 {
+			if len(medias.Items) != mediaCount {
 				t.Fatal("native metadata was not indexed", medias)
 			}
 			ids := make(map[string]string)
+			snapshots := make(map[string]string)
 			for _, item := range medias.Items {
 				ids[item.FileName] = item.ID
+				encoded, _ := json.Marshal(item)
+				snapshots[item.FileName] = string(encoded)
 				width, height := int64(12), int64(7)
 				if item.FileName == "animation.gif" || item.FileName == "animation.png" || item.FileName == "animation.webp" {
 					width, height = 3, 2
+				}
+				if item.Codec == nil || !media.ValidCodec(*item.Codec) {
+					t.Fatal("trusted source codec was not indexed", item)
+				}
+				if fixture, ok := videos[item.FileName]; ok {
+					width, height = 16, 12
+					if item.Kind != "video" || *item.Codec != fixture.codec || item.DurationMS == nil || *item.DurationMS != 400 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != fixture.capture || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil || fixture.orientation == 0 && item.Orientation != nil || fixture.orientation != 0 && (item.Orientation == nil || *item.Orientation != fixture.orientation) {
+						t.Fatal("compiled video metadata lost or invented evidence", item)
+					}
+					assertCompiledVideoOriginal(t, api, item.ID, fixture)
 				}
 				if item.Width == nil || *item.Width != width || item.Height == nil || *item.Height != height {
 					t.Fatal("encoded source dimensions changed", item)
@@ -538,12 +559,16 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(job, job.Counts)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 5 {
+			if len(medias.Items) != mediaCount {
 				t.Fatal("repeat execution lost indexed media", medias)
 			}
 			for _, item := range medias.Items {
 				if ids[item.FileName] != item.ID {
 					t.Fatal("repeat execution duplicated logical media", item)
+				}
+				encoded, _ := json.Marshal(item)
+				if string(encoded) != snapshots[item.FileName] {
+					t.Fatal("repeat execution rewrote source-bound metadata or revisions", item)
 				}
 				if item.ID == exifID && (item.Revision == nil || *item.Revision != *capture.Revision || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(wantCapture)) {
 					t.Fatal("repeat execution lost source-bound EXIF", item)
@@ -572,12 +597,16 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal("source outage blessed old inventory", source)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 5 {
+			if len(medias.Items) != mediaCount {
 				t.Fatal("source outage purged old index", medias)
 			}
 			for _, item := range medias.Items {
 				if ids[item.FileName] != item.ID {
 					t.Fatal("source outage replaced indexed identity", item)
+				}
+				encoded, _ := json.Marshal(item)
+				if string(encoded) != snapshots[item.FileName] {
+					t.Fatal("source outage erased trusted metadata or revisions", item)
 				}
 			}
 			if _, err := os.Stat(marker); !os.IsNotExist(err) {
@@ -597,6 +626,14 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			if data, err := os.ReadFile(webpName); err != nil || !bytes.Equal(data, webpInput) {
 				t.Fatal("process wrote WebP/EXIF source file", err)
+			}
+			for name, fixture := range videos {
+				path := filepath.Join(root, "Album", name)
+				data, err := os.ReadFile(path)
+				info, statErr := os.Stat(path)
+				if err != nil || statErr != nil || !bytes.Equal(data, fixture.data) || info.Mode().Perm() != 0o400 {
+					t.Fatal("process changed read-only video source", name, err, statErr)
+				}
 			}
 			api.request("GET", "/health/ready", nil, 200, &readiness)
 			if readiness.Status != "degraded" || readiness.Sources != "degraded" || readiness.Worker != "ok" {

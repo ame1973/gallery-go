@@ -144,18 +144,18 @@ func requireError(t *testing.T, err, want error) {
 	}
 }
 
-func TestMetadataOrientationAndCaptureUseTheSamePrivateVisibility(t *testing.T) {
+func TestMetadataCodecOrientationAndCaptureUseTheSamePrivateVisibility(t *testing.T) {
 	f := fixture(t)
 	capture := time.Date(2026, 11, 5, 4, 34, 56, 0, time.UTC)
-	if _, err := f.db.Exec(`UPDATE media SET orientation=6,capture_at=? WHERE id=?`, capture.UnixMilli(), f.mediaID); err != nil {
+	if _, err := f.db.Exec(`UPDATE media SET orientation=6,capture_at=?,metadata_json='{"codec":"png"}' WHERE id=?`, capture.UnixMilli(), f.mediaID); err != nil {
 		t.Fatal(err)
 	}
 	value, err := f.svc.Get(t.Context(), f.reader, f.mediaID)
-	if err != nil || value.Orientation == nil || *value.Orientation != 6 || value.CaptureAt == nil || !value.CaptureAt.Equal(capture) || value.CaptureAt.Location() != time.UTC {
+	if err != nil || value.Codec == nil || *value.Codec != "png" || value.Orientation == nil || *value.Orientation != 6 || value.CaptureAt == nil || !value.CaptureAt.Equal(capture) || value.CaptureAt.Location() != time.UTC {
 		t.Fatal(value, err)
 	}
 	items, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, "", 30)
-	if err != nil || len(items) != 1 || items[0].Orientation == nil || *items[0].Orientation != 6 || items[0].CaptureAt == nil || !items[0].CaptureAt.Equal(capture) {
+	if err != nil || len(items) != 1 || items[0].Codec == nil || *items[0].Codec != "png" || items[0].Orientation == nil || *items[0].Orientation != 6 || items[0].CaptureAt == nil || !items[0].CaptureAt.Equal(capture) {
 		t.Fatal(items, err)
 	}
 	encoded, err := json.Marshal(value)
@@ -168,6 +168,14 @@ func TestMetadataOrientationAndCaptureUseTheSamePrivateVisibility(t *testing.T) 
 	value, err = f.svc.Get(t.Context(), f.reader, f.mediaID)
 	if err != nil || value.Orientation != nil || value.CaptureAt != nil {
 		t.Fatal("unknown capture fell back to mtime", value, err)
+	}
+	if _, err := f.db.Exec(`UPDATE media SET metadata_json=json_set(metadata_json,'$.codec',?) WHERE id=?`, f.source, f.mediaID); err != nil {
+		t.Fatal(err)
+	}
+	value, err = f.svc.Get(t.Context(), f.reader, f.mediaID)
+	encoded, _ = json.Marshal(value)
+	if err != nil || value.Codec != nil || bytes.Contains(encoded, []byte(f.source)) {
+		t.Fatal("untrusted stored codec escaped the read projection", value, err)
 	}
 	if _, err := f.db.Exec(`DELETE FROM library_access`); err != nil {
 		t.Fatal(err)

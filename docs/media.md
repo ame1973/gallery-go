@@ -4,14 +4,16 @@ Media metadata and read-only content endpoints use the same SQL visibility rules
 [album and library reads](access.md). There is no public source/cache filesystem
 mount, fallback credential, anonymous thumbnail URL, or original-download bypass.
 
-**Current scope:** protected serving and native read-only inventory publication are
-implemented, including bounded JPEG/PNG/GIF/WebP dimensions, whitelisted JPEG/PNG/WebP
-EXIF, and GIF/APNG/WebP frame/cycle/loop metadata.
-External codec processing, normal variant publication, gallery/player screens, and
-offline manifests are still under development. A fresh installation has no indexed
+**Current scope:** protected serving, native image inventory and controlled video
+metadata publication are implemented. Native JPEG/PNG/GIF/WebP dimensions,
+whitelisted image EXIF, GIF/APNG/WebP frame/cycle/loop metadata and sandboxed
+MP4/MOV/MKV/WebM codec/geometry/duration/transform/creation evidence are available.
+External image capabilities, normal variant publication, gallery/player screens,
+and offline manifests remain under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
-data. The container does not yet include external media codecs. Native metadata
-and original downloads do not establish complete image/video decoding or playback.
+data. Video inspection requires a trusted system FFprobe and mandatory Linux
+isolation; the current container still does not bundle external codecs. Metadata
+and original downloads do not establish full image/video decoding or playback.
 
 All paths below are relative to `/api/v2` and require a valid HTTPS session cookie.
 Original download also requires the actual account's `download_original:true`,
@@ -24,7 +26,7 @@ The server rechecks these conditions before GET, HEAD, Range, or a conditional 3
 - `GET /albums/{album_id}/media` lists visible media in stable ID order. An empty
   authorized album returns an empty page; an unauthorized album returns 404.
 - `GET /media/{media_id}` returns ID, album ID, kind, display basename, nullable
-  dimensions/duration/animation/orientation/capture time/current revision, and offline
+  codec/dimensions/duration/animation/orientation/capture time/current revision, and offline
   capability. No absolute path, cache storage key, EXIF GPS field, password, or
   session capability is returned.
 - `GET /media/{media_id}/variants` lists the latest **ready** preset versions for
@@ -46,11 +48,17 @@ implemented. A stable URL or a browser HTTP cache is not an offline grant.
 Media detail and album-media pages return these fields, including explicit `null`
 when evidence is absent:
 
+- `codec` is a bounded native image or primary video codec identifier such as
+  `jpeg`, `png`, `h264`, `vp8` or `ffv1`. It is null for old uninspected rows and
+  failed/unsupported metadata. A filename, MIME hint, raw tag or diagnostic is
+  never used as a codec value. Codec availability is not browser playback readiness.
 - `width` and `height` are the source's encoded pixel dimensions. EXIF orientation
   does not swap them or rewrite the original.
 - `orientation` is the JPEG/PNG/WebP EXIF orientation integer `1..8`; null means unknown,
-  not an inferred value of 1. Display clients must apply the corresponding transform
-  when they render an original. Generated, orientation-normalized variants are pending.
+  not an inferred value of 1. Image viewers must respect it unless their decoder
+  already does. Video uses equivalent validated orthogonal display transforms as
+  described below; browser video decoders may already apply that transform. Never
+  transform twice. Generated orientation-normalized variants are still pending.
 - `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
@@ -69,8 +77,8 @@ Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
 and header/entry resource limits produce explicit invalid-media work without trusted
 metadata. GPS, MakerNote, embedded thumbnails, raw EXIF maps, metadata paths/URLs,
 and unrelated directories are not followed or exposed. This is not full EXIF
-support: other image containers and video capture metadata remain pending. No raw
-EXIF, XMP or color-profile map is exposed.
+support: other image containers remain pending. Video uses a separate bounded
+whitelist below. No raw EXIF, XMP or color-profile map is exposed.
 
 The inspector version/resource policy and post-inspection full source hash bind
 metadata to immutable staging. Publication retains logical identity on a valid
@@ -125,6 +133,63 @@ fresh evidence. Full pixel validation, generated animation/static fallbacks and
 playback variants remain separate implementation/acceptance work. These fields do
 not grant preview/original access or establish player/offline readiness.
 
+## Controlled video metadata
+
+MP4, MOV, Matroska/MKV and WebM use a mandatory [Linux FFprobe sandbox](codec-sandbox.md).
+Container magic and bounded EBML/ISO-BMFF evidence select MIME, not the extension.
+Classic MOV padding/movie atoms are recognized within the bounded sniff prefix;
+FFprobe must still prove the expected container family and a real video stream.
+The fixed `V:0` selection means the first non-attached-picture video stream.
+Embedded album covers do not become video, and audio/subtitle/secondary-video
+metadata is not silently substituted. This is metadata analysis, not full decoding.
+
+- Encoded width/height and primary `codec` are validated before staging. Positive
+  dimensions must satisfy configured dimension/pixel limits. No source rewrite or
+  width/height swap is performed for rotation.
+- `duration_ms` uses the selected track's positive declared seconds. Missing, zero
+  or `N/A` track timing may use positive container duration. Both declarations must
+  satisfy the duration budget. Decimal seconds are handled as exact rationals and
+  rounded upward once to milliseconds; no frame-count/rate estimate is invented.
+  Unknown timing remains null. Video `animated`, `frame_count` and `loop_count`
+  remain null: those API fields describe inspected image animations, not guesses
+  about video frames or player looping preferences.
+- Pure orthogonal fixed-point display matrices map to the equivalent EXIF `1..8`
+  orientation, including mirror transforms. A matrix is authoritative over legacy
+  rotate tags. Arbitrary scaling, shear, perspective or translation remains unknown
+  rather than being misrepresented as a quarter turn. Without a matrix, a bounded
+  explicit legacy rotate tag may establish a quarter-turn orientation.
+- `com.apple.quicktime.creationdate` is preferred over generic `creation_time`
+  evidence. Only whitelisted RFC3339 values with explicit `Z` or numeric timezone
+  offsets yield `capture_at`, normalized/truncated to UTC milliseconds before
+  staging. An unknown original timestamp is not replaced by a less-specific tag.
+  Conflicting evidence, missing zones and `-00:00` stay null. Generic container
+  creation time is a declared metadata fallback, not proof of an observed camera
+  exposure. Filesystem times and the worker's timezone are never substituted.
+
+The narrow JSON projection reuses the same duplicate-key, exact-field, UTF-8,
+nesting, type and explicitly nullable-field validator as HTTP input. Unknown raw
+maps, GPS, filenames, paths and diagnostics are rejected/not selected, never copied
+into the DTO. Pipe/input/resource bounds, malformed/unknown output and missing
+capabilities produce explicit failed media work. No unrestricted command, network
+protocol, shell, private-file fallback or public original URL is enabled.
+
+Inspector v7 pins resource policy **and** a private trusted-runtime installation
+epoch. The child checks that epoch against the exact file descriptors granted to
+Landlock. It includes canonical tool/loader/dependency/cache identities, sizes,
+modes and modification/change times, not a content hash of untrusted media. Keep
+installed system codecs immutable while workers run; stop/restart workers around
+system tool/library upgrades. Replaced installations cannot resume an old pinned
+generation. Native images still work when FFprobe is missing; affected video paths
+are explicitly unsupported, not silently skipped or reported successful.
+
+All runtime/source/probe work happens outside SQLite writers. A full source hash
+and root-relative stat/configuration check follow inspection. The existing
+source/config/generation/lease/cancel/version fences and atomic progress/audit/
+change/outbox transaction still gate publication. Valid rescans retain logical IDs
+and revisions; format rewrites replace stale codec/clock/transform evidence. This
+adds no READY variants or original-download permission, and does not complete the
+external image, player, container-packaging or source-processing phase gates.
+
 ## Read bytes
 
 | Endpoint                                                   | Policy and behavior                                                                                                                                    |
@@ -141,8 +206,9 @@ variant to another revision's storage key.
 
 Originals always use `Content-Disposition: attachment`. Safe ready variants use
 inline disposition and a restricted image/video MIME allowlist. Unknown original
-MIME types become `application/octet-stream`; active HTML/SVG is not served as an
-inline ready variant. Filenames are encoded safely. Responses include `nosniff`,
+MIME types become `application/octet-stream`; detected MOV/MKV types remain correct
+for forced-attachment originals without expanding the inline READY-preset allowlist.
+Active HTML/SVG is never served as an inline ready variant. Filenames are encoded safely. Responses include `nosniff`,
 a sandbox CSP, `Vary: Cookie`, and `Cache-Control: private, no-store`.
 
 Original files may contain EXIF/GPS or other private metadata. Grant original

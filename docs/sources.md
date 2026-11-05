@@ -167,12 +167,13 @@ share one fenced transaction; no raw source path or system error enters these DT
 ## Inventory processing boundaries
 
 The backend can stage a complete, bounded, root-confined filesystem manifest and
-native JPEG/PNG/GIF/WebP header metadata, whitelisted JPEG/PNG/WebP EXIF orientation/explicitly
-zoned capture time, and bounded GIF/APNG/WebP frame/cycle/loop evidence in private database
-tables. See [media metadata](media.md) for unknown/timezone/privacy rules. It
-revalidates streamed hashes instead of trusting
-equal sizes/timestamps, pins the inspector version and resource policy for retries,
-and records unsupported/corrupt inputs explicitly. Non-media
+native JPEG/PNG/GIF/WebP metadata, whitelisted image EXIF/animation, and sandboxed
+MP4/MOV/MKV/WebM codec/geometry/duration/display-transform/explicit-UTC evidence in
+private database tables. See [media metadata](media.md) for unknown/timezone/privacy
+rules and capability requirements. It revalidates streamed source hashes instead
+of trusting equal sizes/timestamps, pins inspector/resource policy plus a private
+trusted-runtime installation epoch for retries, and records unsupported/corrupt
+inputs explicitly. Non-media
 paths stay in the manifest and count as skipped metadata work; invalid or unsupported
 media count as failed work, not successful decoding. Metadata, issues, generation
 counters, and job progress/events commit together in bounded batches.
@@ -215,9 +216,10 @@ dispatch deadlines do not imply a healthy scan or advance full-publication evide
 [Readiness](health.md) reports degraded for unknown/unavailable/stale/mismatched
 source observations without probing NAS inside an HTTP request. It does not change
 source health or grant inventory authority. Queued acceptance alone cannot prove
-successful ingestion. Header/whitelisted JPEG EXIF inspection does not prove complete
-pixel/frame decoding. External codecs, complete EXIF support and
-variant generation remain pending. Native compiled-worker
+successful ingestion. Native metadata and bounded video probing do not prove full
+pixel/frame decoding. External image capabilities, complete EXIF and variant
+processing remain pending; the current container still lacks FFprobe packaging.
+Native compiled-worker
 SIGKILL/reopened-WAL tests cover staging and partial multi-source publication,
 retained logical IDs/revisions, old owner rejection and duplicate-free events.
 Rootless/read-only container tests also exercise actual native publication/rename

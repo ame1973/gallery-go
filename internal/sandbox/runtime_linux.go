@@ -3,16 +3,78 @@
 package sandbox
 
 import (
+	"context"
+	"crypto/sha256"
 	"debug/elf"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
-// runtimeFiles resolves only the fixed trusted tool's ELF dependencies. File rules,
-// not broad /usr/lib directory grants, prevent source mounts beneath a system
-// directory from accidentally becoming readable by a malicious media file.
+// Signature identifies the fixed installed runtime outside database transactions.
+// Trusted system files are pinned by canonical path, inode, size, mode and both
+// timestamps; unlike source media, they are not attacker-writable NAS inputs.
+func Signature(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	files, err := runtimeFiles()
+	if err == nil {
+		var pin string
+		pin, err = runtimeFingerprint(ctx, files, nil)
+		if err == nil {
+			return pin, nil
+		}
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	return "", ErrUnavailable
+}
+
+// The child's fingerprint uses the very O_PATH descriptors granted to Landlock,
+// not a later pathname lookup that could bless a different installation epoch.
+func runtimeFingerprint(ctx context.Context, files []string, grant func(string, int) error) (string, error) {
+	if len(files) < 1 || len(files) > 256 {
+		return "", ErrUnavailable
+	}
+	files = slices.Clone(files)
+	slices.Sort(files)
+	digest := sha256.New()
+	for _, name := range files {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		fd, err := unix.Open(name, unix.O_PATH|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return "", err
+		}
+		var info unix.Stat_t
+		err = unix.Fstat(fd, &info)
+		if err == nil && (info.Mode&unix.S_IFMT != unix.S_IFREG || info.Size < 0 || info.Size > 512<<20) {
+			err = ErrUnavailable
+		}
+		if err == nil && grant != nil {
+			err = grant(name, fd)
+		}
+		unix.Close(fd)
+		if err != nil {
+			return "", err
+		}
+		_, _ = fmt.Fprintf(digest, "%q:%d:%d:%d:%d:%d:%d:%d:%d\n", name, info.Dev, info.Ino, info.Mode, info.Size, info.Mtim.Sec, info.Mtim.Nsec, info.Ctim.Sec, info.Ctim.Nsec)
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+// runtimeFiles resolves only the fixed trusted tool's ELF dependencies and loader
+// cache. File rules, not broad /usr/lib grants, prevent unrelated source mounts
+// beneath system directories from becoming readable by a malicious media file.
 func runtimeFiles() ([]string, error) {
 	queue := []string{probeBinary, dynamicLoader}
 	seen := make(map[string]bool)
@@ -80,6 +142,14 @@ func runtimeFiles() ([]string, error) {
 				return nil, ErrUnavailable
 			}
 		}
+	}
+	if name, err := filepath.EvalSymlinks("/etc/ld.so.cache"); err == nil {
+		if len(result) >= 256 {
+			return nil, ErrUnavailable
+		}
+		result = append(result, name)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
 	}
 	return result, nil
 }

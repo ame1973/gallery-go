@@ -13,7 +13,7 @@ import (
 
 // Probe returns only the fixed tool's narrow JSON projection. The caller must
 // still validate that metadata and rehash/bind it to the immutable source revision.
-func Probe(ctx context.Context, input *os.File, limits Limits) ([]byte, error) {
+func Probe(ctx context.Context, input *os.File, limits Limits, expected string) ([]byte, error) {
 	if err := limits.Validate(); err != nil {
 		return nil, err
 	}
@@ -27,18 +27,18 @@ func Probe(ctx context.Context, input *os.File, limits Limits) ([]byte, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > limits.InputBytes {
 		return nil, ErrInput
 	}
+	if !validRuntimeSignature(expected) {
+		return nil, ErrUnavailable
+	}
 	attributes := childAttributes()
 	if attributes == nil {
 		return nil, ErrUnavailable
 	}
-	binary, err := os.Executable()
-	if err != nil {
-		return nil, ErrUnavailable
-	}
 	runCtx, cancel := context.WithTimeout(ctx, limits.Timeout)
 	defer cancel()
-	command := exec.CommandContext(runCtx, binary, ChildCommand,
-		strconv.FormatUint(limits.MemoryBytes, 10), strconv.FormatUint(limits.CPUSeconds, 10), strconv.FormatInt(limits.InputBytes, 10))
+	// /proc/self/exe pins the executing Go image even if its pathname is replaced.
+	command := exec.CommandContext(runCtx, "/proc/self/exe", ChildCommand,
+		strconv.FormatUint(limits.MemoryBytes, 10), strconv.FormatUint(limits.CPUSeconds, 10), strconv.FormatInt(limits.InputBytes, 10), expected)
 	command.Env = childEnvironment
 	command.Dir = "/"
 	command.ExtraFiles = []*os.File{input}
@@ -63,6 +63,8 @@ func Probe(ctx context.Context, input *os.File, limits Limits) ([]byte, error) {
 				return nil, ErrUnavailable
 			case 71:
 				return nil, ErrInput
+			case 72:
+				return nil, ErrRuntimeChanged
 			case -1:
 				return nil, ErrResource
 			}

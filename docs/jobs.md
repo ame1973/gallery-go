@@ -54,12 +54,12 @@ response to receive its historical accepted result, even if the job was later
 cancelled or a source registration removed. GET the job for its current state.
 Reusing the key for a changed command returns `409 IDEMPOTENCY_CONFLICT`.
 
-The queue handler executes bounded inventory, native metadata, and indexed
-publication for versioned intents. It rejects unpinned or malformed stored targets,
+The queue handler executes bounded inventory, native image/controlled video metadata,
+and indexed publication for versioned intents. It rejects unpinned or malformed stored targets,
 waits for a live source owner without inventing work, and continues healthy sources
 when another source fails. Failure diagnostics, generation state, and progress commit
 atomically; retryable source failures use the queue's bounded backoff/dead-letter policy.
-`serve` enables a native consumer by default; set `worker.embedded: false` for a
+`serve` enables a scan consumer by default; set `worker.embedded: false` for a
 standalone consumer, or explicitly use [metadata-only mode](health.md) for maintenance.
 Queued acceptance, including
 for an unavailable/unconfigured source, is not evidence that bytes are reachable,

@@ -73,7 +73,8 @@ func TestPublicationPreservesGIFTimingAndClearsItOnFormatRewrite(t *testing.T) {
 
 func TestMetadataRejectsInconsistentAnimationEvidence(t *testing.T) {
 	width, height, frames, loops, duration, animated := int64(3), int64(2), int64(2), int64(0), int64(300), true
-	valid := media.Inspection{Kind: "image", MIME: "image/gif", Format: "gif", Width: &width, Height: &height, FrameCount: &frames, LoopCount: &loops, DurationMS: &duration, Animated: &animated, Status: "ok"}
+	codec := "gif"
+	valid := media.Inspection{Kind: "image", MIME: "image/gif", Format: "gif", Codec: &codec, Width: &width, Height: &height, FrameCount: &frames, LoopCount: &loops, DurationMS: &duration, Animated: &animated, Status: "ok"}
 	if !validInspection(valid) {
 		t.Fatal("valid animation rejected")
 	}

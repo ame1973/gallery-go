@@ -1587,6 +1587,7 @@ components:
           id,
           album_id,
           kind,
+          codec,
           file_name,
           width,
           height,
@@ -1603,6 +1604,14 @@ components:
         id: { type: string }
         album_id: { type: string }
         kind: { type: string, enum: [image, video] }
+        codec:
+          {
+            type: [string, 'null'],
+            minLength: 1,
+            maxLength: 64,
+            pattern: '^[a-z0-9_]+$',
+            description: Validated native image or primary non-attached video codec identifier. Null for unknown or uninspected metadata; never a raw tag or diagnostic.,
+          }
         file_name: { type: string, description: Display basename only; never a filesystem path. }
         width: { type: [integer, 'null'], minimum: 1 }
         height: { type: [integer, 'null'], minimum: 1 }
@@ -1610,7 +1619,7 @@ components:
           {
             type: [integer, 'null'],
             minimum: 0,
-            description: Source duration. Image animation uses one cycle of declared positive delays; APNG exact rational delays are rounded upward once to milliseconds. Null for zero/missing timing or GIF user input. Never multiplied by loop_count or guessed from browser delay clamping.,
+            description: Declared source duration rounded upward once to milliseconds. Video uses the primary non-attached track with container fallback only for unknown track timing. Image animation uses one declared cycle; zero/missing timing or GIF user input stays null. Never inferred from frame rate or multiplied by loop_count.,
           }
         animated:
           {
@@ -1634,13 +1643,13 @@ components:
             type: [integer, 'null'],
             minimum: 1,
             maximum: 8,
-            description: Validated source EXIF orientation; dimensions remain encoded source dimensions.,
+            description: Validated EXIF orientation or equivalent orthogonal video display-matrix transform. Unknown or arbitrary video transforms remain null; dimensions remain encoded source dimensions.,
           }
         capture_at:
           {
             type: [string, 'null'],
             format: date-time,
-            description: UTC instant only for validated DateTimeOriginal with explicit OffsetTimeOriginal; optional SubSecTimeOriginal is truncated to millisecond precision before staging. Null for absent or unzoned camera time; never inferred from file mtime. No GPS/raw EXIF is exposed.,
+            description: UTC instant truncated to milliseconds from validated original EXIF date/offset/subseconds or explicitly zoned whitelisted video creation tags. More specific video capture-date evidence takes precedence; conflicting or unzoned evidence stays null. Never inferred from mtime or host timezone. No GPS/raw tags are exposed.,
           }
         revision:
           {

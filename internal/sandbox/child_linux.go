@@ -3,6 +3,7 @@
 package sandbox
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,7 +31,7 @@ func killChild(process *os.Process) error {
 // RunChild is a private self-exec entrypoint. It opens no config, database, listener
 // or source root, and executes only the fixed probe after all isolation succeeds.
 func RunChild(args []string) int {
-	if len(args) != 3 {
+	if len(args) != 4 || !validRuntimeSignature(args[3]) {
 		return 70
 	}
 	limits := DefaultLimits()
@@ -57,14 +58,18 @@ func RunChild(args []string) int {
 		return 71
 	}
 	arguments := []string{probeBinary, "-hide_banner", "-v", "error", "-max_alloc", "67108864", "-threads", "1",
+		"-max_pixels", "1000000000", "-max_streams", "64", "-max_probe_packets", "256",
 		"-probesize", "8388608", "-analyzeduration", "5000000", "-protocol_whitelist", "file,pipe",
 		"-format_whitelist", "mov,matroska,webm,image2,image2pipe,jpeg_pipe,png_pipe,webp_pipe,gif,tiff_pipe",
-		"-show_entries", "stream=index,codec_type,codec_name,width,height,duration,avg_frame_rate,nb_frames:stream_tags=rotate,creation_time:stream_side_data=rotation:format=format_name,duration:format_tags=creation_time",
+		"-select_streams", "V:0", "-show_entries", "stream=index,codec_type,codec_name,width,height,duration:stream_disposition=attached_pic:stream_tags=rotate,creation_time,com.apple.quicktime.creationdate:stream_side_data=rotation,displaymatrix:format=format_name,duration:format_tags=creation_time,com.apple.quicktime.creationdate",
 		"-of", "json", "-i", "/proc/self/fd/3"}
 	// Landlock before ABI8 is thread-local. This trusted helper never runs codec code
 	// until exec replaces every sibling Go thread; the final thread must stay locked.
 	runtime.LockOSThread()
-	if err := restrictFilesystem(input); err != nil {
+	if err := restrictFilesystem(input, args[3]); err != nil {
+		if err == ErrRuntimeChanged {
+			return 72
+		}
 		return 70
 	}
 	if err := applyLimits(limits); err != nil {
@@ -106,7 +111,7 @@ func applyLimits(limits Limits) error {
 	return nil
 }
 
-func restrictFilesystem(input *os.File) error {
+func restrictFilesystem(input *os.File, expected string) error {
 	version, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, unix.LANDLOCK_CREATE_RULESET_VERSION)
 	if errno != 0 || version < 3 {
 		return ErrUnavailable
@@ -145,25 +150,18 @@ func restrictFilesystem(input *os.File) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat("/etc/ld.so.cache"); err == nil {
-		files = append(files, "/etc/ld.so.cache")
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	for _, name := range files {
+	pin, err := runtimeFingerprint(context.Background(), files, func(name string, fd int) error {
 		rights := uint64(unix.LANDLOCK_ACCESS_FS_READ_FILE)
 		if name == probe || name == loader {
 			rights |= unix.LANDLOCK_ACCESS_FS_EXECUTE
 		}
-		parent, err := unix.Open(name, unix.O_PATH|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return err
-		}
-		err = add(parent, rights)
-		unix.Close(parent)
-		if err != nil {
-			return err
-		}
+		return add(fd, rights)
+	})
+	if err != nil {
+		return err
+	}
+	if pin != expected {
+		return ErrRuntimeChanged
 	}
 	_, _, errno = unix.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, fd, 0, 0)
 	if errno != 0 {

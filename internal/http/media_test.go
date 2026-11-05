@@ -260,28 +260,28 @@ func TestMediaHTTPMetadataReadyOwnershipAndSourceOutage(t *testing.T) {
 	f := protectedMedia(t)
 	response := mediaRequest(f.reader, "GET", "/api/v2/media/protected", nil)
 	item := decodeResponse[media.Metadata](t, response, 200)
-	if item.ID != "protected" || item.FileName != "Portrait 中文.png" || item.OfflineCapable || item.Revision == nil || item.Orientation != nil || item.CaptureAt != nil || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil {
+	if item.ID != "protected" || item.FileName != "Portrait 中文.png" || item.OfflineCapable || item.Codec != nil || item.Revision == nil || item.Orientation != nil || item.CaptureAt != nil || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil {
 		t.Fatal("incorrect metadata or invented unknown fields", item)
 	}
-	for _, field := range []string{"orientation", "capture_at", "animated", "frame_count", "loop_count"} {
+	for _, field := range []string{"codec", "orientation", "capture_at", "animated", "frame_count", "loop_count"} {
 		if !strings.Contains(response.Body.String(), `"`+field+`":null`) {
 			t.Fatal("missing explicit unknown metadata", field, response.Body.String())
 		}
 	}
 	captured := time.Date(2026, 11, 5, 4, 34, 56, 0, time.UTC)
-	if _, err := f.db.Exec(`UPDATE media SET orientation=6,capture_at=?,duration_ms=300,metadata_json='{"animated":true,"frame_count":2,"loop_count":3,"GPS":"private-canary"}' WHERE id='protected'`, captured.UnixMilli()); err != nil {
+	if _, err := f.db.Exec(`UPDATE media SET orientation=6,capture_at=?,duration_ms=300,metadata_json='{"codec":"png","animated":true,"frame_count":2,"loop_count":3,"GPS":"private-canary"}' WHERE id='protected'`, captured.UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
 	response = mediaRequest(f.reader, "GET", "/api/v2/media/protected", nil)
 	item = decodeResponse[media.Metadata](t, response, 200)
-	if item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(captured) || !strings.Contains(response.Body.String(), `"capture_at":"2026-11-05T04:34:56Z"`) || strings.Contains(response.Body.String(), f.source) || strings.Contains(response.Body.String(), "GPS") {
+	if item.Codec == nil || *item.Codec != "png" || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(captured) || !strings.Contains(response.Body.String(), `"capture_at":"2026-11-05T04:34:56Z"`) || strings.Contains(response.Body.String(), f.source) || strings.Contains(response.Body.String(), "GPS") {
 		t.Fatal("whitelisted HTTP metadata lost UTC/privacy boundary", item, response.Body.String())
 	}
 	if item.Animated == nil || !*item.Animated || item.FrameCount == nil || *item.FrameCount != 2 || item.LoopCount == nil || *item.LoopCount != 3 || item.DurationMS == nil || *item.DurationMS != 300 {
 		t.Fatal("whitelisted animation fields were not serialized", item)
 	}
 	page := decodeResponse[listPage[media.Metadata]](t, mediaRequest(f.reader, "GET", "/api/v2/albums/media-album/media", nil), 200)
-	if len(page.Items) != 1 || page.Items[0].ID != item.ID || page.Items[0].Orientation == nil || *page.Items[0].Orientation != 6 || page.Items[0].CaptureAt == nil || !page.Items[0].CaptureAt.Equal(captured) || page.Items[0].Animated == nil || !*page.Items[0].Animated || page.Items[0].FrameCount == nil || *page.Items[0].FrameCount != 2 || page.Items[0].LoopCount == nil || *page.Items[0].LoopCount != 3 {
+	if len(page.Items) != 1 || page.Items[0].ID != item.ID || page.Items[0].Codec == nil || *page.Items[0].Codec != "png" || page.Items[0].Orientation == nil || *page.Items[0].Orientation != 6 || page.Items[0].CaptureAt == nil || !page.Items[0].CaptureAt.Equal(captured) || page.Items[0].Animated == nil || !*page.Items[0].Animated || page.Items[0].FrameCount == nil || *page.Items[0].FrameCount != 2 || page.Items[0].LoopCount == nil || *page.Items[0].LoopCount != 3 {
 		t.Fatal("album/media visibility or metadata mismatch")
 	}
 	variants := decodeResponse[listPage[media.Variant]](t, mediaRequest(f.reader, "GET", "/api/v2/media/protected/variants", nil), 200)
