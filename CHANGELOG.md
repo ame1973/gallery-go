@@ -22,6 +22,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Private bounded static artifact storage with file/parent-directory fsync,
+  post-write hashing and pinned-directory atomic no-replace rename on supported
+  Linux hosts. Replays preserve existing inodes; conflicting bytes, symbolic links,
+  unsafe roots and writable shared directories fail closed. Concurrent observers
+  and isolated SQLite checks distinguish private files from DB READY/download
+  authority. This is not a renderer, production publisher or orphan-GC completion;
+  source media and codec isolation policies remain unchanged.
+
 - Native static WebP artifact validation for the finite versioned 320/720/1920
   presets: orientation-aware no-upscale geometry, per-preset byte bounds, complete
   container checks, no metadata/animation/unknown output chunks, and immutable

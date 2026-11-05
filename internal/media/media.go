@@ -1,5 +1,6 @@
-// Package media reads authorized metadata and content. It never writes source
-// files or exposes a filesystem mount; generation is a separate worker concern.
+// Package media reads authorized metadata/content and confines private worker
+// artifacts. It never writes source files or exposes a filesystem mount;
+// generation orchestration remains a separate worker concern.
 package media
 
 import (

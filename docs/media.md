@@ -72,6 +72,23 @@ current root/configuration/revision and live lease, fsync/rename private output,
 and commit READY with change/outbox/progress. Static output never claims to retain
 source animation, and no original is copied or symlinked into a preview mount.
 
+The Linux amd64/arm64 worker-side private artifact store can write validated bytes
+under `tmp/{job_id}`, fsync and rehash the temporary file, and atomically rename to
+the immutable key **without replacing an existing file**. Both directory handles
+are confined before the basename-only rename. New directories are private and
+parent directory entries are synced. Identical retries reuse the existing inode;
+a corrupt, mismatched, non-private or symbolic-link target fails rather than being
+overwritten. Group/world-writable directories, source/cache overlap and cache-root
+aliases are refused. Missing cache roots are not created by this primitive.
+
+This filesystem boundary is not yet connected to a production renderer or DB
+publisher. Unreferenced bytes are not listed or downloadable, even when a complete
+file exists at an immutable key. Failure after a rename can leave a private orphan;
+job directories remain for later lease-aware reconciliation, never recursive or
+source cleanup. Unsupported platforms fail before writing instead of substituting
+an overwriting rename. Contexts stop work between I/O operations, but cannot promise
+to interrupt a kernel-stalled filesystem flush or rename.
+
 ### Orientation and capture time
 
 Media detail and album-media pages return these fields, including explicit `null`
