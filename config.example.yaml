@@ -31,7 +31,7 @@ inspection:
   max_dimension: 65535
   max_frames: 10000
   max_duration: 24h # Maximum declared animation cycle duration, not total loop time.
-  header_bytes: 8388608 # 8 MiB per pass; PNG/GIF metadata requires complete containers.
+  header_bytes: 8388608 # 8 MiB per pass; PNG/GIF/WebP metadata requires complete containers.
   timeout: 15s
 # Disable in every consumer for explicit/manual-only scan operation.
 scheduler:

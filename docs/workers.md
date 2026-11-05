@@ -49,8 +49,8 @@ A worker claims only supported `scan` jobs. It rejects legacy or malformed priva
 intents rather than guessing roots or scopes. Queued work cannot progress without
 a compatible embedded or standalone consumer.
 
-The native pipeline performs bounded manifests and streamed hashes, JPEG/PNG/GIF
-header metadata, whitelisted JPEG/PNG EXIF, bounded GIF/APNG frame/cycle/loop metadata,
+The native pipeline performs bounded manifests and streamed hashes, JPEG/PNG/GIF/WebP
+header metadata, whitelisted JPEG/PNG/WebP EXIF, bounded GIF/APNG/WebP frame/cycle/loop metadata,
 and fenced indexed publication. Indexed resources and authorized original downloads
 become available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
@@ -61,15 +61,18 @@ to immutable staging. A changed inspector cannot resume a differently pinned gen
 Header/EXIF metadata is not full pixel/frame decoding, complete EXIF/animation
 support, a generated preview, or a READY variant. Unsupported/corrupt media remains
 explicit failed work. External codecs and variant processing are still under development.
-PNG/GIF inspection streams each complete file without allocating frame pixels or
-decoding zlib/LZW. It is bounded by `inspection.header_bytes`, `max_frames`,
-`max_duration` and `timeout`. PNG eXIf separately has a fixed 64 KiB bound; APNG uses
+PNG/GIF/WebP inspection streams each complete file without allocating frame pixels or
+decoding zlib/LZW/VP8 pixels. It is bounded by `inspection.header_bytes`, `max_frames`,
+`max_duration` and `timeout`. PNG eXIf/WebP EXIF separately have fixed 64 KiB bounds; APNG uses
 shared sequence/frame/control checks and exact rational cycle timing, rounded only
-once to milliseconds. APNG plays are already totals, unlike GIF repeat counts.
+once to milliseconds. APNG/WebP plays are already totals, unlike GIF repeat counts.
+WebP additionally validates RIFF/padding, codec headers, canvas/ANMF geometry and
+alpha/bitstream order while ignoring reserved/future fields. Real tiny compressed
+WebP fixtures are synthetic repository test data, not a bundled external adapter.
 `max_duration` caps the sum of declared frame delays for one cycle even when some
 frame timing is unknown; it is not multiplied by finite/infinite playthroughs.
 Missing/zero delays and user-input timing remain unknown, never browser-clamped.
-PNG/GIF files exceeding the metadata byte budget fail with `MEDIA_LIMIT` even when the
+PNG/GIF/WebP files exceeding the metadata byte budget fail with `MEDIA_LIMIT` even when the
 separate scanner input-file budget is larger. Plain Text/unknown rendering extensions
 are explicitly unsupported; metadata success is not LZW decoding or player readiness.
 
@@ -131,7 +134,7 @@ scheduler:
 | `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                                               |
 | `inspection.max_frames`    | 1..100,000 image-animation frames; default 10,000.                                               |
 | `inspection.max_duration`  | 1ms..24h declared animation cycle duration; default 24h, not total loop time.                    |
-| `inspection.header_bytes`  | 512 bytes..32 MiB per metadata input pass; PNG/GIF require complete files.                       |
+| `inspection.header_bytes`  | 512 bytes..32 MiB per metadata input pass; PNG/GIF/WebP require complete files.                  |
 | `inspection.timeout`       | 1s..1m per file's native header/EXIF/GIF inspection across all passes.                           |
 | `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.                                  |
 | `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.                           |
@@ -175,8 +178,8 @@ and already-published logical IDs/revisions remain unchanged without duplicate e
 This is local process-crash evidence, not a NAS/kernel/power-loss or restore drill.
 
 Actual rootless/read-only container ingestion is also covered for embedded and
-standalone CLI consumers through TLS/admin APIs, generated read-only PNG/GIF/APNG mounts and
-private tmpfs storage. The test exercises PNG EXIF/UTC, GIF/APNG frames/cycle/plays, SQLite
+standalone CLI consumers through TLS/admin APIs, generated read-only PNG/GIF/APNG/WebP mounts and
+private tmpfs storage. The test exercises EXIF/UTC, image frames/cycle/plays, SQLite
 temporary publication/rename plans,
 protected originals/Range, stable logical/revision/album IDs, source outage retention
 and restoration, dependency probes and denied source writes. See [deployment tests](../deploy/readme.md).

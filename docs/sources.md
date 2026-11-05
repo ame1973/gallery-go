@@ -167,8 +167,8 @@ share one fenced transaction; no raw source path or system error enters these DT
 ## Inventory processing boundaries
 
 The backend can stage a complete, bounded, root-confined filesystem manifest and
-native JPEG/PNG/GIF header metadata, whitelisted JPEG/PNG EXIF orientation/explicitly
-zoned capture time, and bounded GIF/APNG frame/cycle/loop evidence in private database
+native JPEG/PNG/GIF/WebP header metadata, whitelisted JPEG/PNG/WebP EXIF orientation/explicitly
+zoned capture time, and bounded GIF/APNG/WebP frame/cycle/loop evidence in private database
 tables. See [media metadata](media.md) for unknown/timezone/privacy rules. It
 revalidates streamed hashes instead of trusting
 equal sizes/timestamps, pins the inspector version and resource policy for retries,
@@ -216,7 +216,7 @@ dispatch deadlines do not imply a healthy scan or advance full-publication evide
 source observations without probing NAS inside an HTTP request. It does not change
 source health or grant inventory authority. Queued acceptance alone cannot prove
 successful ingestion. Header/whitelisted JPEG EXIF inspection does not prove complete
-pixel/frame decoding. External codecs, complete EXIF support, WebP timing and
+pixel/frame decoding. External codecs, complete EXIF support and
 variant generation remain pending. Native compiled-worker
 SIGKILL/reopened-WAL tests cover staging and partial multi-source publication,
 retained logical IDs/revisions, old owner rejection and duplicate-free events.

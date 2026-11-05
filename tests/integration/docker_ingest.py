@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise native indexed ingestion in a rootless, read-only, ephemeral image."""
+import base64
 import hashlib
 import http.client
 import http.cookiejar
@@ -72,6 +73,19 @@ def animated_gif():
         # Clear, one palette index, end-of-information: three 3-bit LSB-first codes.
         data += b"\x02\x02" + struct.pack("<H", 4 | (pixel << 3) | (5 << 6)) + b"\x00"
     return data + b"\x3b"
+
+
+def animated_webp():
+    fixtures = json.loads((Path(__file__).resolve().parent.parent / "fixtures" / "webp.json").read_text())
+    data = bytearray(base64.b64decode(fixtures["animated"], validate=True))
+    assert data[12:16] == b"VP8X"
+    data[20] |= 8
+    exif = png_exif()
+    data += b"EXIF" + struct.pack("<I", len(exif)) + exif
+    if len(exif) % 2:
+        data += b"\x00"
+    struct.pack_into("<I", data, 4, len(data) - 8)
+    return bytes(data)
 
 
 class Proxy(http.server.BaseHTTPRequestHandler):
@@ -153,7 +167,7 @@ def run(image, directory, embedded):
     marker = source / ".mounted"
     marker.write_bytes(b"isolated container source marker")
     inputs = {"first.png": png(12, 7), "second.png": png(13, 7),
-              "animation.gif": animated_gif(), "animation.apng": animated_png()}
+              "animation.gif": animated_gif(), "animation.apng": animated_png(), "animation.webp": animated_webp()}
     for name, data in inputs.items():
         (album / name).write_bytes(data)
         (album / name).chmod(0o444)
@@ -247,7 +261,7 @@ def run(image, directory, embedded):
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert len(media["items"]) == len(inputs), media
         identities = {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]}
-        assert {item["width"] for item in media["items"]} == {1, 12, 13}
+        assert {item["width"] for item in media["items"]} == {1, 3, 12, 13}
         animation = next(item for item in media["items"] if item["file_name"] == "animation.gif")
         assert (animation["width"], animation["height"], animation["animated"], animation["frame_count"],
                 animation["duration_ms"], animation["loop_count"]) == (1, 1, True, 2, 300, 3), animation
@@ -258,6 +272,11 @@ def run(image, directory, embedded):
                 apng["capture_at"]) == (True, 2, 2, 300, 6, "2026-11-05T04:34:56Z"), apng
         detail, _ = api.request("GET", "/media/" + apng["id"])
         assert detail == apng, (detail, apng)
+        webp = next(item for item in media["items"] if item["file_name"] == "animation.webp")
+        assert (webp["width"], webp["height"], webp["animated"], webp["frame_count"], webp["loop_count"],
+                webp["duration_ms"], webp["orientation"], webp["capture_at"]) == (3, 2, True, 2, 2, 200, 6, "2026-11-05T04:34:56Z"), webp
+        detail, _ = api.request("GET", "/media/" + webp["id"])
+        assert detail == webp, (detail, webp)
         for item in media["items"]:
             if item["file_name"].endswith(".png"):
                 assert (item["animated"], item["frame_count"], item["loop_count"], item["duration_ms"]) == (False, 1, 1, None), item
@@ -265,7 +284,7 @@ def run(image, directory, embedded):
         anonymous.request("GET", f"/media/{next(iter(identities.values()))[0]}/original", status=401)
         for name, (media_id, _revision) in identities.items():
             original, headers = api.request("GET", f"/media/{media_id}/original", raw=True)
-            expected_mime = "image/gif" if name.endswith(".gif") else "image/png"
+            expected_mime = "image/gif" if name.endswith(".gif") else "image/webp" if name.endswith(".webp") else "image/png"
             assert original == inputs[name] and headers["Content-Type"] == expected_mime
             part, headers = api.request("GET", f"/media/{media_id}/original", status=206,
                                         headers={"Range": "bytes=0-3"}, raw=True)
@@ -275,6 +294,7 @@ def run(image, directory, embedded):
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
+        assert next(item for item in media["items"] if item["id"] == webp["id"]) == webp
         source.chmod(0o755)
         album.rename(source / "Renamed")
         source.chmod(0o555)
@@ -285,6 +305,7 @@ def run(image, directory, embedded):
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
+        assert next(item for item in media["items"] if item["id"] == webp["id"]) == webp
         healthy, _ = api.request("GET", "/admin/sources/" + registration["id"])
         source.chmod(0o755)
         marker.unlink()
@@ -297,6 +318,7 @@ def run(image, directory, embedded):
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
+        assert next(item for item in media["items"] if item["id"] == webp["id"]) == webp
         api.request("GET", f"/media/{next(iter(identities.values()))[0]}/original", status=503)
         ready, _ = api.request("GET", "/health/ready")
         assert ready["status"] == "degraded" and ready["worker"] == "ok", ready
@@ -310,6 +332,7 @@ def run(image, directory, embedded):
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
         assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
+        assert next(item for item in media["items"] if item["id"] == webp["id"]) == webp
         for name, expected in inputs.items():
             assert hashlib.sha256((source / "Renamed" / name).read_bytes()).digest() == hashlib.sha256(expected).digest()
         denied = subprocess.run(["docker", "exec", container, "/bin/sh", "-ec",
@@ -322,7 +345,7 @@ def run(image, directory, embedded):
                                       "--config", "/app/config/integration.yaml"))
             assert state == {"status": "ok", "database": "ok", "worker": "ok", "sources": "ok"}
         mode = "embedded" if embedded else "standalone"
-        print(f"PASS ({mode}): rootless/read-only PNG/GIF/APNG ingestion, PNG EXIF/UTC and direct APNG plays, "
+        print(f"PASS ({mode}): rootless/read-only PNG/GIF/APNG/WebP ingestion, EXIF/UTC/direct plays, "
               "SQLite plans, private originals/Range, stable IDs/metadata, outage recovery, source write denial and probes")
     except BaseException:
         if container:

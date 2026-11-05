@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -224,6 +225,32 @@ func scanAPNGWithEXIF(t *testing.T) []byte {
 	return result
 }
 
+func scanWebPWithEXIF(t *testing.T) []byte {
+	t.Helper()
+	file, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "webp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures map[string]string
+	if err := json.Unmarshal(file, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	data, err := base64.StdEncoding.DecodeString(fixtures["animated"])
+	if err != nil || len(data) < 30 || string(data[12:16]) != "VP8X" {
+		t.Fatal("invalid synthetic WebP fixture", err)
+	}
+	data[20] |= 8
+	exif := scanTIFF()
+	data = append(data, "EXIF"...)
+	data = binary.LittleEndian.AppendUint32(data, uint32(len(exif)))
+	data = append(data, exif...)
+	if len(exif)%2 != 0 {
+		data = append(data, 0)
+	}
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+	return data
+}
+
 func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "gallerygo")
 	build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, ".")
@@ -270,6 +297,11 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			apngInput := scanAPNGWithEXIF(t)
 			apngName := filepath.Join(root, "Album", "animation.png")
 			if err := os.WriteFile(apngName, apngInput, 0o400); err != nil {
+				t.Fatal(err)
+			}
+			webpInput := scanWebPWithEXIF(t)
+			webpName := filepath.Join(root, "Album", "animation.webp")
+			if err := os.WriteFile(webpName, webpInput, 0o400); err != nil {
 				t.Fatal(err)
 			}
 			assets := filepath.Join(directory, "web")
@@ -407,7 +439,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			initialID := accepted.ID
 			result := api.waitJob(accepted.ID)
-			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 12 || result.Done != 12 || !result.TotalKnown {
+			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 15 || result.Done != 15 || !result.TotalKnown {
 				t.Fatal("compiled native execution failed", result, result.Counts)
 			}
 			var readiness health.Readiness
@@ -437,14 +469,14 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				Items []media.Metadata `json:"items"`
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 4 {
+			if len(medias.Items) != 5 {
 				t.Fatal("native metadata was not indexed", medias)
 			}
 			ids := make(map[string]string)
 			for _, item := range medias.Items {
 				ids[item.FileName] = item.ID
 				width, height := int64(12), int64(7)
-				if item.FileName == "animation.gif" || item.FileName == "animation.png" {
+				if item.FileName == "animation.gif" || item.FileName == "animation.png" || item.FileName == "animation.webp" {
 					width, height = 3, 2
 				}
 				if item.Width == nil || *item.Width != width || item.Height == nil || *item.Height != height {
@@ -454,8 +486,8 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					t.Fatal("unknown PNG metadata was invented", item)
 				}
 			}
-			id, exifID, animationID, apngID := ids["photo.png"], ids["capture.jpg"], ids["animation.gif"], ids["animation.png"]
-			if id == "" || exifID == "" || animationID == "" || apngID == "" {
+			id, exifID, animationID, apngID, webpID := ids["photo.png"], ids["capture.jpg"], ids["animation.gif"], ids["animation.png"], ids["animation.webp"]
+			if id == "" || exifID == "" || animationID == "" || apngID == "" || webpID == "" {
 				t.Fatal("source basenames were not preserved", medias)
 			}
 			var capture media.Metadata
@@ -474,8 +506,17 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if apngMetadata.Animated == nil || !*apngMetadata.Animated || apngMetadata.FrameCount == nil || *apngMetadata.FrameCount != 2 || apngMetadata.LoopCount == nil || *apngMetadata.LoopCount != 2 || apngMetadata.DurationMS == nil || *apngMetadata.DurationMS != 300 || apngMetadata.Orientation == nil || *apngMetadata.Orientation != 6 || apngMetadata.CaptureAt == nil || !apngMetadata.CaptureAt.Equal(wantCapture) || apngMetadata.Revision == nil {
 				t.Fatal("compiled APNG lost EXIF or confused direct total plays with GIF repeats", apngMetadata)
 			}
+			var webpMetadata media.Metadata
+			api.request("GET", "/media/"+webpID, nil, 200, &webpMetadata)
+			if webpMetadata.Animated == nil || !*webpMetadata.Animated || webpMetadata.FrameCount == nil || *webpMetadata.FrameCount != 2 || webpMetadata.LoopCount == nil || *webpMetadata.LoopCount != 2 || webpMetadata.DurationMS == nil || *webpMetadata.DurationMS != 200 || webpMetadata.Orientation == nil || *webpMetadata.Orientation != 6 || webpMetadata.CaptureAt == nil || !webpMetadata.CaptureAt.Equal(wantCapture) || webpMetadata.Revision == nil {
+				t.Fatal("compiled WebP lost EXIF or direct total plays", webpMetadata)
+			}
 			var original []byte
-			headers := api.request("GET", "/media/"+apngID+"/original", nil, 200, &original)
+			headers := api.request("GET", "/media/"+webpID+"/original", nil, 200, &original)
+			if !bytes.Equal(original, webpInput) || headers.Get("Content-Type") != "image/webp" {
+				t.Fatal("WebP inspection rewrote protected original bytes", headers)
+			}
+			headers = api.request("GET", "/media/"+apngID+"/original", nil, 200, &original)
 			if !bytes.Equal(original, apngInput) || headers.Get("Content-Type") != "image/png" {
 				t.Fatal("APNG inspection rewrote protected original bytes", headers)
 			}
@@ -496,7 +537,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(job, job.Counts)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 4 {
+			if len(medias.Items) != 5 {
 				t.Fatal("repeat execution lost indexed media", medias)
 			}
 			for _, item := range medias.Items {
@@ -511,6 +552,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				}
 				if item.ID == apngID && (item.Revision == nil || *item.Revision != *apngMetadata.Revision || item.LoopCount == nil || *item.LoopCount != 2 || item.DurationMS == nil || *item.DurationMS != 300 || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(wantCapture)) {
 					t.Fatal("repeat execution lost source-bound APNG/EXIF", item)
+				}
+				if item.ID == webpID && (item.Revision == nil || *item.Revision != *webpMetadata.Revision || item.LoopCount == nil || *item.LoopCount != 2 || item.DurationMS == nil || *item.DurationMS != 200 || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(wantCapture)) {
+					t.Fatal("repeat execution lost source-bound WebP/EXIF", item)
 				}
 			}
 			api.request("GET", "/admin/sources/"+source.ID, nil, 200, &source)
@@ -527,7 +571,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal("source outage blessed old inventory", source)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 4 {
+			if len(medias.Items) != 5 {
 				t.Fatal("source outage purged old index", medias)
 			}
 			for _, item := range medias.Items {
@@ -549,6 +593,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			if data, err := os.ReadFile(apngName); err != nil || !bytes.Equal(data, apngInput) {
 				t.Fatal("process wrote APNG/EXIF source file", err)
+			}
+			if data, err := os.ReadFile(webpName); err != nil || !bytes.Equal(data, webpInput) {
+				t.Fatal("process wrote WebP/EXIF source file", err)
 			}
 			api.request("GET", "/health/ready", nil, 200, &readiness)
 			if readiness.Status != "degraded" || readiness.Sources != "degraded" || readiness.Worker != "ok" {

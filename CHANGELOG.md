@@ -16,6 +16,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded streaming WebP RIFF/VP8/VP8L/VP8X metadata, ANIM/ANMF frame/canvas/padding/
+  bitstream checks, direct total plays/declared-cycle timing and private-safe EXIF
+  orientation/UTC. Reserved/future fields are ignored per format, zero timing stays
+  unknown, and strict resource/version5 pins prevent stale or mixed metadata.
+  Synthetic real codec vectors, malformed/resource/fuzz/race and actual CLI/HTTPS/
+  rootless ingestion tests cover the container boundary, not entropy/pixel decoding
+  or READY variant generation. No runtime encoder dependency is added.
+
 - Bounded PNG/APNG container inspection with CRCs, critical chunk/palette/IDAT order,
   shared animation sequence numbers, frame/default-image/count/control checks and
   direct total plays. Exact rational delays round once per cycle; zero timing stays
@@ -30,14 +38,14 @@ All notable public changes are recorded here. This project uses Conventional Com
   Strict byte/frame/duration/time limits, inspector version 3, malformed/ambiguous/
   unsupported controls, fuzz/cancellation and immutable rewrite tests cover the parser.
   Actual CLI/HTTPS and rootless container ingestion include real GIF fixtures.
-  This is not full LZW decoding, WebP timing or READY animation/static variants.
+  This is not full LZW decoding or READY animation/static variants.
 
 - Bounded, whitelisted JPEG EXIF orientation and explicitly zoned original capture
   time, normalized to UTC in authorized media detail/list responses. Unknown camera
   timezones stay null; no GPS/raw tags, source paths, host timezone or mtime fallback.
   Inspector-version pins, immutable publication/rewrite tests, malformed/resource
   bounds, fuzz tests and real compiled CLI/HTTPS ingestion cover the new metadata.
-  Subseconds, other EXIF containers, WebP timing and external codecs remain pending.
+  Subseconds, other EXIF containers and external codecs remain pending.
 
 - Actual native indexed-ingestion tests inside rootless/read-only containers for
   embedded and standalone consumers, with generated TLS/auth/API setup, private

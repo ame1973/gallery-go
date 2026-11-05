@@ -119,10 +119,23 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 	}
 	kind, mime, codec := sniffMedia(header[:n])
 	result := Inspection{Kind: kind, MIME: mime, Format: codec, Status: "not_media"}
+	var metadataErr error
 	if kind == "" {
 		if candidateKind(name) != "" {
 			result.Kind = candidateKind(name)
 			result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
+		}
+	} else if codec == "webp" {
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return Inspection{}, err
+		}
+		var metadata webpInfo
+		metadata, metadataErr = inspectWebP(ctx, file, before.Size(), policy)
+		if metadataErr == nil {
+			animated := metadata.frames > 1
+			result.Status, result.Width, result.Height = "ok", &metadata.width, &metadata.height
+			result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &metadata.frames, &metadata.loops, metadata.duration
+			result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
 		}
 	} else if codec != "jpeg" && codec != "png" && codec != "gif" {
 		result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
@@ -144,7 +157,6 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 		} else {
 			width, height := int64(configuration.Width), int64(configuration.Height)
 			result.Width, result.Height, result.Status = &width, &height, "ok"
-			var metadataErr error
 			switch codec {
 			case "jpeg":
 				animated, frames, loops := false, int64(1), int64(1)
@@ -168,20 +180,20 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 					result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &animation.frames, &animation.loops, animation.duration
 				}
 			}
-			if err := ctx.Err(); err != nil {
-				return Inspection{}, err
-			}
-			switch {
-			case errors.Is(metadataErr, errMetadataLimit):
-				result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
-			case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported):
-				result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
-			case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
-				result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
-			case metadataErr != nil:
-				return Inspection{}, metadataErr
-			}
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return Inspection{}, err
+	}
+	switch {
+	case errors.Is(metadataErr, errMetadataLimit):
+		result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
+	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported):
+		result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
+	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+		result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
+	case metadataErr != nil:
+		return Inspection{}, metadataErr
 	}
 	after, err := file.Stat()
 	if err != nil {

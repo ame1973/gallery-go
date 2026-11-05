@@ -1615,7 +1615,7 @@ components:
         animated:
           {
             type: [boolean, 'null'],
-            description: Known image animation state; true for multiple PNG/APNG or GIF image frames. Null when the format has not been inspected for animation.,
+            description: 'Known image animation state; true for multiple PNG/APNG, GIF or WebP image frames. Null when the format has not been inspected for animation.',
           }
         frame_count:
           {
@@ -1627,7 +1627,7 @@ components:
           {
             type: [integer, 'null'],
             minimum: 0,
-            description: Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts add the initial playthrough; APNG num_plays is already a total and is unchanged.,
+            description: Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts add the initial playthrough; APNG num_plays and WebP loop counts are already totals and are unchanged.,
           }
         orientation:
           {

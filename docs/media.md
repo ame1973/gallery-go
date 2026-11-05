@@ -5,8 +5,8 @@ Media metadata and read-only content endpoints use the same SQL visibility rules
 mount, fallback credential, anonymous thumbnail URL, or original-download bypass.
 
 **Current scope:** protected serving and native read-only inventory publication are
-implemented, including bounded JPEG/PNG/GIF dimensions, whitelisted JPEG/PNG EXIF,
-and GIF/APNG frame/cycle/loop metadata.
+implemented, including bounded JPEG/PNG/GIF/WebP dimensions, whitelisted JPEG/PNG/WebP
+EXIF, and GIF/APNG/WebP frame/cycle/loop metadata.
 External codec processing, normal variant publication, gallery/player screens, and
 offline manifests are still under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
@@ -48,22 +48,23 @@ when evidence is absent:
 
 - `width` and `height` are the source's encoded pixel dimensions. EXIF orientation
   does not swap them or rewrite the original.
-- `orientation` is the JPEG/PNG EXIF orientation integer `1..8`; null means unknown,
+- `orientation` is the JPEG/PNG/WebP EXIF orientation integer `1..8`; null means unknown,
   not an inferred value of 1. Display clients must apply the corresponding transform
   when they render an original. Generated, orientation-normalized variants are pending.
-- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG
+- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
   substitutes file mtime, modification/digitization time, or its own timezone.
 
-Only the bounded JPEG APP1/PNG eXIf classic-TIFF orientation and original time/offset
-fields are read. PNG eXIf is capped at 64 KiB and must occur once before IDAT.
+Only the bounded JPEG APP1/PNG eXIf/WebP EXIF classic-TIFF orientation and original
+time/offset fields are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
+must occur once before IDAT. WebP accepts a raw TIFF profile or its Exif prefix.
 Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
 and header/entry resource limits produce explicit invalid-media work without trusted
 metadata. GPS, MakerNote, embedded thumbnails, raw EXIF maps, metadata paths/URLs,
 and unrelated directories are not followed or exposed. This is not full EXIF
 support: subseconds, other image containers, and video capture metadata remain
-pending. Animated WebP timing is not yet implemented.
+pending. No raw EXIF, XMP or color-profile map is exposed.
 
 The inspector version/resource policy and post-inspection full source hash bind
 metadata to immutable staging. Publication retains logical identity on a valid
@@ -76,15 +77,15 @@ orientation/capture fields do not grant original-download permission.
 
 Media detail and album-media pages also include these explicitly nullable fields:
 
-- `animated`: true when a fully inspected PNG/APNG or GIF container has multiple
-  animation frames; false for one-frame PNG/GIF or JPEG. Null means unknown, not static.
+- `animated`: true when a fully inspected PNG/APNG, GIF or WebP container has multiple
+  animation frames; false for one-frame PNG/GIF/WebP or JPEG. Null means unknown, not static.
   APNG's separate default image is not counted unless its frame control includes it.
-- `frame_count`: the proven image-animation frame count, or 1 for static PNG/JPEG.
+- `frame_count`: the proven image-animation frame count, or 1 for static PNG/JPEG/WebP.
   It is not an estimate from file size, a decoded-pixel count, or proof that every
   compressed frame decodes.
 - `loop_count`: **total playthroughs**, not repeats after the first play. Zero means
   infinite, 1 means once, and a finite GIF repeat count of 2 becomes 3. APNG
-  `num_plays` is already a total and is not incremented. Missing GIF loop extensions
+  `num_plays` and WebP loop counts are already totals and are not incremented. Missing GIF loop extensions
   mean one playthrough; uninspected formats remain null.
 - `duration_ms`: one cycle's sum of positive declared frame delays, never multiplied
   by `loop_count`. APNG uses exact rational delays rounded upward once for the complete
@@ -105,10 +106,17 @@ A separate default image and zero-length data sub-chunks are accounted for. Unkn
 critical chunks are unsupported; ancillary payloads remain private. This validates
 container metadata, not zlib/LZW pixels. See [worker policy bounds](workers.md).
 
+WebP inspection checks the exact bounded RIFF extent and zero padding, VP8/VP8L
+key-frame dimensions, VP8X canvas bounds, ANIM total plays and ANMF frame rectangles,
+bitstream/alpha ordering and dimension agreement. Unknown chunks remain private;
+reserved/future VP8X and ANMF fields are ignored as required by WebP. Millisecond
+frame durations sum for one cycle; any zero duration remains unknown. These checks
+do not decode entropy-coded pixels or perform color-profile conversion.
+
 Source hash/revision, inspector version and policy bind this evidence to publication.
 Unchanged rescans retain it; format changes replace stale animation/timing/EXIF with
-fresh evidence. WebP timing, full pixel validation, generated animation/static
-fallbacks and playback variants remain separate implementation/acceptance work. These fields do
+fresh evidence. Full pixel validation, generated animation/static fallbacks and
+playback variants remain separate implementation/acceptance work. These fields do
 not grant preview/original access or establish player/offline readiness.
 
 ## Read bytes
