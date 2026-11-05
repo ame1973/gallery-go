@@ -15,7 +15,7 @@ const key = join(directory, 'tls.key');
 const certificate = join(directory, 'tls.pem');
 const password = process.env.GALLERYGO_TEST_PASSWORD;
 const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
-  ['media', 'outage', 'duplicates'].map((kind) => ({
+  ['media', 'outage', 'duplicates', 'people'].map((kind) => ({
     name: `${kind}-${project}`,
     root: join(directory, 'sources', `${kind}-${project}`),
     marker: '.marker',
@@ -166,6 +166,21 @@ try {
         "INSERT INTO albums(id,library_id,source_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,? ,'.',?,?)",
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
+    if (prefix.startsWith('people-')) {
+      fixtureDB
+        .prepare(
+          'INSERT INTO people(id,source_id,relative_path,source_name,display_name,created_at) VALUES(?,?,?,?,?,?)',
+        )
+        .run(
+          `${prefix}-person`,
+          `${prefix}-source`,
+          'Private/Creator',
+          'Creator',
+          'Visible creator',
+          Date.now(),
+        );
+      fixtureDB.prepare('UPDATE albums SET person_id=? WHERE id=?').run(`${prefix}-person`, album);
+    }
     for (const suffix of ['media', 'other-media']) {
       // Equal bytes at distinct paths remain distinct logical media, not two
       // objects sharing one indexed entry. Each original has its own stat epoch.

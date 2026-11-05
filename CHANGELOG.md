@@ -22,6 +22,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Source-bound Person list/detail/album metadata APIs with fresh-session shared
+  SQL visibility, authorized counts/covers and bounded account/scope/collection
+  keysets. Cross-source links, hidden/inactive/unclassified people and foreign
+  covers fail closed; equal folder labels retain distinct identities. Full indexed
+  paths and download capability are never exposed. Real mapping/no-op/mount-loss
+  CLI checks and typed HTTPS permission-latch regressions accompany the read APIs;
+  management UI, richer filters/search and offline acceptance remain separate.
+
 - Administrative indexed exact-duplicate group/member APIs using current owned
   revision SHA-256 plus byte length, shared SQL visibility and filtered-before-count
   bounded keysets. Opaque representative revision IDs prevent an overwritten media

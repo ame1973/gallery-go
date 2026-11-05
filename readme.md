@@ -208,6 +208,9 @@ Only implemented endpoints are advertised:
   current-owned-revision indexed exact duplicates, filtered counts and bounded
   administrative metadata pages. No perceptual claim, source probing, deletion or
   original-download bypass. See [docs/duplicates.md](docs/duplicates.md).
+- `GET /api/v2/people`, `/people/{person_id}`, `/people/{person_id}/albums`:
+  source-bound indexed creators, visible album counts/covers and bounded same-source
+  album pages. No private mapped paths or download grant. See [docs/people.md](docs/people.md).
 - `GET /api/v2/albums/{album_id}/media`, `/media/{media_id}`, and
   `/media/{media_id}/variants`: visible media and latest ready current-revision presets.
 - `GET/HEAD /api/v2/media/{media_id}/variants/{variant_id}/content` and
@@ -278,6 +281,9 @@ anonymous denial, stable complete metadata/revisions on rescan, outage retention
 and graceful shutdown. They then add a read-only identical PNG copy, execute
 60-unit scans, and verify real indexed duplicate groups/member cursors, replay
 identity, anonymous denial and an external same-path rewrite removing the old group.
+A real versioned source-mapping update then creates an indexed Person; all four
+modes verify list/detail/album counts, stable no-op metadata, anonymous denial and
+mount-marker loss without source probing or recreation.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

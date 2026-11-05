@@ -47,6 +47,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List visible indexed people and creators
+         * @description Requires a current session. A source-bound person is visible only through a same-source album that passes the shared library/additional-album policy. Counts and representative cover IDs use that same visible corpus; equal folder labels never merge identities. People without a concrete mapped path or visible album and inactive or inconsistent source relationships are hidden. No source paths or filesystem reads. This initial read surface supports only limit and cursor; management, search and full browsing UI remain separate work.
+         */
+        get: operations["listPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people/{person_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one visible indexed person or creator
+         * @description Returns the same privacy-safe fields and visibility-dependent aggregates as the person list. A hidden, empty, unclassified or unknown person is 404. Metadata and cover IDs never grant original download or offline capability.
+         */
+        get: operations["getPerson"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people/{person_id}/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List authorized albums of a visible indexed person
+         * @description Validates person visibility in the same fresh-session transaction, then lists only same-source albums passing the shared SQL policy. Default 30/max 100 stable album-ID keysets bind account/scope/person collection. Only limit and cursor are supported. Hidden/unknown people return 404, not a revealing empty list.
+         */
+        get: operations["listPersonAlbums"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/live": {
         parameters: {
             query?: never;
@@ -1145,6 +1209,31 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
+        Person: {
+            /** @description Opaque indexed person identity; equal labels may have different IDs. */
+            id: string;
+            /** @description Display override when nonempty, otherwise the indexed folder label; never the full source-relative path. */
+            name: string;
+            /** @description Opaque source identifier, not its root or marker. */
+            source_id: string;
+            /**
+             * Format: int64
+             * @description Only currently authorized same-source albums.
+             */
+            album_count: number;
+            /** @description Visible same-source album-owned media only. Valid album covers are preferred, with stable-ID fallback; null when no visible media exists. No download capability is implied. */
+            cover_media_id: string | null;
+            /**
+             * Format: int64
+             * @description Indexed person metadata version; dynamic ACL-dependent counts are not an immutable offline snapshot.
+             */
+            version: number;
+        };
+        PersonPage: {
+            items: components["schemas"]["Person"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         ExactDuplicateGroup: {
             /** @description Opaque minimum current owned revision identifier within the filtered equal-signature corpus; not a source hash or mutable media ID. */
             id: string;
@@ -1580,6 +1669,7 @@ export interface components {
         };
     };
     parameters: {
+        PersonID: string;
         /** @description Optional current library selection applied before duplicate grouping/counts. Use at most one nonempty opaque ID. */
         DuplicateLibraryFilter: string;
         /** @description Optional current source selection applied before duplicate grouping/counts. Intersects library_id when both are present. */
@@ -1692,6 +1782,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listPeople: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded person metadata in stable ID order, with only authorized album counts and cover IDs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current visible indexed person metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Person"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listPersonAlbums: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current authorized same-source albums in stable ID order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumPage"];
                 };
             };
             404: components["responses"]["Problem"];

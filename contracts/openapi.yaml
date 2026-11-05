@@ -72,6 +72,58 @@ paths:
               schema: { $ref: '#/components/schemas/MediaPage' }
         '404': { $ref: '#/components/responses/Problem' }
         default: { $ref: '#/components/responses/Problem' }
+  /people:
+    get:
+      operationId: listPeople
+      summary: List visible indexed people and creators
+      description: Requires a current session. A source-bound person is visible only through a same-source album that passes the shared library/additional-album policy. Counts and representative cover IDs use that same visible corpus; equal folder labels never merge identities. People without a concrete mapped path or visible album and inactive or inconsistent source relationships are hidden. No source paths or filesystem reads. This initial read surface supports only limit and cursor; management, search and full browsing UI remain separate work.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded person metadata in stable ID order, with only authorized album counts and cover IDs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /people/{person_id}:
+    parameters: [{ $ref: '#/components/parameters/PersonID' }]
+    get:
+      operationId: getPerson
+      summary: Read one visible indexed person or creator
+      description: Returns the same privacy-safe fields and visibility-dependent aggregates as the person list. A hidden, empty, unclassified or unknown person is 404. Metadata and cover IDs never grant original download or offline capability.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current visible indexed person metadata.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Person' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /people/{person_id}/albums:
+    parameters: [{ $ref: '#/components/parameters/PersonID' }]
+    get:
+      operationId: listPersonAlbums
+      summary: List authorized albums of a visible indexed person
+      description: Validates person visibility in the same fresh-session transaction, then lists only same-source albums passing the shared SQL policy. Default 30/max 100 stable album-ID keysets bind account/scope/person collection. Only limit and cursor are supported. Hidden/unknown people return 404, not a revealing empty list.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Current authorized same-source albums in stable ID order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumPage' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
   /health/live:
     get:
       operationId: live
@@ -1105,6 +1157,11 @@ components:
       description: Strong account tag in the form "user:<id>:<version>". Send it unchanged in If-Match.
       schema: { type: string }
   parameters:
+    PersonID:
+      name: person_id
+      in: path
+      required: true
+      schema: { type: string }
     DuplicateLibraryFilter:
       name: library_id
       in: query
@@ -1707,6 +1764,41 @@ components:
       required: [items, next_cursor, has_more]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/JobIssue' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    Person:
+      type: object
+      additionalProperties: false
+      required: [id, name, source_id, album_count, cover_media_id, version]
+      properties:
+        id:
+          type: string
+          description: Opaque indexed person identity; equal labels may have different IDs.
+        name:
+          type: string
+          description: Display override when nonempty, otherwise the indexed folder label; never the full source-relative path.
+        source_id:
+          type: string
+          description: Opaque source identifier, not its root or marker.
+        album_count:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Only currently authorized same-source albums.
+        cover_media_id:
+          type: [string, 'null']
+          description: Visible same-source album-owned media only. Valid album covers are preferred, with stable-ID fallback; null when no visible media exists. No download capability is implied.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Indexed person metadata version; dynamic ACL-dependent counts are not an immutable offline snapshot.
+    PersonPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Person' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
     ExactDuplicateGroup:
