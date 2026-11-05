@@ -64,8 +64,8 @@ func TestNativeInspectionUsesMagicNotExtensionAndBoundsDimensions(t *testing.T) 
 			if result.Status != "ok" || result.Kind != "image" || result.Format != format || result.Width == nil || *result.Width != 12 || result.Height == nil || *result.Height != 7 || result.ErrorCode != nil {
 				t.Fatal(result)
 			}
-			if format == "gif" && (result.Animated == nil || *result.Animated) {
-				t.Fatal("complete GIF container did not prove one static frame")
+			if (format == "gif" || format == "png") && (result.Animated == nil || *result.Animated) {
+				t.Fatal("complete image container did not prove one static frame")
 			}
 			policy := DefaultInspectPolicy()
 			policy.MaxPixels = 83

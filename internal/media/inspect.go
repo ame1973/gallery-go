@@ -61,6 +61,11 @@ type Inspection struct {
 	ErrorCode   *string    `json:"error_code"`
 }
 
+type animationInfo struct {
+	frames, loops int64
+	duration      *int64
+}
+
 func inspectionFailure(result Inspection, status, code string) Inspection {
 	result.Status = status
 	result.ErrorCode = &code
@@ -145,12 +150,19 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 				animated, frames, loops := false, int64(1), int64(1)
 				result.Animated, result.FrameCount, result.LoopCount = &animated, &frames, &loops
 				result.Orientation, result.CaptureAt, metadataErr = jpegEXIF(ctx, file, policy.HeaderBytes)
-			case "gif":
+			case "png", "gif":
 				if _, err := file.Seek(0, io.SeekStart); err != nil {
 					return Inspection{}, err
 				}
-				var animation gifInfo
-				animation, metadataErr = inspectGIF(ctx, file, before.Size(), policy)
+				var animation animationInfo
+				if codec == "png" {
+					var metadata pngInfo
+					metadata, metadataErr = inspectPNG(ctx, file, before.Size(), policy)
+					animation = metadata.animationInfo
+					result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
+				} else {
+					animation, metadataErr = inspectGIF(ctx, file, before.Size(), policy)
+				}
 				if metadataErr == nil {
 					animated := animation.frames > 1
 					result.Animated, result.FrameCount, result.LoopCount, result.DurationMS = &animated, &animation.frames, &animation.loops, animation.duration
@@ -162,9 +174,9 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 			switch {
 			case errors.Is(metadataErr, errMetadataLimit):
 				result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
-			case errors.Is(metadataErr, errGIFUnsupported):
+			case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported):
 				result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
-			case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+			case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
 				result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
 			case metadataErr != nil:
 				return Inspection{}, metadataErr
@@ -283,7 +295,7 @@ func ebmlInteger(data []byte, identifier bool) (uint64, int, bool) {
 
 func candidateKind(name string) string {
 	switch strings.ToLower(path.Ext(name)) {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".heic", ".heif", ".tif", ".tiff", ".dng", ".cr2", ".nef", ".arw":
+	case ".jpg", ".jpeg", ".png", ".apng", ".gif", ".webp", ".avif", ".heic", ".heif", ".tif", ".tiff", ".dng", ".cr2", ".nef", ".arw":
 		return "image"
 	case ".mp4", ".mov", ".mkv", ".webm":
 		return "video"

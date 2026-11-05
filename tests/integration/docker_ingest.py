@@ -28,13 +28,38 @@ def docker(*args, input=None):
     return (result.stdout + result.stderr if args[0] == "logs" else result.stdout).strip()
 
 
+def png_chunk(kind, data):
+    return struct.pack("!I", len(data)) + kind + data + struct.pack("!I", zlib.crc32(kind + data))
+
+
 def png(width, height):
-    def chunk(kind, data):
-        return struct.pack("!I", len(data)) + kind + data + struct.pack("!I", zlib.crc32(kind + data))
     pixels = b"".join(b"\x00" + b"\x20\x60\x90\xff" * width for _ in range(height))
     return (b"\x89PNG\r\n\x1a\n" +
-            chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 6, 0, 0, 0)) +
-            chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b""))
+            png_chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 6, 0, 0, 0)) +
+            png_chunk(b"IDAT", zlib.compress(pixels)) + png_chunk(b"IEND", b""))
+
+
+def png_exif():
+    data = bytearray(95)
+    data[:2] = b"II"
+    struct.pack_into("<HIH", data, 2, 42, 8, 2)
+    struct.pack_into("<HHII", data, 10, 0x0112, 3, 1, 6)
+    struct.pack_into("<HHII", data, 22, 0x8769, 4, 1, 38)
+    struct.pack_into("<H", data, 38, 2)
+    struct.pack_into("<HHII", data, 40, 0x9003, 2, 20, 68)
+    struct.pack_into("<HHII", data, 52, 0x9011, 2, 7, 88)
+    data[68:88], data[88:95] = b"2026:11:05 12:34:56\x00", b"+08:00\x00"
+    return bytes(data)
+
+
+def animated_png():
+    data = (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack("!IIBBBBB", 1, 1, 8, 6, 0, 0, 0)) +
+            png_chunk(b"eXIf", png_exif()) + png_chunk(b"acTL", struct.pack("!II", 2, 2)))
+    for sequence, denominator, pixel in ((0, 10, b"\x20\x60\x90\xff"), (1, 5, b"\xff\xff\xff\xff")):
+        data += png_chunk(b"fcTL", struct.pack("!IIIIIHHBB", sequence, 1, 1, 0, 0, 1, denominator, 0, 0))
+        pixels = zlib.compress(b"\x00" + pixel)
+        data += png_chunk(b"IDAT", pixels) if sequence == 0 else png_chunk(b"fdAT", struct.pack("!I", 2) + pixels)
+    return data + png_chunk(b"IEND", b"")
 
 
 def animated_gif():
@@ -127,7 +152,8 @@ def run(image, directory, embedded):
     album.mkdir(parents=True)
     marker = source / ".mounted"
     marker.write_bytes(b"isolated container source marker")
-    inputs = {"first.png": png(12, 7), "second.png": png(13, 7), "animation.gif": animated_gif()}
+    inputs = {"first.png": png(12, 7), "second.png": png(13, 7),
+              "animation.gif": animated_gif(), "animation.apng": animated_png()}
     for name, data in inputs.items():
         (album / name).write_bytes(data)
         (album / name).chmod(0o444)
@@ -227,9 +253,14 @@ def run(image, directory, embedded):
                 animation["duration_ms"], animation["loop_count"]) == (1, 1, True, 2, 300, 3), animation
         detail, _ = api.request("GET", "/media/" + animation["id"])
         assert detail == animation, (detail, animation)
+        apng = next(item for item in media["items"] if item["file_name"] == "animation.apng")
+        assert (apng["animated"], apng["frame_count"], apng["loop_count"], apng["duration_ms"], apng["orientation"],
+                apng["capture_at"]) == (True, 2, 2, 300, 6, "2026-11-05T04:34:56Z"), apng
+        detail, _ = api.request("GET", "/media/" + apng["id"])
+        assert detail == apng, (detail, apng)
         for item in media["items"]:
             if item["file_name"].endswith(".png"):
-                assert all(item[field] is None for field in ("animated", "frame_count", "loop_count", "duration_ms")), item
+                assert (item["animated"], item["frame_count"], item["loop_count"], item["duration_ms"]) == (False, 1, 1, None), item
         anonymous = API(origin, certificate)
         anonymous.request("GET", f"/media/{next(iter(identities.values()))[0]}/original", status=401)
         for name, (media_id, _revision) in identities.items():
@@ -243,6 +274,7 @@ def run(image, directory, embedded):
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
+        assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
         source.chmod(0o755)
         album.rename(source / "Renamed")
         source.chmod(0o555)
@@ -252,6 +284,7 @@ def run(image, directory, embedded):
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
+        assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
         healthy, _ = api.request("GET", "/admin/sources/" + registration["id"])
         source.chmod(0o755)
         marker.unlink()
@@ -263,6 +296,7 @@ def run(image, directory, embedded):
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
+        assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
         api.request("GET", f"/media/{next(iter(identities.values()))[0]}/original", status=503)
         ready, _ = api.request("GET", "/health/ready")
         assert ready["status"] == "degraded" and ready["worker"] == "ok", ready
@@ -275,6 +309,7 @@ def run(image, directory, embedded):
         media, _ = api.request("GET", f"/albums/{album_id}/media")
         assert {item["file_name"]: (item["id"], item["revision"]) for item in media["items"]} == identities
         assert next(item for item in media["items"] if item["id"] == animation["id"]) == animation
+        assert next(item for item in media["items"] if item["id"] == apng["id"]) == apng
         for name, expected in inputs.items():
             assert hashlib.sha256((source / "Renamed" / name).read_bytes()).digest() == hashlib.sha256(expected).digest()
         denied = subprocess.run(["docker", "exec", container, "/bin/sh", "-ec",
@@ -287,8 +322,8 @@ def run(image, directory, embedded):
                                       "--config", "/app/config/integration.yaml"))
             assert state == {"status": "ok", "database": "ok", "worker": "ok", "sources": "ok"}
         mode = "embedded" if embedded else "standalone"
-        print(f"PASS ({mode}): rootless/read-only PNG/GIF ingestion, GIF frames/cycle/loops, SQLite publication plans, "
-              "private originals/Range, stable rename/revision IDs, outage retention/recovery, source write denial and probes")
+        print(f"PASS ({mode}): rootless/read-only PNG/GIF/APNG ingestion, PNG EXIF/UTC and direct APNG plays, "
+              "SQLite plans, private originals/Range, stable IDs/metadata, outage recovery, source write denial and probes")
     except BaseException:
         if container:
             print(docker("logs", container), file=sys.stderr)

@@ -16,20 +16,28 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded PNG/APNG container inspection with CRCs, critical chunk/palette/IDAT order,
+  shared animation sequence numbers, frame/default-image/count/control checks and
+  direct total plays. Exact rational delays round once per cycle; zero timing stays
+  unknown. Bounded PNG eXIf reuses the private-safe TIFF orientation/UTC whitelist.
+  Inspector v4, historical-pin rejection, malformed/resource/fuzz/race tests and
+  actual CLI/HTTPS/rootless APNG ingestion preserve readonly bytes and identity.
+  This is not zlib/pixel decoding, generated variants or complete codec acceptance.
+
 - Bounded streaming GIF frame counts, declared single-cycle duration and normalized
   total playthroughs, exposed as authorized nullable animation metadata. Missing/zero
   delays or user-input timing stay unknown; comments/application payloads stay private.
   Strict byte/frame/duration/time limits, inspector version 3, malformed/ambiguous/
   unsupported controls, fuzz/cancellation and immutable rewrite tests cover the parser.
   Actual CLI/HTTPS and rootless container ingestion include real GIF fixtures.
-  This is not full LZW decoding, APNG/WebP timing or READY animation/static variants.
+  This is not full LZW decoding, WebP timing or READY animation/static variants.
 
 - Bounded, whitelisted JPEG EXIF orientation and explicitly zoned original capture
   time, normalized to UTC in authorized media detail/list responses. Unknown camera
   timezones stay null; no GPS/raw tags, source paths, host timezone or mtime fallback.
   Inspector-version pins, immutable publication/rewrite tests, malformed/resource
   bounds, fuzz tests and real compiled CLI/HTTPS ingestion cover the new metadata.
-  PNG EXIF, subseconds, APNG/WebP timing and external codecs remain pending.
+  Subseconds, other EXIF containers, WebP timing and external codecs remain pending.
 
 - Actual native indexed-ingestion tests inside rootless/read-only containers for
   embedded and standalone consumers, with generated TLS/auth/API setup, private

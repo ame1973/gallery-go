@@ -59,7 +59,7 @@ func TestPublicationPreservesGIFTimingAndClearsItOnFormatRewrite(t *testing.T) {
 	}
 	f.publish(t, "full", ".")
 	changed, err := service.Get(t.Context(), f.owner, id)
-	if err != nil || changed.Revision == nil || *changed.Revision == revision || changed.Animated != nil || changed.FrameCount != nil || changed.LoopCount != nil || changed.DurationMS != nil || changed.Width == nil || *changed.Width != 12 {
+	if err != nil || changed.Revision == nil || *changed.Revision == revision || changed.Animated == nil || *changed.Animated || changed.FrameCount == nil || *changed.FrameCount != 1 || changed.LoopCount == nil || *changed.LoopCount != 1 || changed.DurationMS != nil || changed.Width == nil || *changed.Width != 12 {
 		t.Fatal("format rewrite retained stale animation or ignored magic", changed, err)
 	}
 	var owner string

@@ -50,8 +50,8 @@ intents rather than guessing roots or scopes. Queued work cannot progress withou
 a compatible embedded or standalone consumer.
 
 The native pipeline performs bounded manifests and streamed hashes, JPEG/PNG/GIF
-header metadata, whitelisted JPEG EXIF, bounded GIF frame/cycle/loop metadata, and
-fenced indexed publication. Indexed resources and authorized original downloads
+header metadata, whitelisted JPEG/PNG EXIF, bounded GIF/APNG frame/cycle/loop metadata,
+and fenced indexed publication. Indexed resources and authorized original downloads
 become available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
 timezone from the host or mtime. JPEG header parsing uses bounded input passes and
@@ -61,12 +61,15 @@ to immutable staging. A changed inspector cannot resume a differently pinned gen
 Header/EXIF metadata is not full pixel/frame decoding, complete EXIF/animation
 support, a generated preview, or a READY variant. Unsupported/corrupt media remains
 explicit failed work. External codecs and variant processing are still under development.
-GIF inspection streams the complete file without allocating frame pixels. It is
-bounded by `inspection.header_bytes`, `max_frames`, `max_duration` and `timeout`.
+PNG/GIF inspection streams each complete file without allocating frame pixels or
+decoding zlib/LZW. It is bounded by `inspection.header_bytes`, `max_frames`,
+`max_duration` and `timeout`. PNG eXIf separately has a fixed 64 KiB bound; APNG uses
+shared sequence/frame/control checks and exact rational cycle timing, rounded only
+once to milliseconds. APNG plays are already totals, unlike GIF repeat counts.
 `max_duration` caps the sum of declared frame delays for one cycle even when some
 frame timing is unknown; it is not multiplied by finite/infinite playthroughs.
 Missing/zero delays and user-input timing remain unknown, never browser-clamped.
-GIF files exceeding the metadata byte budget fail with `MEDIA_LIMIT` even when the
+PNG/GIF files exceeding the metadata byte budget fail with `MEDIA_LIMIT` even when the
 separate scanner input-file budget is larger. Plain Text/unknown rendering extensions
 are explicitly unsupported; metadata success is not LZW decoding or player readiness.
 
@@ -126,9 +129,9 @@ scheduler:
 | `scanner.timeout`          | 1s..24h for one source's complete pipeline, including ownership waiting.                         |
 | `inspection.max_pixels`    | 1..1,000,000,000 image pixels. No native pixel allocation.                                       |
 | `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                                               |
-| `inspection.max_frames`    | 1..100,000 GIF image frames; default 10,000.                                                     |
-| `inspection.max_duration`  | 1ms..24h declared GIF cycle duration; default 24h, not infinite-loop playback time.              |
-| `inspection.header_bytes`  | 512 bytes..32 MiB per metadata input pass; GIF requires the complete file.                       |
+| `inspection.max_frames`    | 1..100,000 image-animation frames; default 10,000.                                               |
+| `inspection.max_duration`  | 1ms..24h declared animation cycle duration; default 24h, not total loop time.                    |
+| `inspection.header_bytes`  | 512 bytes..32 MiB per metadata input pass; PNG/GIF require complete files.                       |
 | `inspection.timeout`       | 1s..1m per file's native header/EXIF/GIF inspection across all passes.                           |
 | `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.                                  |
 | `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.                           |
@@ -172,8 +175,8 @@ and already-published logical IDs/revisions remain unchanged without duplicate e
 This is local process-crash evidence, not a NAS/kernel/power-loss or restore drill.
 
 Actual rootless/read-only container ingestion is also covered for embedded and
-standalone CLI consumers through TLS/admin APIs, generated read-only PNG/GIF mounts and
-private tmpfs storage. The test exercises GIF frames/cycle/normalized loops, SQLite
+standalone CLI consumers through TLS/admin APIs, generated read-only PNG/GIF/APNG mounts and
+private tmpfs storage. The test exercises PNG EXIF/UTC, GIF/APNG frames/cycle/plays, SQLite
 temporary publication/rename plans,
 protected originals/Range, stable logical/revision/album IDs, source outage retention
 and restoration, dependency probes and denied source writes. See [deployment tests](../deploy/readme.md).

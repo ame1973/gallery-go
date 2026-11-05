@@ -10,8 +10,8 @@ password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
-publish read-only inventories, native JPEG/PNG/GIF dimensions, whitelisted JPEG
-EXIF orientation/explicitly zoned capture time, and bounded GIF frame/cycle/loop
+publish read-only inventories, native JPEG/PNG/GIF dimensions, whitelisted JPEG/PNG
+EXIF orientation/explicitly zoned capture time, and bounded GIF/APNG frame/cycle/loop
 metadata. GPS/raw tags are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and
@@ -248,8 +248,8 @@ Screenshots/traces live in ignored test-output directories. Tests never use priv
 source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
-both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, and animated
-GIFs, including encoded dimensions, UTC capture/orientation, frame/cycle/normalized
+both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs and APNGs,
+including PNG EXIF, encoded dimensions, UTC capture/orientation, frame/cycle/total
 loop counts, null unknown metadata, unchanged protected originals, repeat identity,
 safe source outage and graceful process shutdown.
 A separate real SIGKILL regression interrupts native staging and partially published
@@ -278,8 +278,8 @@ outages, in-flight changes, and idle-write cancellation. These are serving tests
 not full codec/player or physical-NAS evidence. Container smoke tests use only
 ephemeral tmpfs storage and remove only their own container. The separate ingestion
 harness runs both embedded and standalone CLI consumers in rootless/read-only
-containers over real TLS/auth APIs, read-only generated PNG/GIF mounts, and temporary
-SQLite/cache storage. It verifies GIF frame/cycle/loop evidence, actual frozen SQLite
+containers over real TLS/auth APIs, read-only generated PNG/GIF/APNG mounts, and temporary
+SQLite/cache storage. It verifies PNG EXIF and GIF/APNG frame/cycle/loop evidence, frozen SQLite
 publication plans, native
 metadata, original/Range authorization, stable rename/revision IDs, source outage
 retention/recovery, write denial and dependency probes. Host-side fixture changes

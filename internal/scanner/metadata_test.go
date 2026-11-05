@@ -60,7 +60,7 @@ func TestMetadataStagesEveryPathAndExplicitFailuresWithoutPublishing(t *testing.
 		if err != nil || result.Status != status {
 			t.Fatal(path, result, err)
 		}
-		if path == "a.mp4" && (result.Kind != "image" || result.MIME != "image/png" || result.Width == nil || *result.Width != 12 || result.Height == nil || *result.Height != 7 || result.Animated != nil) {
+		if path == "a.mp4" && (result.Kind != "image" || result.MIME != "image/png" || result.Width == nil || *result.Width != 12 || result.Height == nil || *result.Height != 7 || result.Animated == nil || *result.Animated || result.FrameCount == nil || *result.FrameCount != 1) {
 			t.Fatal("extension overrode real PNG metadata", result)
 		}
 	}

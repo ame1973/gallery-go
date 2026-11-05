@@ -5,8 +5,8 @@ Media metadata and read-only content endpoints use the same SQL visibility rules
 mount, fallback credential, anonymous thumbnail URL, or original-download bypass.
 
 **Current scope:** protected serving and native read-only inventory publication are
-implemented, including bounded JPEG/PNG/GIF dimensions, whitelisted JPEG EXIF, and
-GIF frame/cycle/loop metadata.
+implemented, including bounded JPEG/PNG/GIF dimensions, whitelisted JPEG/PNG EXIF,
+and GIF/APNG frame/cycle/loop metadata.
 External codec processing, normal variant publication, gallery/player screens, and
 offline manifests are still under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
@@ -48,21 +48,22 @@ when evidence is absent:
 
 - `width` and `height` are the source's encoded pixel dimensions. EXIF orientation
   does not swap them or rewrite the original.
-- `orientation` is the JPEG EXIF orientation integer `1..8`; null means unknown,
+- `orientation` is the JPEG/PNG EXIF orientation integer `1..8`; null means unknown,
   not an inferred value of 1. Display clients must apply the corresponding transform
   when they render an original. Generated, orientation-normalized variants are pending.
-- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG
+- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
   substitutes file mtime, modification/digitization time, or its own timezone.
 
-Only the bounded JPEG APP1/classic-TIFF orientation and original time/offset fields
-are read. Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
+Only the bounded JPEG APP1/PNG eXIf classic-TIFF orientation and original time/offset
+fields are read. PNG eXIf is capped at 64 KiB and must occur once before IDAT.
+Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
 and header/entry resource limits produce explicit invalid-media work without trusted
 metadata. GPS, MakerNote, embedded thumbnails, raw EXIF maps, metadata paths/URLs,
 and unrelated directories are not followed or exposed. This is not full EXIF
-support: PNG EXIF, subseconds, other image containers, and video capture metadata
-remain pending. PNG/APNG and animated WebP timing are not yet implemented.
+support: subseconds, other image containers, and video capture metadata remain
+pending. Animated WebP timing is not yet implemented.
 
 The inspector version/resource policy and post-inspection full source hash bind
 metadata to immutable staging. Publication retains logical identity on a valid
@@ -75,18 +76,21 @@ orientation/capture fields do not grant original-download permission.
 
 Media detail and album-media pages also include these explicitly nullable fields:
 
-- `animated`: true when a fully inspected GIF container has multiple image frames;
-  false for a one-frame GIF or JPEG. Null means unknown, not static, including
-  current PNG/APNG inspection.
-- `frame_count`: the GIF image-frame count, or 1 for JPEG. It is not an estimate
-  from file size, a decoded-pixel count, or proof that every compressed frame decodes.
+- `animated`: true when a fully inspected PNG/APNG or GIF container has multiple
+  animation frames; false for one-frame PNG/GIF or JPEG. Null means unknown, not static.
+  APNG's separate default image is not counted unless its frame control includes it.
+- `frame_count`: the proven image-animation frame count, or 1 for static PNG/JPEG.
+  It is not an estimate from file size, a decoded-pixel count, or proof that every
+  compressed frame decodes.
 - `loop_count`: **total playthroughs**, not repeats after the first play. Zero means
-  infinite, 1 means once, and a finite GIF repeat count of 2 becomes 3. Missing GIF
-  loop extensions mean one playthrough; uninspected formats remain null.
-- `duration_ms`: for GIF, one cycle's sum of positive declared frame delays. It is
-  not multiplied by `loop_count`. If any image frame lacks a positive delay or
-  requests user input, the duration is null. Zero/missing delays are never assigned
-  browser-specific minimum delays or a guessed frames-per-second value.
+  infinite, 1 means once, and a finite GIF repeat count of 2 becomes 3. APNG
+  `num_plays` is already a total and is not incremented. Missing GIF loop extensions
+  mean one playthrough; uninspected formats remain null.
+- `duration_ms`: one cycle's sum of positive declared frame delays, never multiplied
+  by `loop_count`. APNG uses exact rational delays rounded upward once for the complete
+  cycle; a zero denominator means 100. Zero numerators/delays, missing GIF delays, or
+  GIF user-input timing leave duration null. No browser minimum delay or guessed
+  frames-per-second value is substituted.
 
 The GIF inspector streams the complete bounded container without LZW pixel decoding
 or frame-pixel allocation. It checks frame/canvas bounds, palettes, block structure,
@@ -94,12 +98,17 @@ control/loop ambiguity and the final trailer. Comments and unrelated application
 payloads are skipped privately. Plain Text and unknown rendering extensions return
 `CODEC_UNAVAILABLE`, not invented frame/timing evidence. Malformed structures clear
 trusted metadata and count as `INVALID_MEDIA`; input/frame/declared-duration limits
-produce `MEDIA_LIMIT`. See [worker policy bounds](workers.md).
+produce `MEDIA_LIMIT`. PNG/APNG inspection likewise streams the complete bounded
+file, validates every chunk CRC, critical structure/palette/IDAT ordering and shared
+`fcTL`/`fdAT` sequence numbers, frame canvas/control/count consistency and IEND.
+A separate default image and zero-length data sub-chunks are accounted for. Unknown
+critical chunks are unsupported; ancillary payloads remain private. This validates
+container metadata, not zlib/LZW pixels. See [worker policy bounds](workers.md).
 
 Source hash/revision, inspector version and policy bind this evidence to publication.
-Unchanged rescans retain it; format changes clear stale animation/timing fields.
-APNG/WebP timing, full pixel validation, generated animation/static fallbacks and
-playback variants remain separate implementation/acceptance work. These fields do
+Unchanged rescans retain it; format changes replace stale animation/timing/EXIF with
+fresh evidence. WebP timing, full pixel validation, generated animation/static
+fallbacks and playback variants remain separate implementation/acceptance work. These fields do
 not grant preview/original access or establish player/offline readiness.
 
 ## Read bytes

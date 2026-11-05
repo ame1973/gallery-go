@@ -1610,12 +1610,12 @@ components:
           {
             type: [integer, 'null'],
             minimum: 0,
-            description: Source duration. For GIF this is one cycle of declared positive frame delays; null if any frame has missing/zero timing or requires user input. Never multiplied by loop_count or guessed from browser delay clamping.,
+            description: Source duration. Image animation uses one cycle of declared positive delays; APNG exact rational delays are rounded upward once to milliseconds. Null for zero/missing timing or GIF user input. Never multiplied by loop_count or guessed from browser delay clamping.,
           }
         animated:
           {
             type: [boolean, 'null'],
-            description: Known image animation state; true for multiple GIF image frames. Null when the format has not been inspected for animation.,
+            description: Known image animation state; true for multiple PNG/APNG or GIF image frames. Null when the format has not been inspected for animation.,
           }
         frame_count:
           {
@@ -1627,7 +1627,7 @@ components:
           {
             type: [integer, 'null'],
             minimum: 0,
-            description: Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts are normalized by adding the initial playthrough.,
+            description: Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts add the initial playthrough; APNG num_plays is already a total and is unchanged.,
           }
         orientation:
           {

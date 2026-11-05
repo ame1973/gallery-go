@@ -1065,13 +1065,13 @@ export interface components {
             file_name: string;
             width: number | null;
             height: number | null;
-            /** @description Source duration. For GIF this is one cycle of declared positive frame delays; null if any frame has missing/zero timing or requires user input. Never multiplied by loop_count or guessed from browser delay clamping. */
+            /** @description Source duration. Image animation uses one cycle of declared positive delays; APNG exact rational delays are rounded upward once to milliseconds. Null for zero/missing timing or GIF user input. Never multiplied by loop_count or guessed from browser delay clamping. */
             duration_ms: number | null;
-            /** @description Known image animation state; true for multiple GIF image frames. Null when the format has not been inspected for animation. */
+            /** @description Known image animation state; true for multiple PNG/APNG or GIF image frames. Null when the format has not been inspected for animation. */
             animated: boolean | null;
             /** @description Number of image frames proven by bounded container inspection; null when unknown. Does not imply full pixel decoding. */
             frame_count: number | null;
-            /** @description Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts are normalized by adding the initial playthrough. */
+            /** @description Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts add the initial playthrough; APNG num_plays is already a total and is unchanged. */
             loop_count: number | null;
             /** @description Validated source EXIF orientation; dimensions remain encoded source dimensions. */
             orientation: number | null;

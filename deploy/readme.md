@@ -42,9 +42,9 @@ python3 -I tests/integration/docker_ingest.py gallerygo:local
 The second command requires host OpenSSL and validates actual native indexed
 publication with both embedded and standalone consumers inside separate throwaway
 runs. It uses a generated TLS reverse proxy, random bootstrap/stdin secret, real
-administrative APIs, read-only bind-mounted PNG/GIF fixtures, and private tmpfs
-metadata/cache. It verifies GIF frame/cycle/normalized-loop metadata and SQLite's
-temporary rename/publication plans under the hardened runtime,
+administrative APIs, read-only bind-mounted PNG/GIF/APNG fixtures, and private tmpfs
+metadata/cache. It verifies PNG EXIF/UTC and GIF/APNG frame/cycle/total-play metadata,
+plus SQLite's temporary rename/publication plans under the hardened runtime,
 protected original/Range bytes, stable logical/revision/album IDs, failed-source
 retention/recovery and denied source writes. Only its own fixture host directory is
 renamed/modified to simulate an external source change; no real NAS or Compose volume
