@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Versioned administrative album display/cover preference GET/PATCH with strong
+  resource preconditions, current same-album/source cover validation and actor-bound
+  historical command receipts. Empty strings explicitly clear overrides; null and
+  uncontracted fields fail closed. Business metadata/version/complete album change/
+  outbox/audit/receipt co-commit, including late-failure rollback and concurrent
+  deduplication. Desired-cover latches survive scans/provable folder moves without
+  source writes or implicit content authority. Tags/associations/reprocessing and
+  management UI remain separate work.
+
 - Source-bound Person list/detail/album metadata APIs with fresh-session shared
   SQL visibility, authorized counts/covers and bounded account/scope/collection
   keysets. Cross-source links, hidden/inactive/unclassified people and foreign

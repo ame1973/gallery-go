@@ -16,7 +16,7 @@ var (
 	requestKeyPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 )
 
-// Command is a private, transaction-bound POST receipt, not an authorization
+// Command is a private, transaction-bound mutation receipt, not an authorization
 // capability. Metadata must not contain passwords; PasswordHash is either empty
 // or an already computed bcrypt hash, never a fast fingerprint or raw password.
 // Callers must reauthorize the actor before Replay and commit Save with the write.

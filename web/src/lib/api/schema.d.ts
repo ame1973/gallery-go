@@ -111,6 +111,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/albums/{album_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read administrative album display and cover preferences
+         * @description Current administrator and shared active library/source visibility required. Returns the indexed source label and display/current-cover/desired-cover overrides, never a relative/root path. A desired historical cover ID is not proof of current ownership or a download capability; the current cover projection is visibility checked.
+         */
+        get: operations["getAdminAlbumMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set or clear versioned album display and cover overrides
+         * @description Online administrator-only metadata mutation with If-Match and actor-bound Idempotency-Key. Omitted fields are unchanged; an explicit empty string clears that override and null is rejected. Name values use the existing bounded trimmed display-label policy, not search normalization. A nonempty cover must currently be eligible same-album/source media; no source files are read or written. Clearing a cover preference restores sticky automatic selection, which may retain the same current cover. Business row/version/change/outbox/audit/receipt co-commit. Matching key/body/original precondition retries return the historical result/ETag even after later edits; GET refreshes current metadata. No-op saves only its receipt. Source labels, library/source/person associations, permissions, tags and reprocessing are not editable here.
+         */
+        patch: operations["updateAlbumMetadata"];
+        trace?: never;
+    };
     "/health/live": {
         parameters: {
             query?: never;
@@ -1209,6 +1235,25 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
+        AlbumMetadata: {
+            id: string;
+            /** @description Indexed display label only; immutable through this endpoint and never a full relative/root path. */
+            source_name: string;
+            /** @description Current display override; null uses the indexed source label. */
+            display_name: string | null;
+            /** @description Current visibility-checked album-owned representative media ID, not proof of a READY variant or download policy. */
+            cover_media_id: string | null;
+            /** @description Persisted desired cover preference. It may refer to a temporarily moved/unavailable historical choice and grants no content authority. */
+            cover_override_id: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        AlbumMetadataPatch: {
+            /** @description Empty string clears the override; omitted unchanged. Other values are trimmed and must then contain 1 to 100 Unicode characters and at most 400 UTF-8 bytes without control characters. Null is rejected. */
+            display_name?: string;
+            /** @description Currently eligible same-album/source media ID. Empty string clears the desired override and uses sticky automatic selection; omitted unchanged. Null is rejected. */
+            cover_media_id?: string;
+        };
         Person: {
             /** @description Opaque indexed person identity; equal labels may have different IDs. */
             id: string;
@@ -1506,6 +1551,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted album display/cover metadata. Replayed mutation results are historical; GET refreshes current state. */
+        AlbumMetadata: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumMetadata"];
+            };
+        };
         /** @description Source metadata and strong source version tag. Replayed commands return historical metadata; GET refreshes current state. */
         Source: {
             headers: {
@@ -1862,6 +1917,52 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdminAlbumMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumMetadata"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateAlbumMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumMetadataPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AlbumMetadata"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

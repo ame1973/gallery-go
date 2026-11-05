@@ -78,7 +78,7 @@ type scanHTTPSClient struct {
 	origin, csrf string
 }
 
-func (c *scanHTTPSClient) request(method, path string, body any, want int, result any) http.Header {
+func (c *scanHTTPSClient) request(method, path string, body any, want int, result any, extra ...http.Header) http.Header {
 	c.t.Helper()
 	var input io.Reader
 	if body != nil {
@@ -100,6 +100,11 @@ func (c *scanHTTPSClient) request(method, path string, body any, want int, resul
 		}
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
+		}
+	}
+	for _, headers := range extra {
+		for name, values := range headers {
+			req.Header[name] = append([]string(nil), values...)
 		}
 	}
 	response, err := c.client.Do(req)
@@ -744,6 +749,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			verifyCompiledExactDuplicates(t, api, source, marker, input.Bytes(), workUnits)
 			verifyCompiledPersonMapping(t, api, source, marker, workUnits)
+			verifyCompiledAlbumOverrides(t, api, source, marker, workUnits)
 			if stopWorker != nil {
 				stopWorker()
 				api.request("GET", "/health/ready", nil, 503, nil)

@@ -195,6 +195,9 @@ Only implemented endpoints are advertised:
   version preconditions and scope revocation.
 - `GET/POST /api/v2/admin/libraries`, `GET/PATCH/DELETE /admin/libraries/{library_id}`:
   library configuration; only empty libraries can be deleted.
+- `GET/PATCH /api/v2/admin/albums/{album_id}`: versioned display/cover overrides
+  with actor-bound command receipts, same-album cover ownership and retained source
+  labels/preferences across scans. No source writes. See [docs/album-metadata.md](docs/album-metadata.md).
 - `GET/PUT /api/v2/admin/libraries/{library_id}/access` and
   `/admin/albums/{album_id}/access`: fail-closed grants and additive restrictions.
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
@@ -283,7 +286,9 @@ and graceful shutdown. They then add a read-only identical PNG copy, execute
 identity, anonymous denial and an external same-path rewrite removing the old group.
 A real versioned source-mapping update then creates an indexed Person; all four
 modes verify list/detail/album counts, stable no-op metadata, anonymous denial and
-mount-marker loss without source probing or recreation.
+mount-marker loss without source probing or recreation. Versioned display/cover
+commands then verify no-op scan retention, a provable whole-folder move with stable
+IDs/overrides, historical receipt replay and unchanged source bytes/modes.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

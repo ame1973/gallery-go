@@ -124,6 +124,40 @@ paths:
               schema: { $ref: '#/components/schemas/AlbumPage' }
         '404': { $ref: '#/components/responses/Problem' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/albums/{album_id}:
+    parameters: [{ $ref: '#/components/parameters/AlbumID' }]
+    get:
+      operationId: getAdminAlbumMetadata
+      summary: Read administrative album display and cover preferences
+      description: Current administrator and shared active library/source visibility required. Returns the indexed source label and display/current-cover/desired-cover overrides, never a relative/root path. A desired historical cover ID is not proof of current ownership or a download capability; the current cover projection is visibility checked.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AlbumMetadata' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      operationId: updateAlbumMetadata
+      summary: Set or clear versioned album display and cover overrides
+      description: Online administrator-only metadata mutation with If-Match and actor-bound Idempotency-Key. Omitted fields are unchanged; an explicit empty string clears that override and null is rejected. Name values use the existing bounded trimmed display-label policy, not search normalization. A nonempty cover must currently be eligible same-album/source media; no source files are read or written. Clearing a cover preference restores sticky automatic selection, which may retain the same current cover. Business row/version/change/outbox/audit/receipt co-commit. Matching key/body/original precondition retries return the historical result/ETag even after later edits; GET refreshes current metadata. No-op saves only its receipt. Source labels, library/source/person associations, permissions, tags and reprocessing are not editable here.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumMetadataPatch' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumMetadata' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
   /health/live:
     get:
       operationId: live
@@ -1261,6 +1295,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    AlbumMetadata:
+      description: Current or historical actor-receipted album display/cover metadata. Replayed mutation results are historical; GET refreshes current state.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AlbumMetadata' }
     Source:
       description: Source metadata and strong source version tag. Replayed commands return historical metadata; GET refreshes current state.
       headers:
@@ -1766,6 +1807,37 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/JobIssue' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
+    AlbumMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, source_name, display_name, cover_media_id, cover_override_id, version]
+      properties:
+        id: { type: string }
+        source_name:
+          type: string
+          description: Indexed display label only; immutable through this endpoint and never a full relative/root path.
+        display_name:
+          type: [string, 'null']
+          description: Current display override; null uses the indexed source label.
+        cover_media_id:
+          type: [string, 'null']
+          description: Current visibility-checked album-owned representative media ID, not proof of a READY variant or download policy.
+        cover_override_id:
+          type: [string, 'null']
+          description: Persisted desired cover preference. It may refer to a temporarily moved/unavailable historical choice and grants no content authority.
+        version: { type: integer, format: int64, minimum: 1 }
+    AlbumMetadataPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        display_name:
+          type: string
+          description: Empty string clears the override; omitted unchanged. Other values are trimmed and must then contain 1 to 100 Unicode characters and at most 400 UTF-8 bytes without control characters. Null is rejected.
+        cover_media_id:
+          type: string
+          maxLength: 64
+          description: Currently eligible same-album/source media ID. Empty string clears the desired override and uses sticky automatic selection; omitted unchanged. Null is rejected.
     Person:
       type: object
       additionalProperties: false
