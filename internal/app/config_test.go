@@ -71,7 +71,7 @@ func TestConfigSymlinkOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Worker, c.Scanner, c.Inspection = defaults.Worker, defaults.Scanner, defaults.Inspection
+	c.Worker, c.Scanner, c.Inspection, c.Scheduler = defaults.Worker, defaults.Scanner, defaults.Inspection, defaults.Scheduler
 	if err := c.validate(dir); err == nil {
 		t.Fatal("symlink overlap accepted")
 	}

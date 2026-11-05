@@ -3,7 +3,7 @@
 > This is an authentication/access/content-serving development build, not the
 > complete gallery. Keep it on a trusted development machine; native read-only scan
 > workers are available, but complete codec processing, gallery/player screens,
-> automatic scheduling, and offline downloads remain pending.
+> source/process readiness, and offline downloads remain pending.
 
 ## Build and initialize
 
@@ -59,8 +59,10 @@ The image includes native scan execution: `serve` starts its embedded consumer b
 default, and `gallerygo worker --config ...` can consume without a listener or web
 assets. See [worker operation](../docs/workers.md) for limits and a dedicated-process
 configuration. Keep the DB on the same host and configure every process with the
-same source pins. Registration alone does not scan; enqueue through the API.
-Complete external media codec tooling and automatic scheduling are not available yet.
+same source pins. Enabled consumers schedule active registrations automatically;
+set `scheduler.enabled: false` in every consumer for manual-only scans. Source API
+calls do no synchronous scanning or filesystem creation. Complete external media
+codec tooling is not available yet.
 
 For a port change, use the provided non-secret environment example:
 

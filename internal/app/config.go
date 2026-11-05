@@ -35,22 +35,23 @@ type WorkerConfig struct {
 }
 
 type Config struct {
-	Listen     string              `yaml:"listen"`
-	BaseURL    string              `yaml:"base_url"`
-	Database   string              `yaml:"database"`
-	CacheRoot  string              `yaml:"cache_root"`
-	WebRoot    string              `yaml:"web_root"`
-	Sources    []Source            `yaml:"sources"`
-	Auth       auth.Policy         `yaml:"auth"`
-	Worker     WorkerConfig        `yaml:"worker"`
-	Scanner    scanner.Policy      `yaml:"scanner"`
-	Inspection media.InspectPolicy `yaml:"inspection"`
+	Listen     string                 `yaml:"listen"`
+	BaseURL    string                 `yaml:"base_url"`
+	Database   string                 `yaml:"database"`
+	CacheRoot  string                 `yaml:"cache_root"`
+	WebRoot    string                 `yaml:"web_root"`
+	Sources    []Source               `yaml:"sources"`
+	Auth       auth.Policy            `yaml:"auth"`
+	Worker     WorkerConfig           `yaml:"worker"`
+	Scanner    scanner.Policy         `yaml:"scanner"`
+	Inspection media.InspectPolicy    `yaml:"inspection"`
+	Scheduler  scanner.SchedulePolicy `yaml:"scheduler"`
 }
 
 // LoadConfig resolves relative paths against the config file, not the invocation
 // directory. Missing explicit configuration is an error, never a silent fallback.
 func LoadConfig(path string) (Config, error) {
-	c := Config{Listen: "127.0.0.1:8080", BaseURL: "https://localhost:8443", Database: "data/gallerygo.db", CacheRoot: "cache", WebRoot: "web/dist", Auth: auth.DefaultPolicy(), Worker: WorkerConfig{Embedded: true, Policy: jobs.DefaultPolicy()}, Scanner: scanner.DefaultPolicy(), Inspection: media.DefaultInspectPolicy()}
+	c := Config{Listen: "127.0.0.1:8080", BaseURL: "https://localhost:8443", Database: "data/gallerygo.db", CacheRoot: "cache", WebRoot: "web/dist", Auth: auth.DefaultPolicy(), Worker: WorkerConfig{Embedded: true, Policy: jobs.DefaultPolicy()}, Scanner: scanner.DefaultPolicy(), Inspection: media.DefaultInspectPolicy(), Scheduler: scanner.DefaultSchedulePolicy()}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return c, err
@@ -126,6 +127,9 @@ func (c *Config) validate(base string) error {
 		return err
 	}
 	if err := c.Inspection.Validate(); err != nil {
+		return err
+	}
+	if err := c.Scheduler.Validate(); err != nil {
 		return err
 	}
 	host, port, err := net.SplitHostPort(c.Listen)

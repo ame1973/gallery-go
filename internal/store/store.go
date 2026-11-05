@@ -10,8 +10,15 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
+
+// IsBusy identifies actual SQLite writer contention, not error-message text.
+// Retrying it is never proof of a successful heartbeat, lease, or readiness check.
+func IsBusy(err error) bool {
+	var failure *sqlite.Error
+	return errors.As(err, &failure) && (failure.Code()&255 == 5 || failure.Code()&255 == 6)
+}
 
 // Open accepts a filesystem path, never a caller-supplied SQLite URI or SQL pragma.
 // The database must reside on a local filesystem with working WAL locking.

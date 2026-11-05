@@ -30,6 +30,10 @@ inspection:
   max_dimension: 65535
   header_bytes: 8388608 # 8 MiB
   timeout: 15s
+# Disable in every consumer for explicit/manual-only scan operation.
+scheduler:
+  enabled: true
+  interval: 1s
 # Source roots are never created or written by GalleryGo.
 # Names are unique 1..64-byte UTF-8 labels; markers are normalized relative paths.
 # Register a declared name through /api/v2/admin/sources; paths are never API input.

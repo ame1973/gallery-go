@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 
 	"gallerygo/internal/auth"
@@ -24,9 +25,13 @@ type scanRuntime struct {
 	scans          *scanner.Scans
 	handler        jobs.Handler
 	roots          map[string]media.SourceRoot
+	schedule       scanner.SchedulePolicy
 }
 
 func newScanRuntime(db *sql.DB, c Config) (*scanRuntime, error) {
+	if err := c.Scheduler.Validate(); err != nil {
+		return nil, err
+	}
 	authentication, err := auth.New(db, c.Auth)
 	if err != nil {
 		return nil, err
@@ -49,11 +54,24 @@ func newScanRuntime(db *sql.DB, c Config) (*scanRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &scanRuntime{authentication, queue, sources, scans, handler, roots}, nil
+	return &scanRuntime{authentication, queue, sources, scans, handler, roots, c.Scheduler}, nil
 }
 
 func (r *scanRuntime) run(ctx context.Context, role string) error {
-	return r.queue.Run(ctx, role, map[string]jobs.Handler{"scan": r.handler})
+	consume := func(ctx context.Context) error {
+		return r.queue.Run(ctx, role, map[string]jobs.Handler{"scan": r.handler})
+	}
+	if !r.schedule.Enabled {
+		return consume(ctx)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan error, 2)
+	go func() { done <- consume(runCtx) }()
+	go func() { done <- r.scans.RunSchedule(runCtx, r.sources, r.schedule) }()
+	err := <-done
+	cancel()
+	return errors.Join(err, <-done)
 }
 
 // Worker consumes accepted scan intents without a listener or web asset dependency.

@@ -125,7 +125,7 @@ func TestScanRuntimeRejectsInvalidResourcePolicies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, field := range []string{"auth", "worker", "scanner", "inspection"} {
+	for _, field := range []string{"auth", "worker", "scanner", "inspection", "scheduler"} {
 		invalid := c
 		switch field {
 		case "auth":
@@ -136,6 +136,8 @@ func TestScanRuntimeRejectsInvalidResourcePolicies(t *testing.T) {
 			invalid.Scanner.MaxFiles = 0
 		case "inspection":
 			invalid.Inspection.MaxPixels = 0
+		case "scheduler":
+			invalid.Scheduler.Interval = 0
 		}
 		if _, err := newScanRuntime(db, invalid); err == nil {
 			t.Fatal("invalid runtime policy accepted", field)

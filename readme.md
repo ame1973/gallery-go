@@ -11,7 +11,7 @@ Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
 publish read-only inventories and native JPEG/PNG/GIF header metadata. Management/
-browsing screens, automatic scheduling, complete media processing, playback, and
+browsing screens, source/process readiness, complete media processing, playback, and
 offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 
@@ -127,10 +127,12 @@ control characters; mount markers are normalized root-relative paths. GalleryGo
 does not create source roots or mount markers.
 Declare roots in YAML, then use the [source API](docs/sources.md) to register a
 library/mapping, inspect reachability, or deactivate a source. These operations do
-not scan or purge files. Explicit scan jobs are consumed by the native worker and
-publish only after healthy manifest/metadata/configuration/lease validation.
-Automatic scheduling is not wired yet. See [workers and resource limits](docs/workers.md)
-for `worker`, `scanner`, and `inspection` YAML settings and supported native capabilities.
+not scan or purge files synchronously. Enabled consumers automatically schedule
+active registered sources for initial/periodic full scans and intervening polls.
+Native publication still requires healthy manifest/metadata/configuration/lease
+validation. Set `scheduler.enabled: false` in every consumer for manual-only operation.
+See [workers and resource limits](docs/workers.md) for `worker`, `scanner`,
+`inspection`, and `scheduler` YAML settings and supported native capabilities.
 `.env.example` contains only a Compose port setting. The application reads YAML,
 not arbitrary environment variables.
 

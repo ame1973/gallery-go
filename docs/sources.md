@@ -3,9 +3,11 @@
 Administrators can register declared source roots, configure folder mapping and
 safety policies, and inspect root reachability through the HTTPS API. They can
 also [enqueue durable scan intents](jobs.md), which the embedded or standalone
-[native worker](workers.md) can execute. Management screens and automatic polling
-are **not available yet**. Registration and reachability checks alone do not ingest
-files. A fresh installation has no indexed media until healthy scan publication.
+[native worker](workers.md) can execute. Enabled consumers also schedule active
+registrations automatically. Management screens are **not available yet**.
+Registration and reachability endpoints do no synchronous scanning; background
+policy dispatch is separate. A fresh installation has no indexed media until
+healthy scan publication.
 
 All paths below are relative to `/api/v2`. Use an active administrator's session,
 configured `Origin`, and session-bound `X-CSRF-Token` as described in
@@ -43,15 +45,15 @@ use default limit 30, maximum 100, and opaque account/scope/collection-bound cur
 
 `POST /admin/sources` requires a new `Idempotency-Key` and accepts:
 
-| Field                        | Default                       | Meaning                                                                          |
-| ---------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
-| `library_id`                 | Required                      | Existing destination library ID. Its grants remain mandatory.                    |
-| `root_name`                  | Required                      | Exact YAML allowlist label, not an absolute or relative path.                    |
-| `mapping`                    | Album depth 1; person depth 0 | Optional full mapping object described below.                                    |
-| `active`                     | `true`                        | Whether this source's albums and content may be visible.                         |
-| `minimum_files`              | `0`                           | Completed whole-source scan safety guard, 0..1,000,000,000.                      |
-| `poll_interval_seconds`      | `60`                          | Stored incremental scheduling policy, 10..86,400 seconds.                        |
-| `full_scan_interval_seconds` | `86400`                       | Stored full-scan policy, at least the poll interval and at most 604,800 seconds. |
+| Field                        | Default                       | Meaning                                                                         |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| `library_id`                 | Required                      | Existing destination library ID. Its grants remain mandatory.                   |
+| `root_name`                  | Required                      | Exact YAML allowlist label, not an absolute or relative path.                   |
+| `mapping`                    | Album depth 1; person depth 0 | Optional full mapping object described below.                                   |
+| `active`                     | `true`                        | Whether this source's albums and content may be visible.                        |
+| `minimum_files`              | `0`                           | Completed whole-source scan safety guard, 0..1,000,000,000.                     |
+| `poll_interval_seconds`      | `60`                          | Dispatch interval, 10..86,400 seconds; full until healthy full evidence exists. |
+| `full_scan_interval_seconds` | `86400`                       | Periodic full policy, at least the poll interval and at most 604,800 seconds.   |
 
 For example:
 
@@ -202,8 +204,12 @@ publication can resolve it safely. Ownership/library changes revoke historical a
 destination authorization projections without revoking valid login sessions.
 
 The [scan enqueue API](jobs.md) accepts these private durable intents; `serve` consumes
-them by default, or use `worker` with consistent configuration. Automatic scheduling
-and source/process readiness are not wired yet. Queued acceptance alone cannot prove
+them by default, or use `worker` with consistent configuration. Consumers also
+schedule active process-configured sources by default; initial/overdue full work
+and incremental polls share the same immutable source-intent keys as manual jobs.
+Disable `scheduler.enabled` in every consumer for manual-only operation. Private
+dispatch deadlines do not imply a healthy scan or advance full-publication evidence.
+Source/process readiness is not wired yet. Queued acceptance alone cannot prove
 successful ingestion. Header inspection does not prove complete pixel/frame decoding. External
 codecs, EXIF, animation timing, variant generation, and indexed SIGKILL/reopened-DB
 recovery acceptance remain pending. These capabilities do not complete the

@@ -94,66 +94,9 @@ func (s *Scans) Enqueue(ctx context.Context, current auth.Session, request ScanR
 	if replayed, err := command.Replay(ctx, tx, s.clock(), &job); replayed || err != nil {
 		return job, err
 	}
-	hash := sha256.New()
-	encoder := json.NewEncoder(hash)
-	if err := encoder.Encode([]any{"scan", 1, request.Mode, request.selection(), request.AlbumID}); err != nil {
-		return jobs.Job{}, err
-	}
-	var count int64
-	after := ""
-	for {
-		targets, err := selectionBatch(ctx, tx, request, after)
-		if err != nil {
-			return jobs.Job{}, err
-		}
-		if len(targets) == 0 {
-			break
-		}
-		for _, target := range targets {
-			if err := encoder.Encode([]any{target.sourceID, target.config, target.scope, nullableString(target.album)}); err != nil {
-				return jobs.Job{}, err
-			}
-			count++
-		}
-		after = targets[len(targets)-1].sourceID
-	}
-	if count == 0 {
-		if request.selection() == "all" {
-			return jobs.Job{}, ErrNoSources
-		}
-		return jobs.Job{}, sql.ErrNoRows
-	}
-	primary := "scan:all"
-	if request.AlbumID != nil {
-		primary = "album:" + *request.AlbumID
-	} else if request.SourceID != nil {
-		primary = "source:" + *request.SourceID
-	}
-	payload, _ := json.Marshal(scanPayload{Version: 1, Mode: request.Mode})
-	job, created, err := s.queue.EnqueueTx(ctx, tx, jobs.Input{Kind: "scan", ResourceKey: primary, Dedupe: "scan:" + hex.EncodeToString(hash.Sum(nil)), Payload: payload, ActorID: actor.User.ID})
+	job, created, count, err := s.enqueueTx(ctx, tx, request, actor.User.ID)
 	if err != nil {
 		return jobs.Job{}, err
-	}
-	if created {
-		after = ""
-		for {
-			targets, err := selectionBatch(ctx, tx, request, after)
-			if err != nil {
-				return jobs.Job{}, err
-			}
-			if len(targets) == 0 {
-				break
-			}
-			for _, target := range targets {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO scan_targets(job_id,source_id,source_config_version,scope_path,album_id) VALUES(?,?,?,?,?)`, job.ID, target.sourceID, target.config, target.scope, target.album); err != nil {
-					return jobs.Job{}, err
-				}
-				if err := s.queue.BindResourceTx(ctx, tx, job, "source:"+target.sourceID); err != nil {
-					return jobs.Job{}, err
-				}
-			}
-			after = targets[len(targets)-1].sourceID
-		}
 	}
 	if _, err := s.auth.RequireAdmin(ctx, tx, current); err != nil {
 		return jobs.Job{}, err
@@ -170,6 +113,74 @@ func (s *Scans) Enqueue(ctx context.Context, current auth.Session, request ScanR
 		return jobs.Job{}, err
 	}
 	return job, tx.Commit()
+}
+
+// enqueueTx is shared only by authorized administrative commands and the internal
+// scheduler. It freezes the same effective intent, never creates actor credentials,
+// and never expands an existing/coalesced job's target set.
+func (s *Scans) enqueueTx(ctx context.Context, tx *sql.Tx, request ScanRequest, actor string) (jobs.Job, bool, int64, error) {
+	hash := sha256.New()
+	encoder := json.NewEncoder(hash)
+	if err := encoder.Encode([]any{"scan", 1, request.Mode, request.selection(), request.AlbumID}); err != nil {
+		return jobs.Job{}, false, 0, err
+	}
+	var count int64
+	after := ""
+	for {
+		targets, err := selectionBatch(ctx, tx, request, after)
+		if err != nil {
+			return jobs.Job{}, false, 0, err
+		}
+		if len(targets) == 0 {
+			break
+		}
+		for _, target := range targets {
+			if err := encoder.Encode([]any{target.sourceID, target.config, target.scope, nullableString(target.album)}); err != nil {
+				return jobs.Job{}, false, 0, err
+			}
+			count++
+		}
+		after = targets[len(targets)-1].sourceID
+	}
+	if count == 0 {
+		if request.selection() == "all" {
+			return jobs.Job{}, false, 0, ErrNoSources
+		}
+		return jobs.Job{}, false, 0, sql.ErrNoRows
+	}
+	primary := "scan:all"
+	if request.AlbumID != nil {
+		primary = "album:" + *request.AlbumID
+	} else if request.SourceID != nil {
+		primary = "source:" + *request.SourceID
+	}
+	payload, _ := json.Marshal(scanPayload{Version: 1, Mode: request.Mode})
+	job, created, err := s.queue.EnqueueTx(ctx, tx, jobs.Input{Kind: "scan", ResourceKey: primary, Dedupe: "scan:" + hex.EncodeToString(hash.Sum(nil)), Payload: payload, ActorID: actor})
+	if err != nil {
+		return jobs.Job{}, false, 0, err
+	}
+	if created {
+		after = ""
+		for {
+			targets, err := selectionBatch(ctx, tx, request, after)
+			if err != nil {
+				return jobs.Job{}, false, 0, err
+			}
+			if len(targets) == 0 {
+				break
+			}
+			for _, target := range targets {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO scan_targets(job_id,source_id,source_config_version,scope_path,album_id) VALUES(?,?,?,?,?)`, job.ID, target.sourceID, target.config, target.scope, target.album); err != nil {
+					return jobs.Job{}, false, 0, err
+				}
+				if err := s.queue.BindResourceTx(ctx, tx, job, "source:"+target.sourceID); err != nil {
+					return jobs.Job{}, false, 0, err
+				}
+			}
+			after = targets[len(targets)-1].sourceID
+		}
+	}
+	return job, created, count, nil
 }
 
 func selectionBatch(ctx context.Context, tx *sql.Tx, request ScanRequest, after string) ([]scanTarget, error) {

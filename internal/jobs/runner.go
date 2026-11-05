@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"gallerygo/internal/store"
-
-	"modernc.org/sqlite"
 )
 
 // Handler does blocking work outside SQLite transactions. It must observe ctx and
@@ -71,7 +69,7 @@ func (q *Queue) Run(ctx context.Context, role string, handlers map[string]Handle
 			}
 		case <-heartbeat.C:
 			if runCtx.Err() == nil {
-				if err := q.WorkerHeartbeat(runCtx, id); err != nil && !databaseBusy(err) && runCtx.Err() == nil {
+				if err := q.WorkerHeartbeat(runCtx, id); err != nil && !store.IsBusy(err) && runCtx.Err() == nil {
 					failure = err
 					cancel(err)
 				}
@@ -89,7 +87,7 @@ func (q *Queue) Run(ctx context.Context, role string, handlers map[string]Handle
 func (q *Queue) runSlot(ctx context.Context, id string, kinds []string, handlers map[string]Handler) error {
 	for ctx.Err() == nil {
 		lease, err := q.Claim(ctx, id, kinds)
-		if errors.Is(err, ErrNoWork) || databaseBusy(err) {
+		if errors.Is(err, ErrNoWork) || store.IsBusy(err) {
 			select {
 			case <-ctx.Done():
 				return nil
@@ -114,11 +112,6 @@ func (q *Queue) runSlot(ctx context.Context, id string, kinds []string, handlers
 // Retry contention at the existing poll/heartbeat cadence, not as dependency or
 // lease success: readiness still uses committed worker timestamps, and the next
 // successful lease check must reject real cancellation, expiry, or replacement.
-func databaseBusy(err error) bool {
-	var failure *sqlite.Error
-	return errors.As(err, &failure) && (failure.Code()&255 == 5 || failure.Code()&255 == 6)
-}
-
 func (q *Queue) execute(parent context.Context, lease Lease, handler Handler) error {
 	ctx, cancel := context.WithCancelCause(parent)
 	heartbeatDone := make(chan struct{})
@@ -131,7 +124,7 @@ func (q *Queue) execute(parent context.Context, lease Lease, handler Handler) er
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := q.Heartbeat(ctx, lease); err != nil && !databaseBusy(err) {
+				if err := q.Heartbeat(ctx, lease); err != nil && !store.IsBusy(err) {
 					cancel(err)
 					return
 				}

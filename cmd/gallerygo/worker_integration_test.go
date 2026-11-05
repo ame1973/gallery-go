@@ -139,8 +139,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build CLI: %v\n%s", err, output)
 	}
-	for _, embedded := range []bool{true, false} {
-		t.Run(fmt.Sprintf("embedded=%t", embedded), func(t *testing.T) {
+	for _, mode := range []struct{ embedded, scheduled bool }{{true, false}, {false, false}, {true, true}, {false, true}} {
+		embedded, scheduled := mode.embedded, mode.scheduled
+		t.Run(fmt.Sprintf("embedded=%t/scheduled=%t", embedded, scheduled), func(t *testing.T) {
 			directory := t.TempDir()
 			root := filepath.Join(directory, "source")
 			if err := os.MkdirAll(filepath.Join(root, "Album"), 0o700); err != nil {
@@ -186,8 +187,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			settings := map[string]any{
 				"listen": address, "base_url": proxy.URL, "database": filepath.Join(directory, "data", "gallerygo.db"),
 				"cache_root": filepath.Join(directory, "cache"), "web_root": assets,
-				"sources": []map[string]string{{"name": "fixture", "root": root, "marker": ".mounted"}},
-				"worker":  map[string]any{"embedded": embedded, "concurrency": 1, "poll": "100ms", "max_attempts": 2, "retry_base": "100ms", "retry_max": "200ms"},
+				"sources":   []map[string]string{{"name": "fixture", "root": root, "marker": ".mounted"}},
+				"worker":    map[string]any{"embedded": embedded, "concurrency": 1, "poll": "100ms", "max_attempts": 2, "retry_base": "100ms", "retry_max": "200ms"},
+				"scheduler": map[string]any{"enabled": scheduled},
 			}
 			config := filepath.Join(directory, "config.yaml")
 			write := func(path string) {
@@ -246,13 +248,17 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			var source library.Source
 			api.request("POST", "/admin/sources", map[string]any{"library_id": collection.ID, "root_name": "fixture", "minimum_files": 1}, 201, &source)
 			var accepted jobs.Job
-			api.request("POST", "/admin/scans", map[string]string{"mode": "full", "source_id": source.ID}, 202, &accepted)
+			if !scheduled {
+				api.request("POST", "/admin/scans", map[string]string{"mode": "full", "source_id": source.ID}, 202, &accepted)
+			}
 			var stopWorker func()
 			if !embedded {
-				var queued jobs.Job
-				api.request("GET", "/admin/jobs/"+accepted.ID, nil, 200, &queued)
-				if queued.Status != "queued" || queued.Attempts != 0 {
-					t.Fatal("HTTP-only server consumed scan", queued)
+				if !scheduled {
+					var queued jobs.Job
+					api.request("GET", "/admin/jobs/"+accepted.ID, nil, 200, &queued)
+					if queued.Status != "queued" || queued.Attempts != 0 {
+						t.Fatal("HTTP-only server consumed scan", queued)
+					}
 				}
 				// The worker uses the same declared roots/DB but has no web assets and
 				// must not try to bind the already occupied HTTP listener.
@@ -262,6 +268,26 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				stopWorker = startCLIProcess(t, binary, workerConfig, "worker")
 				defer stopWorker()
 			}
+			if scheduled {
+				automaticDeadline := time.NewTimer(10 * time.Second)
+				defer automaticDeadline.Stop()
+				for accepted.ID == "" {
+					var history struct {
+						Items []jobs.Job `json:"items"`
+					}
+					api.request("GET", "/admin/jobs", nil, 200, &history)
+					if len(history.Items) == 1 {
+						accepted = history.Items[0]
+						break
+					}
+					select {
+					case <-automaticDeadline.C:
+						t.Fatal("source policy did not create a scheduled scan")
+					case <-tick.C:
+					}
+				}
+			}
+			initialID := accepted.ID
 			result := api.waitJob(accepted.ID)
 			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 3 || result.Done != 3 || !result.TotalKnown {
 				t.Fatal("compiled native execution failed", result, result.Counts)
@@ -331,6 +357,13 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(err)
 			}
 			defer db.Close()
+			if scheduled {
+				var actor *string
+				var mode string
+				if err := db.QueryRow(`SELECT created_by_user_id,json_extract(payload_json,'$.mode') FROM jobs WHERE id=?`, initialID).Scan(&actor, &mode); err != nil || actor != nil || mode != "full" {
+					t.Fatal("automatic work used credentials or skipped initial full mode", actor, mode, err)
+				}
+			}
 			role := "worker"
 			if embedded {
 				role = "serve"

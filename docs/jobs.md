@@ -2,7 +2,8 @@
 
 Durable scan enqueue, history, and online-only controls are available through the
 HTTPS API. Embedded and standalone [native workers](workers.md) can consume accepted
-scan intents. Scheduling and job UI are **not available yet**. A `202` response is
+scan intents and schedule active sources by policy. Job UI is **not available yet**.
+A `202` response is
 not successful ingestion or codec processing. Source registration, folder
 mapping, and separate reachability checks are in [sources.md](sources.md).
 
@@ -61,8 +62,11 @@ atomically; retryable source failures use the queue's bounded backoff/dead-lette
 `serve` enables a native consumer by default; set `worker.embedded: false` only when
 a standalone worker consumes the same local database. Queued acceptance, including
 for an unavailable/unconfigured source, is not evidence that bytes are reachable,
-indexed, or decoded. Source/process readiness, scheduling, and indexed process-crash
-acceptance remain under development.
+indexed, or decoded. `scheduler.enabled: true` dispatches initial/periodic full
+scans and intervening source polls. Identical active manual/scheduled source intents
+coalesce; mode, selection, configuration and reprocess boundaries stay distinct.
+System dispatch creates no administrator session or replay receipt. Source/process
+readiness and indexed process-crash acceptance remain under development.
 
 ## Inspect history
 

@@ -19,16 +19,35 @@ share a WAL database between hosts or put it on NFS/SMB.
 2. Sign in over the configured HTTPS origin as an active administrator.
 3. Create a destination library and register a declared root through the
    [source API](sources.md). A new library grants no ordinary-user access.
-4. [Enqueue a scan](jobs.md) using `POST /api/v2/admin/scans` with the desired
+4. Allow the enabled scheduler to dispatch the active source, or
+   [enqueue a scan](jobs.md) using `POST /api/v2/admin/scans` with the desired
    full/incremental mode and source, album, or all-source selection.
 5. Follow the returned job and attempt history. `202` means accepted, not completed.
    Check terminal status and actual failed/skipped/cancelled counts.
 
-Startup and source registration alone do not scan. Automatic scheduling is not yet
-wired; enqueue explicitly. A worker claims only supported `scan` jobs. It rejects
-legacy or malformed private intents rather than guessing roots or scopes. The
-server can operate without an embedded consumer, but queued work will not progress
-until a compatible standalone consumer starts.
+Active registered sources are scheduled automatically by default. Each embedded or
+standalone consumer runs the same scheduler; multiple processes serialize dispatch
+through SQLite. Set `scheduler.enabled: false` in every consumer's YAML for manual-
+only operation. An HTTP-only server (`worker.embedded: false`) does not schedule;
+its standalone workers own that responsibility.
+
+A source without healthy full-scan evidence starts with a full scan. Later polls
+use incremental mode until a periodic full scan is due. Failed full work remains
+full on later dispatches; only healthy publication advances full-scan evidence.
+A dispatch advances the private poll deadline even if the job later fails, preventing
+a fast new-job loop around the bounded per-job retry budget. Repeated dispatches
+coalesce an identical active manual/scheduled source intent without expanding targets.
+
+Scheduling validates at most 100 active, due, process-configured registrations per
+transaction. Job/targets/dependencies, private dispatch deadlines and system audit
+commit atomically. It never probes files, creates administrator sessions, or changes
+published inventory/health merely because an intent was accepted. Inactive or
+mismatched registry pins are skipped. Source edits cancel old dependent jobs and
+reset dispatch deadlines; the next accepted intent binds the new epoch.
+
+A worker claims only supported `scan` jobs. It rejects legacy or malformed private
+intents rather than guessing roots or scopes. Queued work cannot progress without
+a compatible embedded or standalone consumer.
 
 The native pipeline performs bounded manifests and streamed hashes, JPEG/PNG/GIF
 header metadata, and fenced indexed publication. Indexed resources and authorized
@@ -67,6 +86,9 @@ inspection:
   max_dimension: 65535
   header_bytes: 8388608
   timeout: 15s
+scheduler:
+  enabled: true
+  interval: 1s
 ```
 
 | Setting                    | Allowed values and meaning                                               |
@@ -88,6 +110,8 @@ inspection:
 | `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                       |
 | `inspection.header_bytes`  | 512 bytes..32 MiB of native header inspection input.                     |
 | `inspection.timeout`       | 1s..1m per native header inspection.                                     |
+| `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.          |
+| `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.   |
 
 Source-specific mapping, minimum-file and scheduling policies remain API resources,
 not arbitrary filesystem paths or commands in job payloads. Target/incremental
@@ -115,6 +139,6 @@ their configured final stop deadline. Never weaken lease/config fences or edit j
 rows to recover a stalled source. Use the administrative cancel/retry APIs.
 
 Current readiness still checks the metadata database only. Source/process readiness,
-automatic scheduling, complete external metadata and indexed SIGKILL/reopened-DB
-acceptance remain pending; a successful startup or native scan is not the complete
+complete external metadata and indexed SIGKILL/reopened-DB acceptance remain pending;
+a successful startup or native scan is not the complete
 source-processing phase or a production-release claim.

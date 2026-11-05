@@ -41,6 +41,7 @@ writeFileSync(
     // These control/seeded-content cases deliberately do not consume their jobs.
     // Actual ingestion uses the separate compiled CLI integration test.
     worker: { embedded: false },
+    scheduler: { enabled: false },
   }),
   { mode: 0o600 },
 );

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"gallerygo/internal/store"
 )
 
 func TestRunnerRetriesWriterContentionDuringTransactionBoundHeartbeats(t *testing.T) {
@@ -72,7 +74,7 @@ func TestRunnerRetriesWriterContentionDuringTransactionBoundHeartbeats(t *testin
 	}
 	select {
 	case err := <-busyResult:
-		if err == nil || !databaseBusy(fmt.Errorf("wrapped: %w", err)) {
+		if err == nil || !store.IsBusy(fmt.Errorf("wrapped: %w", err)) {
 			t.Fatal("real SQLite busy error not recognized", err)
 		}
 	case <-time.After(8 * time.Second):
@@ -112,7 +114,7 @@ func TestRunnerDoesNotRetryOtherDatabaseOrAuthorityFailuresAsBusy(t *testing.T) 
 	q := runtimeFixture(t)
 	_, sqlError := q.db.Exec(`NOT VALID SQL`)
 	for _, err := range []error{nil, sqlError, sql.ErrNoRows, context.Canceled, ErrLeaseLost, ErrCancelled, errors.New("database is locked")} {
-		if databaseBusy(err) {
+		if store.IsBusy(err) {
 			t.Fatal("non-busy or untrusted text treated as retryable authority", err)
 		}
 	}
