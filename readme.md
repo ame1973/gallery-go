@@ -17,8 +17,9 @@ and mandatory Linux isolation they also publish MP4/MOV/MKV/WebM codec, dimensio
 declared duration, orthogonal display transforms and explicitly zoned creation
 metadata. The same sandbox also cross-checks bounded AVIF primary-item/sequence
 metadata with ordered transforms, EXIF and declared image timing/plays. An additional
-fixed libvips header profile supports generic-brand and compatible grid stills.
-GPS/raw tags
+fixed libvips header profile supports generic-brand/grid AVIF stills and controlled
+classic TIFF first-page dimensions/EXIF. TIFF document pages do not fabricate image
+animation. GPS/raw tags
 are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and
@@ -234,7 +235,8 @@ ABI 3+, unprivileged seccomp filters, trusted `/usr/bin/ffprobe` and
 `/usr/bin/vipsheader` with HEIF/AV1 loader dependencies. They fail
 closed when mandatory isolation is unavailable; they never skip to unrestricted
 execution. See [codec sandbox boundaries](docs/codec-sandbox.md). The scan inspector
-uses it for video metadata; the current container still does not bundle FFprobe.
+uses it for controlled AVIF/TIFF/video metadata; the current container still does
+not bundle these external tools.
 
 ```sh
 make check                         # Go race/vet, formatting, API, TS, lint, unit tests, build
@@ -263,8 +265,8 @@ source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
 both worker modes against fresh databases/read-only PNGs, EXIF JPEGs, GIFs, APNGs,
-WebP, AVIF and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
-cases verify 39 work units, image animation, video codec/geometry/duration/display
+WebP, AVIF, classic TIFF and owned MP4/MOV/MKV/WebM vectors. Four embedded/standalone x manual/scheduled
+cases verify 48 work units, image animation, TIFF first-page/unknown-animation semantics, video codec/geometry/duration/display
 transforms, UTC milliseconds, unknown-null semantics, protected original/Range and
 anonymous denial, stable complete metadata/revisions on rescan, outage retention
 and graceful shutdown. Video fixtures need no runtime encoder and do not establish

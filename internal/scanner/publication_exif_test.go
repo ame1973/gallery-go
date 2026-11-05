@@ -119,7 +119,7 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 		HeaderBytes  int64
 		Timeout      time.Duration
 	}{policy.MaxPixels, policy.MaxDimension, policy.HeaderBytes, policy.Timeout}
-	for _, older := range []int{1, 2, 3, 4, 5, 6, 7, 8} {
+	for _, older := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9} {
 		legacyPolicy := any(oldPolicy)
 		if older >= 3 {
 			legacyPolicy = policy
@@ -138,6 +138,18 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 				Policy       media.InspectPolicy
 				CodecRuntime string
 			}{older, policy, pinned.CodecRuntimePin()})
+		}
+		if older >= 9 {
+			pinned, err := policy.PinCodecRuntime(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, _ = json.Marshal(struct {
+				Version      int
+				Policy       media.InspectPolicy
+				CodecRuntime string
+				ImageRuntime string
+			}{older, policy, pinned.CodecRuntimePin(), pinned.ImageRuntimePin()})
 		}
 		digest := sha256.Sum256(data)
 		if _, err := f.db.Exec(`UPDATE inventory_generations SET inspect_policy_sha256=? WHERE id=?`, hex.EncodeToString(digest[:]), generation.ID); err != nil {

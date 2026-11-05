@@ -16,6 +16,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Controlled classic TIFF metadata through bounded native directories/local strip
+  and tile extents plus the existing isolated libvips header profile. First-page
+  dimensions and whitelisted orientation/explicit-zone UTC-millisecond EXIF are
+  published; document pages never fabricate animation/timing. BigTIFF, recognized
+  RAW/reduced/SubIFD and unknown profiles remain explicit unsupported work.
+  Inspector v10 rejects historical pins. Owned endian/Deflate/tile/strip/multipage
+  vectors, malformed/resource/fuzz cases, SQLite rewrites and four 48-unit CLI modes
+  cover the path. TIFF originals retain attachment/extra-grant policy without
+  expanding inline READY MIME types. Full decoding/variants/packaging remain pending.
+
 - A second finite Linux codec profile using only fixed `vipsheader` geometry output,
   independent runtime pins and exact trusted HEIF/decoder files. Module-folder
   enumeration does not grant unselected module contents; both profiles retain

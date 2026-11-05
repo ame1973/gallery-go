@@ -317,7 +317,13 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					t.Fatal(err)
 				}
 			}
-			mediaCount := 5 + len(videos) + len(avifs)
+			tiffs := scanTIFFFixtures(t)
+			for name, data := range tiffs {
+				if err := os.WriteFile(filepath.Join(root, "Album", name), data, 0o400); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mediaCount := 5 + len(videos) + len(avifs) + len(tiffs)
 			workUnits := int64(mediaCount * 3)
 			assets := filepath.Join(directory, "web")
 			if err := os.Mkdir(assets, 0o700); err != nil {
@@ -521,6 +527,12 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					}
 					assertCompiledOriginal(t, api, item.ID, data, "image/avif")
 				}
+				if data, ok := tiffs[item.FileName]; ok {
+					if item.Kind != "image" || *item.Codec != "tiff" || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != "2026-11-05T04:34:56.123Z" || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil || item.DurationMS != nil {
+						t.Fatal("compiled TIFF metadata lost first-page EXIF or invented animation", item)
+					}
+					assertCompiledOriginal(t, api, item.ID, data, "image/tiff")
+				}
 				if fixture, ok := videos[item.FileName]; ok {
 					width, height = 16, 12
 					if item.Kind != "video" || *item.Codec != fixture.codec || item.DurationMS == nil || *item.DurationMS != 400 || item.CaptureAt == nil || item.CaptureAt.Format(time.RFC3339Nano) != fixture.capture || item.Animated != nil || item.FrameCount != nil || item.LoopCount != nil || fixture.orientation == 0 && item.Orientation != nil || fixture.orientation != 0 && (item.Orientation == nil || *item.Orientation != fixture.orientation) {
@@ -668,6 +680,14 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				info, statErr := os.Stat(path)
 				if err != nil || statErr != nil || !bytes.Equal(data, expected) || info.Mode().Perm() != 0o400 {
 					t.Fatal("process changed read-only AVIF source", name, err, statErr)
+				}
+			}
+			for name, expected := range tiffs {
+				path := filepath.Join(root, "Album", name)
+				data, err := os.ReadFile(path)
+				info, statErr := os.Stat(path)
+				if err != nil || statErr != nil || !bytes.Equal(data, expected) || info.Mode().Perm() != 0o400 {
+					t.Fatal("process changed read-only TIFF source", name, err, statErr)
 				}
 			}
 			api.request("GET", "/health/ready", nil, 200, &readiness)

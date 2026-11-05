@@ -1069,9 +1069,9 @@ export interface components {
             height: number | null;
             /** @description Declared source duration rounded upward once to milliseconds. Video uses the primary non-attached track with container fallback only for unknown track timing. Image animation uses one declared cycle; zero/missing timing or GIF user input stays null. Never inferred from frame rate or multiplied by loop_count. */
             duration_ms: number | null;
-            /** @description Known image animation state; true for multiple PNG/APNG, GIF, WebP or AVIF sequence frames. Null when the format has not been inspected for animation. */
+            /** @description Known image animation state; true for multiple PNG/APNG, GIF, WebP or AVIF sequence frames. Null when unknown; TIFF document pages do not imply animation and leave this field null. */
             animated: boolean | null;
-            /** @description Image frame/sample count proven by bounded container inspection; null when unknown. AVIF uses matching sample-size/timing tables and local chunk extents. Does not imply full pixel decoding. */
+            /** @description Image frame/sample count proven by bounded container inspection; null when unknown or for TIFF document pages. AVIF uses matching sample-size/timing tables and local chunk extents. Does not imply full pixel decoding. */
             frame_count: number | null;
             /** @description Total animation playthroughs; zero means infinite and one means no repetition. Null when unknown. GIF repeat counts add the initial playthrough; APNG/WebP totals and AVIF whole-edit playback counts do not. Unproven or partial AVIF repetition remains null. */
             loop_count: number | null;

@@ -37,6 +37,28 @@ HEIF-major tests change only the owned still's major brand, not private media.
 The isolated image-header profile is tested separately from that trusted-input
 fixture-generation decode; metadata success is not full AV1 pixel acceptance.
 
+## Owned classic TIFF vectors
+
+`tiff.json` contains seven complete TIFFs built with standard-library byte packing
+and zlib over owned RGB `(32, 96, 144)` pixels. The first page is 12 by 7 pixels;
+the multipage vector adds a 3-by-2 page of `(240, 224, 192)` with different EXIF.
+No external photograph, NAS mount, network fetch or runtime encoder is involved.
+
+- `little_exif` and `big_exif` use classic TIFF's two byte orders and one RGB strip.
+- `deflate` compresses that strip with standard zlib/Deflate.
+- `tiled_deflate` uses a 16-by-16 Deflate tile cropped by the 12-by-7 canvas.
+- `strips` uses three big-endian RGB strips with LONG offsets and SHORT byte counts.
+- `multipage` proves first-page selection rather than stacked geometry or animation.
+- `plain` omits orientation and capture fields; no default/host time is substituted.
+
+Whitelisted synthetic EXIF declares orientation 6, an explicitly zoned original
+date and `.123456` subseconds, normalized to `.123Z` after UTC conversion. A private
+canary description must never appear in metadata DTOs. System libvips independently
+decoded **every RGB byte of every page** during generation, including Deflate and
+tile/strip layouts. Runtime tests use the fixed isolated header profile, not that
+trusted-input generation decoder. Metadata success does not imply full TIFF/RAW,
+all-page decoding, browser playback or READY variant acceptance.
+
 ## Owned video vectors
 
 `video.json` contains tiny complete containers generated with system FFmpeg 6.1.1

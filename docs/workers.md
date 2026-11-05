@@ -50,8 +50,8 @@ intents rather than guessing roots or scopes. Queued work cannot progress withou
 a compatible embedded or standalone consumer.
 
 The pipeline performs bounded manifests and streamed hashes, native JPEG/PNG/GIF/WebP
-metadata, whitelisted image EXIF/animation, controlled AVIF primary items/sequences
-and MP4/MOV/MKV/WebM metadata,
+metadata, whitelisted image EXIF/animation, controlled AVIF primary items/sequences,
+classic TIFF first-page dimensions/EXIF and MP4/MOV/MKV/WebM metadata,
 then fenced indexed publication. Indexed resources and authorized originals become
 available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
@@ -67,7 +67,7 @@ explicit failed work. External image capabilities and variant processing remain
 under development. Video uses the fail-closed [codec sandbox](codec-sandbox.md),
 with strict JSON, codec/geometry/duration checks, orthogonal display transforms
 and explicitly zoned creation tags. Its private trusted-installation epoch joins
-inspector v9/resource policy in immutable staging, with per-child epoch checks and
+inspector v10/resource policy in immutable staging, with per-child epoch checks and
 post-probe source rehashing. Keep trusted codecs immutable while workers run.
 Missing tools/kernel support count as unsupported failed media, not successful or
 silently skipped work; the current container still does not include codecs.
@@ -93,6 +93,16 @@ extents, ordered transforms and primary-associated EXIF; image timing comes from
 sample tables and declared edit repetition, never FPS. Unknown/unsupported profiles stay explicit.
 Missing a required profile cannot bless AVIF from headers; the independent FFprobe
 and image-header runtime pins are collected before database writers. See [AVIF boundaries](media.md#controlled-avif-metadata).
+
+Classic TIFF also uses the fixed image-header profile. A bounded native first-page
+reader validates dimensions, strip/tile local extents and only primary EXIF;
+page-chain cycles, unsupported raw/reduced/SubIFD profiles and resource excesses
+fail closed. TIFF pages are not animation, so all frame/loop/animation/duration
+fields stay null. Metadata reads can seek to scattered fields without loading
+compressed pixels or the whole source prefix. Each directory has at most 512
+entries, page traversal is capped at `min(max_frames, 4096)`, and each offset/count
+vector has at most 1,048,576 values within the shared byte budget. BigTIFF and
+recognized RAW profiles remain unsupported. See [TIFF boundaries](media.md#controlled-classic-tiff-metadata).
 
 ## Strict YAML policies
 
@@ -150,17 +160,17 @@ scheduler:
 | `scanner.timeout`          | 1s..24h for one source's complete pipeline, including ownership waiting.                         |
 | `inspection.max_pixels`    | 1..1,000,000,000 encoded image/video pixels; no native image pixel allocation.                   |
 | `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                                               |
-| `inspection.max_frames`    | 1..100,000 image-animation frames; default 10,000.                                               |
+| `inspection.max_frames`    | 1..100,000 image-animation frames; default 10,000. TIFF page chains also cap at 4096.            |
 | `inspection.max_duration`  | 1ms..24h declared image cycle or video track/container duration; not loop time.                  |
 | `inspection.header_bytes`  | 512 bytes..32 MiB per native metadata input pass; PNG/GIF/WebP require complete files.           |
 | `inspection.timeout`       | 1s..1m per file across native passes or the sandboxed video probe.                               |
 | `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.                                  |
 | `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.                           |
 
-Video also has the [sandbox's fixed budgets](codec-sandbox.md), including a 32 GiB
-input-file ceiling and an 8 MiB demuxer probe budget. `header_bytes` and `max_frames`
-limit native image inspection, not a guessed video frame count. Do not assume a
-larger scanner file limit overrides codec limits.
+Fixed external probes also have the [sandbox's budgets](codec-sandbox.md), including
+a 32 GiB input-file ceiling; FFprobe additionally uses an 8 MiB demuxer probe budget.
+`header_bytes` and `max_frames` limit native image inspection, not a guessed video
+frame count. Do not assume a larger scanner file limit overrides codec limits.
 
 Source-specific mapping, minimum-file and scheduling policies remain API resources,
 not arbitrary filesystem paths or commands in job payloads. Target/incremental

@@ -41,7 +41,7 @@ func safeMIME(value string) string {
 // and forced attachment policy; this never expands the inline READY preset list.
 func originalMIME(value string) string {
 	kind, _, err := mime.ParseMediaType(value)
-	if err == nil && (mediaExtensions[kind] != "" || kind == "video/quicktime" || kind == "video/x-matroska") {
+	if err == nil && (mediaExtensions[kind] != "" || kind == "video/quicktime" || kind == "video/x-matroska" || kind == "image/tiff") {
 		return kind
 	}
 	return "application/octet-stream"

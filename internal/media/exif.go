@@ -101,15 +101,45 @@ func jpegEXIF(ctx context.Context, file *os.File, budget int64) (*int64, *time.T
 	}
 }
 
-// parseEXIF reads orientation and explicitly zoned original time/subseconds from
-// caller-bounded classic TIFF (JPEG APP1, PNG eXIf or WebP EXIF). Fractions are
-// normalized to DB milliseconds. An unzoned clock is never host time or file mtime.
+// parseEXIF reads only the classic-TIFF whitelist from a caller-bounded profile.
+// The same reader serves scattered TIFF fields without copying source pixels.
 func parseEXIF(data []byte) (*int64, *time.Time, error) {
-	if len(data) < 8 {
-		return nil, nil, errEXIF
+	return readEXIF(func(offset, length int64) ([]byte, error) {
+		if offset < 0 || length < 0 || offset > int64(len(data)) || length > int64(len(data))-offset {
+			return nil, errEXIF
+		}
+		return data[offset : offset+length], nil
+	})
+}
+
+func readTIFFDirectory(read func(int64, int64) ([]byte, error), order binary.ByteOrder, offset uint32) ([]byte, uint32, error) {
+	if offset < 8 {
+		return nil, 0, errEXIF
+	}
+	countBytes, err := read(int64(offset), 2)
+	if err != nil {
+		return nil, 0, err
+	}
+	count := int64(order.Uint16(countBytes))
+	if count > 512 {
+		return nil, 0, errMetadataLimit
+	}
+	data, err := read(int64(offset)+2, count*12+4)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data[:count*12], order.Uint32(data[count*12:]), nil
+}
+
+// Fractions are normalized to DB milliseconds; an unzoned clock is never host
+// time or mtime. GPS, MakerNote, thumbnails and next-page EXIF are not followed.
+func readEXIF(read func(int64, int64) ([]byte, error)) (*int64, *time.Time, error) {
+	header, err := read(0, 8)
+	if err != nil {
+		return nil, nil, err
 	}
 	var order binary.ByteOrder
-	switch string(data[:2]) {
+	switch string(header[:2]) {
 	case "II":
 		order = binary.LittleEndian
 	case "MM":
@@ -117,23 +147,13 @@ func parseEXIF(data []byte) (*int64, *time.Time, error) {
 	default:
 		return nil, nil, errEXIF
 	}
-	if order.Uint16(data[2:4]) != 42 {
+	if order.Uint16(header[2:4]) != 42 {
 		return nil, nil, errEXIF
 	}
-	first := order.Uint32(data[4:8])
+	first := order.Uint32(header[4:8])
 	entries := func(offset uint32) ([]byte, error) {
-		if offset < 8 || uint64(offset)+2 > uint64(len(data)) {
-			return nil, errEXIF
-		}
-		count := uint64(order.Uint16(data[offset : offset+2]))
-		if count > 512 {
-			return nil, errMetadataLimit
-		}
-		start := uint64(offset) + 2
-		if start+count*12+4 > uint64(len(data)) {
-			return nil, errEXIF
-		}
-		return data[start : start+count*12], nil
+		data, _, err := readTIFFDirectory(read, order, offset)
+		return data, err
 	}
 	base, err := entries(first)
 	if err != nil {
@@ -182,11 +202,15 @@ func parseEXIF(data []byte) (*int64, *time.Time, error) {
 		if length <= 4 {
 			value = entry[8 : 8+length]
 		} else {
-			offset := uint64(order.Uint32(entry[8:12]))
-			if offset < 8 || offset+uint64(length) > uint64(len(data)) {
+			offset := int64(order.Uint32(entry[8:12]))
+			if offset < 8 {
 				return "", errEXIF
 			}
-			value = data[offset : offset+uint64(length)]
+			var err error
+			value, err = read(offset, int64(length))
+			if err != nil {
+				return "", err
+			}
 		}
 		if value[len(value)-1] != 0 || strings.ContainsRune(string(value[:len(value)-1]), 0) {
 			return "", errEXIF

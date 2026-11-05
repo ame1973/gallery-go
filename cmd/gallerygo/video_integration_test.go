@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -77,8 +78,8 @@ func assertCompiledOriginal(t *testing.T, api *scanHTTPSClient, id string, sourc
 	t.Helper()
 	var original []byte
 	headers := api.request("GET", "/media/"+id+"/original", nil, 200, &original)
-	if !bytes.Equal(original, source) || headers.Get("Content-Type") != mime || headers.Get("Cache-Control") != "private, no-store" {
-		t.Fatal("compiled video probe rewrote bytes or bypassed protected serving", headers)
+	if !bytes.Equal(original, source) || headers.Get("Content-Type") != mime || headers.Get("Cache-Control") != "private, no-store" || !strings.HasPrefix(headers.Get("Content-Disposition"), "attachment;") {
+		t.Fatal("compiled media probe rewrote bytes or bypassed protected serving", headers)
 	}
 	request, err := http.NewRequestWithContext(t.Context(), "GET", api.origin+"/api/v2/media/"+id+"/original", nil)
 	if err != nil {

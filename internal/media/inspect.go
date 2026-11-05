@@ -42,9 +42,9 @@ func (policy InspectPolicy) Validate() error {
 	return nil
 }
 
-// Inspection is bounded metadata, not a decoded/READY derivative or a claim that
-// every codec/frame is valid. Native images and sandboxed video have distinct
-// bounded paths; other formats retain an explicit unavailable-capability result.
+// Inspection is bounded metadata, not full pixel/frame decoding or a READY variant.
+// Native readers and fixed sandboxed image/video probes have distinct bounded
+// paths; other formats retain an explicit unavailable-capability result.
 // No GPS/raw tags, paths, stderr, or worker capabilities enter this DTO.
 // CaptureAt requires explicitly zoned whitelisted EXIF/container evidence; an
 // unzoned camera clock never assumes the server timezone.
@@ -155,6 +155,13 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 				result.LoopCount = &metadata.loops
 			}
 		}
+	} else if codec == "tiff" {
+		var metadata tiffInfo
+		metadata, metadataErr = inspectTIFF(ctx, file, before.Size(), policy)
+		if metadataErr == nil {
+			result.Status, result.Width, result.Height = "ok", &metadata.width, &metadata.height
+			result.Orientation, result.CaptureAt = metadata.orientation, metadata.capture
+		}
 	} else if kind == "video" {
 		var metadata videoInfo
 		metadata, metadataErr = inspectVideo(ctx, file, codec, policy)
@@ -214,9 +221,9 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 	switch {
 	case errors.Is(metadataErr, errMetadataLimit):
 		result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
-	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported), errors.Is(metadataErr, errAVIFUnsupported), errors.Is(metadataErr, errVideoUnsupported):
+	case errors.Is(metadataErr, errGIFUnsupported), errors.Is(metadataErr, errPNGUnsupported), errors.Is(metadataErr, errAVIFUnsupported), errors.Is(metadataErr, errTIFFUnsupported), errors.Is(metadataErr, errVideoUnsupported):
 		result = inspectionFailure(result, "unsupported", "CODEC_UNAVAILABLE")
-	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, errAVIF), errors.Is(metadataErr, errVideoMetadata), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+	case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, errGIF), errors.Is(metadataErr, errPNG), errors.Is(metadataErr, errWebP), errors.Is(metadataErr, errAVIF), errors.Is(metadataErr, errTIFF), errors.Is(metadataErr, errVideoMetadata), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
 		result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
 	case metadataErr != nil:
 		return Inspection{}, metadataErr
@@ -301,7 +308,7 @@ func sniffMedia(header []byte) (kind, mime, codec string) {
 	case "video/mp4":
 		return "video", mime, "mp4"
 	}
-	if len(header) >= 4 && (string(header[:4]) == "II\x2a\x00" || string(header[:4]) == "MM\x00\x2a") {
+	if len(header) >= 4 && (string(header[:4]) == "II\x2a\x00" || string(header[:4]) == "MM\x00\x2a" || string(header[:4]) == "II\x2b\x00" || string(header[:4]) == "MM\x00\x2b") {
 		return "image", "image/tiff", "tiff"
 	}
 	return "", "application/octet-stream", ""

@@ -7,8 +7,8 @@ mount, fallback credential, anonymous thumbnail URL, or original-download bypass
 **Current scope:** protected serving, native image inventory and controlled video
 metadata publication are implemented. Native JPEG/PNG/GIF/WebP dimensions,
 whitelisted image EXIF, GIF/APNG/WebP frame/cycle/loop metadata, controlled AVIF
-primary-item/sequence metadata and sandboxed MP4/MOV/MKV/WebM codec/geometry/
-duration/transform/creation evidence are available.
+primary-item/sequence metadata, classic TIFF first-page dimensions/EXIF and sandboxed
+MP4/MOV/MKV/WebM codec/geometry/duration/transform/creation evidence are available.
 External image capabilities, normal variant publication, gallery/player screens,
 and offline manifests remain under development. A fresh installation has no indexed
 media until a configured source is scanned; test fixtures are not production seed
@@ -61,7 +61,7 @@ when evidence is absent:
   already does. Video uses equivalent validated orthogonal display transforms as
   described below; browser video decoders may already apply that transform. Never
   transform twice. Generated orientation-normalized variants are still pending.
-- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP/AVIF
+- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG/PNG/WebP/AVIF/TIFF
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
   substitutes file mtime, modification/digitization time, or its own timezone.
@@ -72,8 +72,8 @@ when evidence is absent:
   ASCII-space padding is allowed; non-digits, duplicate tags and unsafe counts/offsets
   are rejected. The subsecond ASCII value is capped at 64 bytes including its NUL.
 
-Only bounded JPEG APP1/PNG eXIf/WebP EXIF/primary-associated AVIF Exif classic-TIFF
-orientation and original time/offset fields are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
+Only bounded JPEG APP1/PNG eXIf/WebP EXIF/primary-associated AVIF Exif profiles and
+classic TIFF's first-page orientation/original-time whitelist are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
 must occur once before IDAT. WebP accepts a raw TIFF profile or its Exif prefix.
 Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
 and header/entry resource limits produce explicit invalid-media work without trusted
@@ -135,6 +135,43 @@ Unchanged rescans retain it; format changes replace stale animation/timing/EXIF 
 fresh evidence. Full pixel validation, generated animation/static fallbacks and
 playback variants remain separate implementation/acceptance work. These fields do
 not grant preview/original access or establish player/offline readiness.
+
+## Controlled classic TIFF metadata
+
+Classic little- and big-endian TIFF uses a bounded native directory reader plus the
+mandatory fixed libvips header sandbox. The first full-resolution page supplies
+encoded dimensions and the same orientation/original-date/explicit-offset/subsecond
+whitelist described above. Its codec is `tiff`. The isolated `tiffload` summary must
+agree with the native geometry; missing isolation or tools cannot turn native
+headers into successful metadata. No pixels are allocated in the Go reader.
+
+- Root dimensions and whitelisted fields reject duplicates, invalid types/counts,
+  unsafe offsets and ambiguous EXIF. Only the primary page's EXIF is considered.
+  Missing timezone stays null even if a later page supplies one.
+- Declared strip or tile offset/length vectors must pair, remain bounded, and point
+  to nonempty local source extents. The reader skips compressed pixels and private
+  tag payloads. It does not prove their complete decompression or color correctness.
+- Each directory has at most 512 entries. The next-page chain rejects cycles and
+  is capped at the smaller of `inspection.max_frames` and 4096 directories. Each
+  strip/tile vector has at most 1,048,576 values and also shares the metadata byte
+  budget. `inspection.header_bytes` counts actual native bytes read, not the largest
+  offset: valid scattered fields do not require copying the whole source prefix.
+- TIFF document pages are **not** image animation. `animated`, `frame_count`,
+  `loop_count` and `duration_ms` remain null, including for a multipage document.
+  The first page is not replaced by a thumbnail, concatenated page stack or inferred
+  animation timeline.
+- BigTIFF, DNG/recognized camera-RAW profiles, reduced/mask-first images, SubIFD
+  primary selection and unknown compression/photometric profiles remain explicitly
+  unsupported. They do not establish deployment support for arbitrary TIFF or RAW.
+  Corrupt directories/extents are invalid media; byte/page/pixel/entry limits fail
+  with `MEDIA_LIMIT`, never partially trusted fields.
+
+The original still requires its extra download grant and is served as an
+`image/tiff` attachment. This does not add TIFF to inline READY variant MIME types,
+produce a preview, or establish full TIFF decoder/browser support. Owned uncompressed,
+Deflate, tiled, strip-vector, endian and multipage vectors exercise publication and
+format rewrites without changing source bytes. Source/runtime/configuration/lease
+pins and the post-inspection full hash remain mandatory.
 
 ## Controlled AVIF metadata
 

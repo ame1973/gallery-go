@@ -5,7 +5,7 @@
 GalleryGo has two finite fixed metadata profiles: `/usr/bin/ffprobe` and
 `/usr/bin/vipsheader`, both inside the same mandatory Linux boundary. The latter
 returns only its default geometry summary, never raw all-fields/history output.
-They support [controlled AVIF/video metadata](media.md); this is not full HEIF/TIFF/
+They support [controlled AVIF/TIFF/video metadata](media.md); this is not full HEIF/TIFF/
 RAW decoding, generated variants, a new API or a configurable command runner.
 The current container does not bundle these tools.
 
@@ -120,7 +120,8 @@ discarded, not returned or logged as API details. Failure returns no partial met
 The image summary parser allows at most 1 KiB, exactly one fixed `/proc/self/fd/3`
 line, bounded positive geometry/bands, supported numeric pixel types and safe enum
 identifiers. Extra lines, paths, field maps and unknown syntax are rejected. It
-cross-checks native primary/grid geometry without publishing the summary itself.
+cross-checks native AVIF primary/grid or TIFF first-page geometry without publishing
+the summary itself. TIFF multipage documents are not accepted as animation evidence.
 
 Sandbox output is still **untrusted**. Before publication, the scan inspector
 validates this projection, normalizes capture times to UTC milliseconds without
