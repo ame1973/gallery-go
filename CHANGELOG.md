@@ -16,17 +16,23 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Embedded scan execution in `serve` and a standalone `gallerygo worker` command
+  using the same queue, immutable roots, native handler, and strict YAML resource
+  limits. Coordinated shutdown and real compiled CLI/HTTPS ingestion, repeat
+  identity, source-outage and no-asset worker tests. Scheduling, source/process
+  readiness, external codecs and indexed SIGKILL recovery remain pending.
+
 - A versioned-intent scan handler connecting durable execution to read-only inventory,
   native metadata, and indexed publication. Multi-source failures retain healthy
   results, diagnostics and progress commit atomically, live source owners are not
-  stolen, and cancellation/configuration/lease fences remain mandatory. App/CLI
-  consumer wiring, scheduling, and indexed process-crash acceptance are still pending.
+  stolen, and cancellation/configuration/lease fences remain mandatory. Scheduling,
+  source/process readiness and indexed process-crash acceptance remain pending.
 
 - Administrator-only scan enqueue for full/incremental source, album-target, and
   all-source intents; bounded immutable configuration snapshots, distinct dedupe
   purposes, historical receipts, atomic dependency/audit events, explicitly nullable
   selection fields, generated contracts/types, and real HTTPS regressions. Accepted
-  jobs remain queued until executable workers and scheduling are wired.
+  jobs require a compatible embedded or standalone worker; 202 is not completion.
 
 - Durable private job-resource dependencies with creation-transaction-only binding,
   primary-resource backfill, and atomic source-change cancellation of multi-source
@@ -36,8 +42,8 @@ All notable public changes are recorded here. This project uses Conventional Com
   frozen unique rename matching, owned immutable media revisions, retained album/
   person overrides and interactions, source/path-bound people, scoped reconciliation,
   conservative missing/quarantine evidence, and atomic source/job/event completion.
-  Executable worker wiring, scheduling, and real process-level
-  indexed-ingestion recovery acceptance are still pending.
+  Scheduling, source/process readiness and indexed process-crash recovery acceptance
+  are still pending.
 
 - Immutable per-path metadata staging with inspector-policy pins, streamed hash
   revalidation, explicit skipped/failed outcomes, atomic progress/issue events, and
@@ -51,11 +57,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 - Bounded root-confined inventory walking with streamed hashes, read-only regular
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
-  Runnable scan workers are not available yet.
+  These guards are shared by embedded and standalone native consumers.
 
 - Fenced durable inventory generations, bounded immutable staging, co-committed
   job progress, safe issue history, and complete double-pass/minimum-file sealing.
-  Integrated scan handlers and runnable scan workers are not yet wired.
+  Staging alone never publishes indexed resources.
 
 - Registry-selected source configuration services with independent policy epochs,
   configurable album/person folder depths, safe reachability checks, atomic scope
@@ -64,7 +70,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   original bytes, preventing reachability probes from blessing stale inventories.
 - Administrative source/root-name APIs, versioned updates, read-only checks, safe
   empty deletion, nested strict JSON, generated types, usage docs, and HTTPS tests.
-  Inventory workers and scheduling are not yet wired.
+  Automatic inventory scheduling is not yet wired.
 
 - Durable SQLite job leases, heartbeats, bounded retries/dead letters, cooperative
   cancellation, restart reclamation, and transaction-fenced completion.
@@ -74,7 +80,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   propagation, safe handler diagnostics, and graceful retry/dead-letter settlement.
 - Administrator-only job/attempt history and versioned cancel/retry HTTPS APIs,
   filter/sort-bound cursors, generated types, and replay/rollback/authorization tests.
-  App/CLI worker wiring and source scanning are not yet available.
+  Native source scans are executable; complete media processing is still pending.
 
 - Session-protected media metadata, current-ready variant URLs, original-download
   policy, GET/HEAD/single-Range, strong ETag/conditional handling, and private errors.

@@ -67,6 +67,11 @@ func TestConfigSymlinkOverlap(t *testing.T) {
 	}
 	c := Config{Listen: ":8080", BaseURL: "https://localhost", Database: "data/db", CacheRoot: "alias/cache", WebRoot: "web", Sources: []Source{{Name: "A", Root: "photos", Marker: ".mounted"}}}
 	c.Auth = auth.DefaultPolicy()
+	defaults, err := LoadConfig(writeConfig(t, "sources: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Worker, c.Scanner, c.Inspection = defaults.Worker, defaults.Scanner, defaults.Inspection
 	if err := c.validate(dir); err == nil {
 		t.Fatal("symlink overlap accepted")
 	}

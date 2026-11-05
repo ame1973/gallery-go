@@ -21,7 +21,7 @@ tags:
   - name: Library
     description: Session-protected metadata filtered by the shared SQL authorization predicate.
   - name: Sources
-    description: Registry-selected read-only source configuration and safe reachability checks. Inventory workers remain under development.
+    description: Registry-selected read-only source configuration, safe reachability checks, and native scan workers. Complete external metadata and scheduling remain under development.
   - name: Jobs
     description: Versioned administrative job history and online-only cancellation/retry controls.
   - name: Media
@@ -467,7 +467,7 @@ paths:
     post:
       operationId: enqueueScan
       summary: Enqueue a durable read-only inventory intent
-      description: Administrator only. Select an active source, a source-backed album, or all active registered sources by omitting or nulling both IDs. A supplied source constraint must match the album. Canonical mode/selection/configuration snapshots deduplicate identical active intents; scan and reprocess never coalesce. Targets and source dependencies are private durable rows, not filesystem paths or unbounded JSON. This operation performs no filesystem I/O. A 202 response means accepted/queued, not ingested; executable scan workers and scheduling are not wired yet. No active sources returns SCAN_NO_SOURCES. Retry the same key/body for the historical accepted result.
+      description: Administrator only. Select an active source, a source-backed album, or all active registered sources by omitting or nulling both IDs. A supplied source constraint must match the album. Canonical mode/selection/configuration snapshots deduplicate identical active intents; scan and reprocess never coalesce. Targets and source dependencies are private durable rows, not filesystem paths or unbounded JSON. This operation performs no filesystem I/O. A 202 response means accepted/queued, not ingested; a compatible embedded or standalone native worker executes the intent. Automatic scheduling remains under development. No active sources returns SCAN_NO_SOURCES. Retry the same key/body for the historical accepted result.
       tags: [Jobs]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1320,7 +1320,7 @@ components:
             minimum: 10,
             maximum: 604800,
             default: 86400,
-            description: Must be at least poll_interval_seconds. Scheduling policies are stored; inventory workers are not available yet.,
+            description: Must be at least poll_interval_seconds. Scheduling policies are stored; automatic scheduling is not wired yet.,
           }
     SourcePatch:
       type: object

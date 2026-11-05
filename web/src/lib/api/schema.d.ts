@@ -394,7 +394,7 @@ export interface paths {
         put?: never;
         /**
          * Enqueue a durable read-only inventory intent
-         * @description Administrator only. Select an active source, a source-backed album, or all active registered sources by omitting or nulling both IDs. A supplied source constraint must match the album. Canonical mode/selection/configuration snapshots deduplicate identical active intents; scan and reprocess never coalesce. Targets and source dependencies are private durable rows, not filesystem paths or unbounded JSON. This operation performs no filesystem I/O. A 202 response means accepted/queued, not ingested; executable scan workers and scheduling are not wired yet. No active sources returns SCAN_NO_SOURCES. Retry the same key/body for the historical accepted result.
+         * @description Administrator only. Select an active source, a source-backed album, or all active registered sources by omitting or nulling both IDs. A supplied source constraint must match the album. Canonical mode/selection/configuration snapshots deduplicate identical active intents; scan and reprocess never coalesce. Targets and source dependencies are private durable rows, not filesystem paths or unbounded JSON. This operation performs no filesystem I/O. A 202 response means accepted/queued, not ingested; a compatible embedded or standalone native worker executes the intent. Automatic scheduling remains under development. No active sources returns SCAN_NO_SOURCES. Retry the same key/body for the historical accepted result.
          */
         post: operations["enqueueScan"];
         delete?: never;
@@ -890,7 +890,7 @@ export interface components {
             poll_interval_seconds: number;
             /**
              * Format: int64
-             * @description Must be at least poll_interval_seconds. Scheduling policies are stored; inventory workers are not available yet.
+             * @description Must be at least poll_interval_seconds. Scheduling policies are stored; automatic scheduling is not wired yet.
              * @default 86400
              */
             full_scan_interval_seconds: number;

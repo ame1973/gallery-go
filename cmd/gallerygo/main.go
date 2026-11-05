@@ -40,7 +40,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 
 func runWithInput(ctx context.Context, args []string, input io.Reader, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: gallerygo <serve|migrate|bootstrap-admin|doctor|healthcheck|version> [--config config.yaml]")
+		return errors.New("usage: gallerygo <serve|worker|migrate|bootstrap-admin|doctor|healthcheck|version> [--config config.yaml]")
 	}
 	if args[0] == "version" {
 		if len(args) != 1 {
@@ -49,7 +49,7 @@ func runWithInput(ctx context.Context, args []string, input io.Reader, out io.Wr
 		_, err := fmt.Fprintln(out, version)
 		return err
 	}
-	if args[0] != "serve" && args[0] != "migrate" && args[0] != "doctor" && args[0] != "healthcheck" && args[0] != "bootstrap-admin" {
+	if args[0] != "serve" && args[0] != "worker" && args[0] != "migrate" && args[0] != "doctor" && args[0] != "healthcheck" && args[0] != "bootstrap-admin" {
 		return fmt.Errorf("unknown command %q", args[0])
 	}
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
@@ -73,6 +73,9 @@ func runWithInput(ctx context.Context, args []string, input io.Reader, out io.Wr
 	}
 	if args[0] == "serve" {
 		return app.Serve(ctx, c, version)
+	}
+	if args[0] == "worker" {
+		return app.Worker(ctx, c)
 	}
 	if args[0] == "healthcheck" {
 		host, port, _ := net.SplitHostPort(c.Listen)

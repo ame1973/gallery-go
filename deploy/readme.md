@@ -1,8 +1,9 @@
 # Container deployment and operations
 
 > This is an authentication/access/content-serving development build, not the
-> complete gallery. Keep it on a trusted development machine; source ingestion,
-> codec processing, gallery/player screens, and offline downloads remain pending.
+> complete gallery. Keep it on a trusted development machine; native read-only scan
+> workers are available, but complete codec processing, gallery/player screens,
+> automatic scheduling, and offline downloads remain pending.
 
 ## Build and initialize
 
@@ -54,7 +55,12 @@ through the [source API](../docs/sources.md); no API accepts arbitrary root path
 or creates a missing mount. Mount sources read-only, with appropriate
 `nodev`/`nosuid`/`noexec` policy and verified NAS I/O timeouts. Root confinement does
 not make stalled kernel filesystem calls cancellable. See [protected media](../docs/media.md).
-Scanning, media codec tooling, and worker commands are not part of this image yet.
+The image includes native scan execution: `serve` starts its embedded consumer by
+default, and `gallerygo worker --config ...` can consume without a listener or web
+assets. See [worker operation](../docs/workers.md) for limits and a dedicated-process
+configuration. Keep the DB on the same host and configure every process with the
+same source pins. Registration alone does not scan; enqueue through the API.
+Complete external media codec tooling and automatic scheduling are not available yet.
 
 For a port change, use the provided non-secret environment example:
 

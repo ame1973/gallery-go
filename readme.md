@@ -9,8 +9,10 @@ Database migrations, health checks, one-time administrator bootstrap, secure log
 password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
-and job history/cancel/retry APIs are available. Management/browsing screens, executable source
-inventory, media processing, playback, and offline downloads are still being built. Do not expose this build
+and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
+publish read-only inventories and native JPEG/PNG/GIF header metadata. Management/
+browsing screens, automatic scheduling, complete media processing, playback, and
+offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 
 ## Requirements
@@ -74,8 +76,9 @@ see [docs/administration.md](docs/administration.md). New regular accounts have 
 library grants, and the last active administrator cannot be removed or disabled.
 [Job controls](docs/jobs.md) describe administrator-only source/all-source/album
 scan enqueue, durable history, truthful attempt counts, versioned cancellation, and
-safe retries. Enqueue returns durable queued acceptance, not ingestion. Executable
-scan consumers and the standalone worker command are not available yet.
+safe retries. Enqueue returns durable queued acceptance, not ingestion. `serve`
+starts a native consumer by default; [worker operation](docs/workers.md) describes
+standalone execution, validated limits, real status, and the remaining codec gates.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another
 terminal. Vite serves `http://127.0.0.1:5173` and proxies `/api` to port 8080.
@@ -88,20 +91,22 @@ that same origin; keep Vite's `/api` proxy pointed at Go.
 | Command                                                           | Behavior                                                               |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `gallerygo migrate --config config.yaml`                          | Validate migration history and atomically apply pending migrations.    |
-| `gallerygo serve --config config.yaml`                            | Require a current database, then serve HTTP and built web assets.      |
+| `gallerygo serve --config config.yaml`                            | Serve HTTP/assets and consume scans unless `worker.embedded: false`.   |
+| `gallerygo worker --config config.yaml`                           | Consume scans without a listener or web asset dependency.              |
 | `gallerygo doctor --config config.yaml`                           | Validate the migration history and run SQLite `quick_check`.           |
 | `gallerygo healthcheck --config config.yaml`                      | Request the running server's readiness endpoint; fail if unavailable.  |
 | `gallerygo bootstrap-admin --config config.yaml --username owner` | Create the first administrator using hidden password input; runs once. |
 | `gallerygo version`                                               | Print the build version.                                               |
 
-`serve` never silently runs migrations. A missing, altered, or future migration
-blocks startup. Stop with Ctrl+C or SIGTERM for graceful shutdown.
+`serve` and `worker` never silently run migrations. A missing, altered, or future
+migration blocks startup. Stop with Ctrl+C or SIGTERM for coordinated graceful shutdown.
 
 ## Configuration
 
 Copy `config.example.yaml`; do not commit your `config.yaml`. YAML fields are
-strict: unknown keys, duplicate keys, multiple documents, and invalid values fail
-startup. Relative paths resolve from the configuration file's directory.
+strict: unknown/duplicate keys, nulls, anchors/aliases/merges, multiple documents,
+excessive nesting, and invalid values fail startup. Relative paths resolve from
+the configuration file's directory.
 
 | Field        | Meaning                                                                    |
 | ------------ | -------------------------------------------------------------------------- |
@@ -122,9 +127,10 @@ control characters; mount markers are normalized root-relative paths. GalleryGo
 does not create source roots or mount markers.
 Declare roots in YAML, then use the [source API](docs/sources.md) to register a
 library/mapping, inspect reachability, or deactivate a source. These operations do
-not scan or purge files. The backend has internal staged-inventory and atomic
-indexed-publication services, but runnable inventory processing and automatic
-scheduling are not available yet.
+not scan or purge files. Explicit scan jobs are consumed by the native worker and
+publish only after healthy manifest/metadata/configuration/lease validation.
+Automatic scheduling is not wired yet. See [workers and resource limits](docs/workers.md)
+for `worker`, `scanner`, and `inspection` YAML settings and supported native capabilities.
 `.env.example` contains only a Compose port setting. The application reads YAML,
 not arbitrary environment variables.
 
@@ -178,7 +184,7 @@ Only implemented endpoints are advertised:
   SQL-authorized metadata, counts, and covers. See [docs/access.md](docs/access.md).
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
-  probed by enqueue, and runtime scan execution is not available yet.
+  probed by enqueue; a compatible embedded or standalone worker executes the job.
 - `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
   and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
 - `GET /api/v2/albums/{album_id}/media`, `/media/{media_id}`, and
@@ -227,7 +233,11 @@ fixtures are read-only files; a separate missing-marker fixture verifies outages
 This uses Node's test-only built-in SQLite module, which may emit an experimental
 warning; there is no production seed command or backdoor route.
 Screenshots/traces live in ignored test-output directories. Tests never use private
-source media or an existing user database.
+source media or an existing user database. These control/seeded-content cases
+explicitly disable the embedded consumer using supported configuration. A separate
+compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
+both worker modes against fresh databases/read-only PNGs, including exact indexed
+metadata/originals, repeat identity, safe source outage and graceful process shutdown.
 
 Tests cover migration rollback/checksum/future-schema detection, concurrent
 migration, per-connection pragmas, FTS5, foreign keys, config/path rejection,

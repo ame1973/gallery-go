@@ -8,6 +8,28 @@ web_root: web/dist
 auth:
   session_idle_timeout: 24h
   session_absolute_timeout: 720h
+# Set embedded: false only when a separate `gallerygo worker` consumes this DB.
+# See docs/workers.md for validated bounds and per-process capacity.
+worker:
+  embedded: true
+  concurrency: 2
+  lease: 30s
+  heartbeat: 5s
+  poll: 500ms
+  max_attempts: 3
+  retry_base: 1s
+  retry_max: 5m
+scanner:
+  max_depth: 64
+  max_files: 1000000
+  max_file_bytes: 34359738368 # 32 GiB
+  batch_size: 128
+  timeout: 6h
+inspection:
+  max_pixels: 120000000
+  max_dimension: 65535
+  header_bytes: 8388608 # 8 MiB
+  timeout: 15s
 # Source roots are never created or written by GalleryGo.
 # Names are unique 1..64-byte UTF-8 labels; markers are normalized relative paths.
 # Register a declared name through /api/v2/admin/sources; paths are never API input.

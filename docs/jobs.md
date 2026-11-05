@@ -1,9 +1,9 @@
 # Administrative job controls
 
 Durable scan enqueue, history, and online-only controls are available through the
-HTTPS API. Executable scan workers, scheduling, the standalone `worker` command,
-and job UI are **not available yet**. Accepted jobs remain queued; a `202` response
-is not successful ingestion or codec processing. Source registration, folder
+HTTPS API. Embedded and standalone [native workers](workers.md) can consume accepted
+scan intents. Scheduling and job UI are **not available yet**. A `202` response is
+not successful ingestion or codec processing. Source registration, folder
 mapping, and separate reachability checks are in [sources.md](sources.md).
 
 All paths below are relative to `/api/v2`. Sign in as an active administrator as
@@ -53,14 +53,15 @@ response to receive its historical accepted result, even if the job was later
 cancelled or a source registration removed. GET the job for its current state.
 Reusing the key for a changed command returns `409 IDEMPOTENCY_CONFLICT`.
 
-The internal queue handler executes bounded inventory, native metadata, and indexed
+The queue handler executes bounded inventory, native metadata, and indexed
 publication for versioned intents. It rejects unpinned or malformed stored targets,
 waits for a live source owner without inventing work, and continues healthy sources
 when another source fails. Failure diagnostics, generation state, and progress commit
 atomically; retryable source failures use the queue's bounded backoff/dead-letter policy.
-There is still no process/CLI scan consumer. Queued acceptance, including for an
-unavailable/unconfigured registered source, is not evidence that bytes are reachable,
-indexed, or decoded. Runtime workers/readiness/scheduling and full ingestion/restart
+`serve` enables a native consumer by default; set `worker.embedded: false` only when
+a standalone worker consumes the same local database. Queued acceptance, including
+for an unavailable/unconfigured source, is not evidence that bytes are reachable,
+indexed, or decoded. Source/process readiness, scheduling, and indexed process-crash
 acceptance remain under development.
 
 ## Inspect history

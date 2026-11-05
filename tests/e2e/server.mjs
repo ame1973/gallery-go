@@ -38,6 +38,9 @@ writeFileSync(
     cache_root: join(directory, 'cache'),
     web_root: resolve('web/dist'),
     sources: [...fixtureSources, ...managementRoots],
+    // These control/seeded-content cases deliberately do not consume their jobs.
+    // Actual ingestion uses the separate compiled CLI integration test.
+    worker: { embedded: false },
   }),
   { mode: 0o600 },
 );

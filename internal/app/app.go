@@ -9,12 +9,9 @@ import (
 	"os"
 	"time"
 
-	"gallerygo/internal/auth"
 	httpapi "gallerygo/internal/http"
 	"gallerygo/internal/jobs"
-	"gallerygo/internal/library"
 	"gallerygo/internal/media"
-	"gallerygo/internal/scanner"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 )
@@ -40,33 +37,36 @@ func Serve(ctx context.Context, c Config, version string) error {
 	} else {
 		f.Close()
 	}
-	authentication, err := auth.New(db, c.Auth)
+	runtime, err := newScanRuntime(db, c)
 	if err != nil {
 		return err
 	}
-	roots := make(map[string]media.SourceRoot, len(c.Sources))
-	for _, source := range c.Sources {
-		roots[source.Name] = media.SourceRoot{Path: source.Root, Marker: source.Marker}
-	}
-	content := media.New(db, authentication, c.CacheRoot, roots)
-	queue, err := jobs.New(db, jobs.DefaultPolicy())
-	if err != nil {
-		return err
-	}
-	work := jobs.NewAdmin(queue, authentication)
-	sources := library.NewSources(db, authentication, queue, roots)
+	content := media.New(db, runtime.authentication, c.CacheRoot, runtime.roots)
+	work := jobs.NewAdmin(runtime.queue, runtime.authentication)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	listener, err := net.Listen("tcp", c.Listen)
 	if err != nil {
 		return err
 	}
 	server := &http.Server{
-		Handler:           httpapi.New(db, assets.FS(), version, authentication, c.BaseURL, content, work, sources, scanner.NewScans(db, authentication, queue)),
+		Handler:           httpapi.New(db, assets.FS(), version, runtime.authentication, c.BaseURL, content, work, runtime.sources, runtime.scans),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 32 << 10,
-		BaseContext:    func(net.Listener) context.Context { return ctx },
+		BaseContext:    func(net.Listener) context.Context { return runCtx },
 	}
 	slog.Info("HTTP server listening", "address", listener.Addr().String(), "version", version)
-	return serveUntilCancelled(ctx, server, listener)
+	if !c.Worker.Embedded {
+		return serveUntilCancelled(runCtx, server, listener)
+	}
+	// Either component's failure stops the other before storage is closed. Workers
+	// stop claiming, cancel active handlers, and settle only still-owned attempts.
+	done := make(chan error, 2)
+	go func() { done <- runtime.run(runCtx, "serve") }()
+	go func() { done <- serveUntilCancelled(runCtx, server, listener) }()
+	err = <-done
+	cancel()
+	return errors.Join(err, <-done)
 }
 
 func serveUntilCancelled(ctx context.Context, server *http.Server, listener net.Listener) error {

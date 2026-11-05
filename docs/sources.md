@@ -2,10 +2,10 @@
 
 Administrators can register declared source roots, configure folder mapping and
 safety policies, and inspect root reachability through the HTTPS API. They can
-also [enqueue durable scan intents](jobs.md), but management screens, executable
-inventory consumers, automatic polling, and the standalone `worker` command are
-**not available yet**. Registration, checks, and queued acceptance do not ingest
-files. A fresh installation still has no indexed media.
+also [enqueue durable scan intents](jobs.md), which the embedded or standalone
+[native worker](workers.md) can execute. Management screens and automatic polling
+are **not available yet**. Registration and reachability checks alone do not ingest
+files. A fresh installation has no indexed media until healthy scan publication.
 
 All paths below are relative to `/api/v2`. Use an active administrator's session,
 configured `Origin`, and session-bound `X-CSRF-Token` as described in
@@ -49,7 +49,7 @@ use default limit 30, maximum 100, and opaque account/scope/collection-bound cur
 | `root_name`                  | Required                      | Exact YAML allowlist label, not an absolute or relative path.                    |
 | `mapping`                    | Album depth 1; person depth 0 | Optional full mapping object described below.                                    |
 | `active`                     | `true`                        | Whether this source's albums and content may be visible.                         |
-| `minimum_files`              | `0`                           | Future completed-scan safety guard, 0..1,000,000,000.                            |
+| `minimum_files`              | `0`                           | Completed whole-source scan safety guard, 0..1,000,000,000.                      |
 | `poll_interval_seconds`      | `60`                          | Stored incremental scheduling policy, 10..86,400 seconds.                        |
 | `full_scan_interval_seconds` | `86400`                       | Stored full-scan policy, at least the poll interval and at most 604,800 seconds. |
 
@@ -172,10 +172,9 @@ paths stay in the manifest and count as skipped metadata work; invalid or unsupp
 media count as failed work, not successful decoding. Metadata, issues, generation
 counters, and job progress/events commit together in bounded batches.
 
-The internal scan handler connects these services to the durable queue, using only
-versioned payloads and immutable selected targets. Process/CLI wiring is not yet
-available. Staging alone publishes no indexed resources or READY variants. The
-internal indexed publisher first
+The scan handler connects these services to the durable embedded/standalone worker,
+using only versioned payloads and immutable selected targets. Staging alone publishes
+no indexed resources or READY variants. The indexed publisher first
 re-walks and rehashes the complete manifest, then rechecks metadata completion,
 source configuration, exact live lease/attempt, cancellation, and generation version
 inside one writer transaction. Source entries, logical media, owned revisions,
@@ -202,10 +201,10 @@ selected scope; a cross-scope rename is deferred with a diagnostic until a full
 publication can resolve it safely. Ownership/library changes revoke historical and
 destination authorization projections without revoking valid login sessions.
 
-The [scan enqueue API](jobs.md) accepts these private durable intents, but no
-scheduler, embedded scan consumer, or runnable worker is available yet. Queued
-acceptance cannot ingest files on a fresh installation by itself. Header inspection
-does not prove complete pixel/frame decoding. External
-codecs, EXIF, animation timing, variant generation, and real process-level indexed
-ingestion/restart acceptance remain pending. These services do not complete the
+The [scan enqueue API](jobs.md) accepts these private durable intents; `serve` consumes
+them by default, or use `worker` with consistent configuration. Automatic scheduling
+and source/process readiness are not wired yet. Queued acceptance alone cannot prove
+successful ingestion. Header inspection does not prove complete pixel/frame decoding. External
+codecs, EXIF, animation timing, variant generation, and indexed SIGKILL/reopened-DB
+recovery acceptance remain pending. These capabilities do not complete the
 source-processing phase or authorize index purge.
