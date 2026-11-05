@@ -16,6 +16,7 @@ import (
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
@@ -101,7 +102,7 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources, scanService *scanner.Scans) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources, scanService *scanner.Scans, readiness *health.Service) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	authorization := authorization{service: access.New(db, service)}
@@ -168,14 +169,13 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		"headOriginal":       content.original,
 		"live":               func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, Health{"ok"}) },
 		"ready": func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-			defer cancel()
-			if err := db.PingContext(ctx); err != nil {
-				slog.Error("readiness database failure", "request_id", w.Header().Get("X-Request-ID"), "error", err)
-				problem(w, http.StatusServiceUnavailable, "NOT_READY", "The metadata database is unavailable.")
+			state, err := readiness.Check(r.Context())
+			if err != nil {
+				slog.Warn("readiness dependency unavailable", "request_id", w.Header().Get("X-Request-ID"), "error", err)
+				problem(w, http.StatusServiceUnavailable, "NOT_READY", "A required service dependency is unavailable.")
 				return
 			}
-			writeJSON(w, http.StatusOK, Health{"ok"})
+			writeJSON(w, http.StatusOK, state)
 		},
 		"publicConfig": func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, PublicConfig{Version: version, OfflineEnabled: false})

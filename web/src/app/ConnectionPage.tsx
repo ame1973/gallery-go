@@ -33,9 +33,13 @@ export function ConnectionPage() {
               </p>
             ) : (
               <>
-                <p className="connection-summary">
+                <p
+                  className={`connection-summary${system.data?.ready.status === 'degraded' ? ' is-degraded' : ''}`}
+                >
                   <span className="connection-dot" aria-hidden="true" />
-                  <FormattedMessage id="connected" />
+                  <FormattedMessage
+                    id={system.data?.ready.status === 'degraded' ? 'degraded' : 'connected'}
+                  />
                 </p>
                 <dl className="connection-details">
                   <div>
@@ -52,6 +56,28 @@ export function ConnectionPage() {
                     </dt>
                     <dd>
                       <FormattedMessage id="healthy" />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <FormattedMessage id="worker" />
+                    </dt>
+                    <dd>
+                      <FormattedMessage
+                        id={system.data?.ready.worker === 'optional' ? 'optionalWorker' : 'healthy'}
+                      />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <FormattedMessage id="sources" />
+                    </dt>
+                    <dd>
+                      <FormattedMessage
+                        id={
+                          system.data?.ready.sources === 'degraded' ? 'needsAttention' : 'healthy'
+                        }
+                      />
                     </dd>
                   </div>
                 </dl>

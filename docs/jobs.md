@@ -59,14 +59,16 @@ publication for versioned intents. It rejects unpinned or malformed stored targe
 waits for a live source owner without inventing work, and continues healthy sources
 when another source fails. Failure diagnostics, generation state, and progress commit
 atomically; retryable source failures use the queue's bounded backoff/dead-letter policy.
-`serve` enables a native consumer by default; set `worker.embedded: false` only when
-a standalone worker consumes the same local database. Queued acceptance, including
+`serve` enables a native consumer by default; set `worker.embedded: false` for a
+standalone consumer, or explicitly use [metadata-only mode](health.md) for maintenance.
+Queued acceptance, including
 for an unavailable/unconfigured source, is not evidence that bytes are reachable,
 indexed, or decoded. `scheduler.enabled: true` dispatches initial/periodic full
 scans and intervening source polls. Identical active manual/scheduled source intents
 coalesce; mode, selection, configuration and reprocess boundaries stay distinct.
-System dispatch creates no administrator session or replay receipt. Source/process
-readiness and indexed process-crash acceptance remain under development.
+System dispatch creates no administrator session or replay receipt. [Readiness](health.md)
+checks committed worker/source evidence without NAS I/O in HTTP. Indexed process-crash
+acceptance remains under development.
 
 ## Inspect history
 

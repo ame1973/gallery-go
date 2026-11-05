@@ -2,8 +2,8 @@
 
 > This is an authentication/access/content-serving development build, not the
 > complete gallery. Keep it on a trusted development machine; native read-only scan
-> workers are available, but complete codec processing, gallery/player screens,
-> source/process readiness, and offline downloads remain pending.
+> workers and readiness are available; complete codec processing, gallery/player
+> screens and offline downloads remain pending.
 
 ## Build and initialize
 
@@ -74,6 +74,27 @@ docker compose --env-file .env -f deploy/compose.yaml up -d
 Do not mount a directory containing `.env`, TLS keys, metadata databases, or NAS
 originals as `web_root`.
 
+## Optional standalone worker
+
+The `worker` Compose profile adds a listener-free consumer using the same hardened
+runtime settings and local metadata/cache volumes:
+
+```sh
+docker compose -f deploy/compose.yaml --profile worker up -d
+docker compose -f deploy/compose.yaml exec worker healthcheck --worker --config /app/config/config.yaml
+```
+
+By default this adds capacity alongside the embedded consumer. To dedicate processing
+to the worker, mount a consistent private config into **both services**, set
+`worker.embedded: false`, and keep `worker.required: true`. Mount the same declared
+sources read-only into both. The server returns 503 until a committed worker
+heartbeat is present. For deliberate metadata-only operation without any consumer,
+set both worker flags false and disable scheduling in every remaining consumer.
+
+The profile overrides the image's HTTP health check with the database-backed worker
+probe. It reports shared dependency readiness, not a particular PID or codec proof;
+the supervisor separately observes the main process. See [health semantics](../docs/health.md).
+
 ## TLS and reverse proxy
 
 The application listens on internal HTTP and expects TLS to terminate at a trusted
@@ -112,12 +133,17 @@ docker compose -f deploy/compose.yaml exec app healthcheck --config /app/config/
 ```
 
 - `/api/v2/health/live` only proves the process is alive.
-- `/api/v2/health/ready` currently checks the metadata database.
+- `/api/v2/health/ready` checks the DB, required committed worker heartbeat and
+  recent source observations. Source warnings return 200/degraded without disabling
+  metadata; missing required workers or failed checks return 503.
+- `healthcheck --worker` checks shared worker/source readiness without HTTP or assets.
 - `doctor` checks migration history and SQLite integrity.
 - Logs are structured JSON on stderr. API failures include a request ID.
 
-NAS, worker-heartbeat, codec, disk-budget, and operational dashboard checks are
-still release work, not capabilities to infer from a successful health response.
+Source observations are bounded database reads, not live NAS I/O in HTTP or proof
+of completed inventory. CLI config validation still resolves filesystem paths.
+Complete codecs, disk-budget and operational dashboards remain release work; do not
+infer them or physical NAS/device acceptance from a successful health response.
 
 ## Upgrades and recovery
 

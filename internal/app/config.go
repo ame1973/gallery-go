@@ -31,7 +31,18 @@ type Source struct {
 
 type WorkerConfig struct {
 	Embedded    bool `yaml:"embedded"`
+	Required    bool `yaml:"required"`
 	jobs.Policy `yaml:",inline"`
+}
+
+func (c WorkerConfig) Validate() error {
+	if err := c.Policy.Validate(); err != nil {
+		return err
+	}
+	if c.Embedded && !c.Required {
+		return errors.New("an embedded worker must be required for readiness")
+	}
+	return nil
 }
 
 type Config struct {
@@ -51,7 +62,7 @@ type Config struct {
 // LoadConfig resolves relative paths against the config file, not the invocation
 // directory. Missing explicit configuration is an error, never a silent fallback.
 func LoadConfig(path string) (Config, error) {
-	c := Config{Listen: "127.0.0.1:8080", BaseURL: "https://localhost:8443", Database: "data/gallerygo.db", CacheRoot: "cache", WebRoot: "web/dist", Auth: auth.DefaultPolicy(), Worker: WorkerConfig{Embedded: true, Policy: jobs.DefaultPolicy()}, Scanner: scanner.DefaultPolicy(), Inspection: media.DefaultInspectPolicy(), Scheduler: scanner.DefaultSchedulePolicy()}
+	c := Config{Listen: "127.0.0.1:8080", BaseURL: "https://localhost:8443", Database: "data/gallerygo.db", CacheRoot: "cache", WebRoot: "web/dist", Auth: auth.DefaultPolicy(), Worker: WorkerConfig{Embedded: true, Required: true, Policy: jobs.DefaultPolicy()}, Scanner: scanner.DefaultPolicy(), Inspection: media.DefaultInspectPolicy(), Scheduler: scanner.DefaultSchedulePolicy()}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return c, err
@@ -120,7 +131,7 @@ func (c *Config) validate(base string) error {
 	if err := c.Auth.Validate(); err != nil {
 		return err
 	}
-	if err := c.Worker.Policy.Validate(); err != nil {
+	if err := c.Worker.Validate(); err != nil {
 		return err
 	}
 	if err := c.Scanner.Validate(); err != nil {

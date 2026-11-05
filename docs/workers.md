@@ -68,6 +68,7 @@ working directory.
 ```yaml
 worker:
   embedded: true
+  required: true
   concurrency: 2
   lease: 30s
   heartbeat: 5s
@@ -91,27 +92,28 @@ scheduler:
   interval: 1s
 ```
 
-| Setting                    | Allowed values and meaning                                               |
-| -------------------------- | ------------------------------------------------------------------------ |
-| `worker.embedded`          | Boolean; controls `serve` only. `worker` always starts a consumer.       |
-| `worker.concurrency`       | 1..16 concurrent jobs **per process**. Multiple processes add capacity.  |
-| `worker.lease`             | 3s..10m live ownership window. Expired owners cannot publish.            |
-| `worker.heartbeat`         | At least 500ms and at most one third of the lease.                       |
-| `worker.poll`              | 100ms..5s idle queue polling. It is not source scheduling.               |
-| `worker.max_attempts`      | 1..10 initial automatic attempts, with retained history.                 |
-| `worker.retry_base`        | 100ms..1m initial bounded exponential backoff.                           |
-| `worker.retry_max`         | At least `retry_base`, at most 1h.                                       |
-| `scanner.max_depth`        | 1..256 source-relative directory levels.                                 |
-| `scanner.max_files`        | 1..10,000,000 inventory paths per source.                                |
-| `scanner.max_file_bytes`   | 1 byte..1 TiB per input; default 32 GiB. Oversize fails closed.          |
-| `scanner.batch_size`       | 1..256 staged paths per batch; memory stays bounded.                     |
-| `scanner.timeout`          | 1s..24h for one source's complete pipeline, including ownership waiting. |
-| `inspection.max_pixels`    | 1..1,000,000,000 image pixels. No native pixel allocation.               |
-| `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                       |
-| `inspection.header_bytes`  | 512 bytes..32 MiB of native header inspection input.                     |
-| `inspection.timeout`       | 1s..1m per native header inspection.                                     |
-| `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.          |
-| `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.   |
+| Setting                    | Allowed values and meaning                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `worker.embedded`          | Boolean; controls `serve` only. `worker` always starts a consumer.                               |
+| `worker.required`          | Boolean, default true. External workers may be optional only for explicit metadata-only servers. |
+| `worker.concurrency`       | 1..16 concurrent jobs **per process**. Multiple processes add capacity.                          |
+| `worker.lease`             | 3s..10m live ownership window. Expired owners cannot publish.                                    |
+| `worker.heartbeat`         | At least 500ms and at most one third of the lease.                                               |
+| `worker.poll`              | 100ms..5s idle queue polling. It is not source scheduling.                                       |
+| `worker.max_attempts`      | 1..10 initial automatic attempts, with retained history.                                         |
+| `worker.retry_base`        | 100ms..1m initial bounded exponential backoff.                                                   |
+| `worker.retry_max`         | At least `retry_base`, at most 1h.                                                               |
+| `scanner.max_depth`        | 1..256 source-relative directory levels.                                                         |
+| `scanner.max_files`        | 1..10,000,000 inventory paths per source.                                                        |
+| `scanner.max_file_bytes`   | 1 byte..1 TiB per input; default 32 GiB. Oversize fails closed.                                  |
+| `scanner.batch_size`       | 1..256 staged paths per batch; memory stays bounded.                                             |
+| `scanner.timeout`          | 1s..24h for one source's complete pipeline, including ownership waiting.                         |
+| `inspection.max_pixels`    | 1..1,000,000,000 image pixels. No native pixel allocation.                                       |
+| `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                                               |
+| `inspection.header_bytes`  | 512 bytes..32 MiB of native header inspection input.                                             |
+| `inspection.timeout`       | 1s..1m per native header inspection.                                                             |
+| `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.                                  |
+| `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.                           |
 
 Source-specific mapping, minimum-file and scheduling policies remain API resources,
 not arbitrary filesystem paths or commands in job payloads. Target/incremental
@@ -138,7 +140,11 @@ reliably interrupt a stalled kernel filesystem call; container supervisors may n
 their configured final stop deadline. Never weaken lease/config fences or edit job
 rows to recover a stalled source. Use the administrative cancel/retry APIs.
 
-Current readiness still checks the metadata database only. Source/process readiness,
-complete external metadata and indexed SIGKILL/reopened-DB acceptance remain pending;
-a successful startup or native scan is not the complete
-source-processing phase or a production-release claim.
+[Readiness](health.md) checks DB access, required committed worker heartbeats and
+recent source observations without probing NAS from HTTP. For metadata-only
+maintenance, explicitly set `worker.embedded: false` and `worker.required: false`;
+this never claims a healthy worker or successful ingestion. The CLI worker probe
+`healthcheck --worker` needs no listener or web assets and still requires a heartbeat.
+Complete external metadata and indexed SIGKILL/reopened-DB acceptance remain pending;
+a successful startup or native scan is not the complete source-processing phase
+or a production-release claim.

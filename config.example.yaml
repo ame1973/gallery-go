@@ -12,6 +12,7 @@ auth:
 # See docs/workers.md for validated bounds and per-process capacity.
 worker:
   embedded: true
+  required: true # Metadata-only servers must set both flags false; see docs/health.md.
   concurrency: 2
   lease: 30s
   heartbeat: 5s

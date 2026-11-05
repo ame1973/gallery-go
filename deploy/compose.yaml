@@ -1,27 +1,35 @@
 name: gallerygo
+x-runtime: &runtime
+  image: gallerygo:local
+  init: true
+  user: '65532:65532'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 1g
+  cpus: 2
+  restart: unless-stopped
+  stop_grace_period: 20s
+  volumes:
+    - metadata:/data
+    - variants:/cache
+  tmpfs:
+    - /tmp:size=256m,mode=1777,noexec,nosuid
 services:
   app:
+    <<: *runtime
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: gallerygo:local
-    init: true
-    user: '65532:65532'
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    pids_limit: 128
-    mem_limit: 1g
-    cpus: 2
-    restart: unless-stopped
-    stop_grace_period: 20s
     ports:
       - '127.0.0.1:${GALLERYGO_PORT:-8080}:8080'
-    volumes:
-      - metadata:/data
-      - variants:/cache
-    tmpfs:
-      - /tmp:size=256m,mode=1777,noexec,nosuid
+  worker:
+    <<: *runtime
+    profiles: [worker]
+    command: [worker, --config, /app/config/config.yaml]
+    healthcheck:
+      test: [CMD, gallerygo, healthcheck, --worker, --config, /app/config/config.yaml]
 volumes:
   metadata:
   variants:

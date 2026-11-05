@@ -14,6 +14,7 @@ import (
 
 	"gallerygo/contracts"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
@@ -44,7 +45,7 @@ func newTestServer(t *testing.T) (*sql.DB, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service))
+	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service), testReadiness(t, db, service, nil))
 }
 
 func testJobAdmin(t *testing.T, db *sql.DB, authentication *auth.Service) *jobs.Admin {
@@ -72,6 +73,15 @@ func testScans(t *testing.T, db *sql.DB, authentication *auth.Service) *scanner.
 		t.Fatal(err)
 	}
 	return scanner.NewScans(db, authentication, queue)
+}
+
+func testReadiness(t *testing.T, db *sql.DB, authentication *auth.Service, roots map[string]media.SourceRoot) *health.Service {
+	t.Helper()
+	queue, err := jobs.New(db, jobs.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return health.New(db, queue, library.NewSources(db, authentication, queue, roots), false)
 }
 
 func TestHealthAndHeaders(t *testing.T) {
@@ -198,7 +208,7 @@ func TestAssetRootRejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
+	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service), testReadiness(t, db, service, nil)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
 	if w.Code != 404 || strings.Contains(w.Body.String(), "PRIVATE") {
 		t.Fatalf("escape: %d %s", w.Code, w.Body.String())
 	}
@@ -265,6 +275,8 @@ func TestOpenAPIRegisteredOperationsAndResponses(t *testing.T) {
 		schemaName := "Health"
 		if op.ID == "publicConfig" {
 			schemaName = "PublicConfig"
+		} else if op.ID == "ready" {
+			schemaName = "Readiness"
 		}
 		schema := spec.Components.Schemas[schemaName]
 		for _, key := range schema.Required {

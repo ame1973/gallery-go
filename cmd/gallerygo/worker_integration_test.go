@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/store"
@@ -241,6 +242,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			api.request("GET", "/auth/csrf", nil, 200, &csrf)
 			api.csrf = csrf.Token
+			if !embedded {
+				api.request("GET", "/health/ready", nil, 503, nil)
+			}
 			var collection struct {
 				ID string `json:"id"`
 			}
@@ -252,6 +256,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				api.request("POST", "/admin/scans", map[string]string{"mode": "full", "source_id": source.ID}, 202, &accepted)
 			}
 			var stopWorker func()
+			probeConfig := config
 			if !embedded {
 				if !scheduled {
 					var queued jobs.Job
@@ -264,6 +269,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				// must not try to bind the already occupied HTTP listener.
 				settings["web_root"] = filepath.Join(directory, "absent-worker-assets")
 				workerConfig := filepath.Join(directory, "worker.yaml")
+				probeConfig = workerConfig
 				write(workerConfig)
 				stopWorker = startCLIProcess(t, binary, workerConfig, "worker")
 				defer stopWorker()
@@ -291,6 +297,20 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			result := api.waitJob(accepted.ID)
 			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 3 || result.Done != 3 || !result.TotalKnown {
 				t.Fatal("compiled native execution failed", result, result.Counts)
+			}
+			var readiness health.Readiness
+			api.request("GET", "/health/ready", nil, 200, &readiness)
+			if readiness.Status != "ok" || readiness.Worker != "ok" || readiness.Sources != "ok" {
+				t.Fatal("committed worker/source evidence not ready", readiness)
+			}
+			for _, args := range [][]string{{"healthcheck", "--config", config}, {"healthcheck", "--worker", "--config", probeConfig}} {
+				output, err := exec.CommandContext(t.Context(), binary, args...).CombinedOutput()
+				if err != nil {
+					t.Fatalf("%v: %v\n%s", args, err, output)
+				}
+				if err := json.Unmarshal(output, &readiness); err != nil || readiness.Status != "ok" || readiness.Worker != "ok" {
+					t.Fatal("CLI readiness did not check real dependencies", readiness, err)
+				}
 			}
 			var albums struct {
 				Items []struct {
@@ -348,10 +368,18 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if data, err := os.ReadFile(name); err != nil || !bytes.Equal(data, input.Bytes()) {
 				t.Fatal("process wrote source file", err)
 			}
+			api.request("GET", "/health/ready", nil, 200, &readiness)
+			if readiness.Status != "degraded" || readiness.Sources != "degraded" || readiness.Worker != "ok" {
+				t.Fatal("source failure hid metadata availability or worker status", readiness)
+			}
 			if stopWorker != nil {
 				stopWorker()
+				api.request("GET", "/health/ready", nil, 503, nil)
 			}
 			stopServer()
+			if output, err := exec.CommandContext(t.Context(), binary, "healthcheck", "--worker", "--config", probeConfig).CombinedOutput(); err == nil {
+				t.Fatal("CLI accepted stopped worker readiness", string(output))
+			}
 			db, err := store.Open(t.Context(), settings["database"].(string))
 			if err != nil {
 				t.Fatal(err)

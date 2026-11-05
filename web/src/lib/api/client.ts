@@ -14,7 +14,17 @@ export async function readSystem(signal: AbortSignal) {
     api.GET('/health/ready', { signal }),
     api.GET('/public/config', { signal }),
   ]);
-  if (!live.data || !ready.data || !config.data) {
+  if (
+    !live.data ||
+    !ready.data ||
+    !config.data ||
+    live.data.status !== 'ok' ||
+    ready.data.database !== 'ok' ||
+    !['ok', 'degraded'].includes(ready.data.status) ||
+    !['ok', 'optional'].includes(ready.data.worker) ||
+    !['ok', 'degraded'].includes(ready.data.sources) ||
+    (ready.data.status === 'degraded') !== (ready.data.sources === 'degraded')
+  ) {
     throw new Error('SYSTEM_UNAVAILABLE');
   }
   return { live: live.data, ready: ready.data, config: config.data };

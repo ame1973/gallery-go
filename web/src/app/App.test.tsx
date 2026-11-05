@@ -17,14 +17,18 @@ function renderApp() {
   );
 }
 
-function healthyFetch() {
+function healthyFetch(
+  readiness: Record<string, string> = { status: 'ok', database: 'ok', worker: 'ok', sources: 'ok' },
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (request: Request) =>
       Response.json(
         request.url.endsWith('/public/config')
           ? { version: 'test-build', offline_enabled: false }
-          : { status: 'ok' },
+          : request.url.endsWith('/health/ready')
+            ? readiness
+            : { status: 'ok' },
       ),
     ),
   );
@@ -48,10 +52,34 @@ describe('service connection', () => {
       vi.fn(async () => Response.json({ code: 'NOT_READY' }, { status: 503 })),
     );
     renderApp();
-    expect(await screen.findByRole('alert')).toHaveTextContent('The service could not be reached');
+    expect(await screen.findByRole('alert')).toHaveTextContent('The service is not ready');
     healthyFetch();
     await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
     expect(await screen.findByText('The service is ready.')).toBeInTheDocument();
+  });
+
+  it('shows degraded source observations without claiming processing or storage success', async () => {
+    healthyFetch({ status: 'degraded', database: 'ok', worker: 'ok', sources: 'degraded' });
+    renderApp();
+    expect(
+      await screen.findByText('The service is available, but media sources need attention.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Needs attention')).toBeInTheDocument();
+    expect(screen.queryByText('The service is ready.')).not.toBeInTheDocument();
+  });
+
+  it('labels an explicitly optional worker instead of claiming a healthy heartbeat', async () => {
+    healthyFetch({ status: 'ok', database: 'ok', worker: 'optional', sources: 'ok' });
+    renderApp();
+    expect(await screen.findByText('Not required')).toBeInTheDocument();
+    expect(screen.getByText('The service is ready.')).toBeInTheDocument();
+  });
+
+  it('does not turn an incomplete readiness response into a successful status', async () => {
+    healthyFetch({ status: 'ok' });
+    renderApp();
+    expect(await screen.findByRole('alert')).toHaveTextContent('The service is not ready');
+    expect(screen.queryByText('The service is ready.')).not.toBeInTheDocument();
   });
 
   it('persists locale and translates the complete page', async () => {

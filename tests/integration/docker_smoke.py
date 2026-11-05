@@ -38,7 +38,7 @@ def main():
         while True:
             try:
                 with opener.open(base + "/api/v2/health/ready", timeout=2) as response:
-                    assert json.load(response) == {"status": "ok"}
+                    assert json.load(response) == {"status": "ok", "database": "ok", "worker": "ok", "sources": "ok"}
                     assert response.headers["Cache-Control"] == "private, no-store"
                 break
             except (OSError, urllib.error.URLError):
@@ -57,7 +57,9 @@ def main():
         result = json.loads(docker("exec", container, "gallerygo", "doctor", "--config", "/app/config/config.yaml"))
         assert result["database"] == "ok" and result["schema"] == "ok"
         docker("exec", container, "gallerygo", "healthcheck", "--config", "/app/config/config.yaml")
-        print("PASS: rootless/read-only container, migrations, HTTP, assets, doctor, healthcheck")
+        worker = json.loads(docker("exec", container, "gallerygo", "healthcheck", "--worker", "--config", "/app/config/config.yaml"))
+        assert worker == {"status": "ok", "database": "ok", "worker": "ok", "sources": "ok"}
+        print("PASS: rootless/read-only container, migrations, HTTP, assets, doctor, source/worker readiness")
     except BaseException:
         print(docker("logs", container), file=sys.stderr)
         raise

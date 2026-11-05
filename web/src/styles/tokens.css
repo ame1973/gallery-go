@@ -8,6 +8,7 @@
   --on-accent: #ffffff;
   --border: #d7e1e7;
   --danger: #a42b37;
+  --warning: #886216;
   --radius: 0.75rem;
   --font-sans: 'Manrope Variable', 'Noto Sans TC', 'Noto Sans SC', sans-serif;
 }
@@ -22,5 +23,6 @@
     --on-accent: #182f3c;
     --border: #435965;
     --danger: #ffb3b9;
+    --warning: #f2cc83;
   }
 }

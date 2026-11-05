@@ -16,11 +16,12 @@ func TestWorkerAndScanResourceDefaultsAndStrictOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.Worker.Embedded || c.Worker.Policy != jobs.DefaultPolicy() || c.Scanner != scanner.DefaultPolicy() || c.Inspection != media.DefaultInspectPolicy() || c.Scheduler != scanner.DefaultSchedulePolicy() {
+	if !c.Worker.Embedded || !c.Worker.Required || c.Worker.Policy != jobs.DefaultPolicy() || c.Scanner != scanner.DefaultPolicy() || c.Inspection != media.DefaultInspectPolicy() || c.Scheduler != scanner.DefaultSchedulePolicy() {
 		t.Fatal("worker safety defaults changed", c.Worker, c.Scanner, c.Inspection)
 	}
 	c, err = LoadConfig(writeConfig(t, `worker:
   embedded: false
+  required: false
   concurrency: 3
   lease: 6s
   heartbeat: 1s
@@ -46,7 +47,7 @@ scheduler:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Worker.Embedded || c.Worker.Concurrency != 3 || c.Worker.Lease != 6*time.Second || c.Worker.Heartbeat != time.Second || c.Worker.Poll != 100*time.Millisecond || c.Worker.MaxAttempts != 2 || c.Worker.RetryBase != 200*time.Millisecond || c.Worker.RetryMax != 2*time.Second || c.Scanner.MaxDepth != 7 || c.Scanner.MaxFiles != 100 || c.Scanner.MaxFileBytes != 1024 || c.Scanner.BatchSize != 4 || c.Scanner.Timeout != 2*time.Minute || c.Inspection.MaxPixels != 999 || c.Inspection.MaxDimension != 22 || c.Inspection.HeaderBytes != 512 || c.Inspection.Timeout != time.Second || c.Scheduler.Enabled || c.Scheduler.Interval != 2*time.Second {
+	if c.Worker.Embedded || c.Worker.Required || c.Worker.Concurrency != 3 || c.Worker.Lease != 6*time.Second || c.Worker.Heartbeat != time.Second || c.Worker.Poll != 100*time.Millisecond || c.Worker.MaxAttempts != 2 || c.Worker.RetryBase != 200*time.Millisecond || c.Worker.RetryMax != 2*time.Second || c.Scanner.MaxDepth != 7 || c.Scanner.MaxFiles != 100 || c.Scanner.MaxFileBytes != 1024 || c.Scanner.BatchSize != 4 || c.Scanner.Timeout != 2*time.Minute || c.Inspection.MaxPixels != 999 || c.Inspection.MaxDimension != 22 || c.Inspection.HeaderBytes != 512 || c.Inspection.Timeout != time.Second || c.Scheduler.Enabled || c.Scheduler.Interval != 2*time.Second {
 		t.Fatal(c.Worker, c.Scanner, c.Inspection)
 	}
 	if _, err := os.Stat(filepath.Dir(c.Database)); !os.IsNotExist(err) {
@@ -56,6 +57,7 @@ scheduler:
 
 func TestWorkerAndScanConfigurationRejectsUnsafeOrAmbiguousPolicy(t *testing.T) {
 	cases := []string{
+		"worker: {required: null}", "worker: {required: arbitrary}", "worker: {embedded: true, required: false}",
 		"worker: null", "worker: {embedded: null}", "worker: {embedded: arbitrary}", "worker: {concurrency: 0}", "worker: {concurrency: 17}",
 		"worker: {lease: 2s}", "worker: {lease: 11m}", "worker: {heartbeat: 0s}", "worker: {lease: 3s, heartbeat: 2s}", "worker: {poll: 0s}",
 		"worker: {max_attempts: 0}", "worker: {max_attempts: 11}", "worker: {retry_base: 0s}", "worker: {retry_base: 2s, retry_max: 1s}",

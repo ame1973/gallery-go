@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -9,17 +10,21 @@ import (
 	"testing"
 	"time"
 
+	"gallerygo/internal/health"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
 )
 
 func TestStandaloneWorkerRequiresMigrationButNotAssetsOrListener(t *testing.T) {
-	c, err := LoadConfig(writeConfig(t, "worker: {embedded: false, concurrency: 1}\nsources: []\n"))
+	c, err := LoadConfig(writeConfig(t, "worker: {embedded: false, required: false, concurrency: 1}\nsources: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := Worker(t.Context(), c); err == nil {
 		t.Fatal("worker silently migrated schema")
+	}
+	if _, err := WorkerReadiness(t.Context(), c); err == nil {
+		t.Fatal("worker readiness silently migrated schema")
 	}
 	db, err := store.Open(t.Context(), c.Database)
 	if err != nil {
@@ -28,6 +33,9 @@ func TestStandaloneWorkerRequiresMigrationButNotAssetsOrListener(t *testing.T) {
 	defer db.Close()
 	if err := store.Migrate(t.Context(), db, migrations.Files); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := WorkerReadiness(t.Context(), c); !errors.Is(err, health.ErrWorkerUnavailable) {
+		t.Fatal("metadata-only config bypassed explicit worker check", err)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -67,6 +75,10 @@ func TestStandaloneWorkerRequiresMigrationButNotAssetsOrListener(t *testing.T) {
 		case <-tick.C:
 		}
 	}
+	state, err := WorkerReadiness(t.Context(), c)
+	if err != nil || state.Status != "ok" || state.Worker != "ok" {
+		t.Fatal(state, err)
+	}
 	cancel()
 	select {
 	case err := <-done:
@@ -79,6 +91,9 @@ func TestStandaloneWorkerRequiresMigrationButNotAssetsOrListener(t *testing.T) {
 	var count int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM workers WHERE state='stopped'`).Scan(&count); err != nil || count != 1 {
 		t.Fatal("worker did not journal shutdown", count, err)
+	}
+	if _, err := WorkerReadiness(t.Context(), c); !errors.Is(err, health.ErrWorkerUnavailable) {
+		t.Fatal("stopped worker remained ready", err)
 	}
 	if _, err := os.Stat(c.WebRoot); !os.IsNotExist(err) {
 		t.Fatal("worker touched web asset directory", err)
@@ -125,13 +140,15 @@ func TestScanRuntimeRejectsInvalidResourcePolicies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, field := range []string{"auth", "worker", "scanner", "inspection", "scheduler"} {
+	for _, field := range []string{"auth", "worker", "required", "scanner", "inspection", "scheduler"} {
 		invalid := c
 		switch field {
 		case "auth":
 			invalid.Auth.Idle = 0
 		case "worker":
 			invalid.Worker.Concurrency = 0
+		case "required":
+			invalid.Worker.Required = false
 		case "scanner":
 			invalid.Scanner.MaxFiles = 0
 		case "inspection":

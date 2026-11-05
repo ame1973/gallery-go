@@ -40,7 +40,7 @@ writeFileSync(
     sources: [...fixtureSources, ...managementRoots],
     // These control/seeded-content cases deliberately do not consume their jobs.
     // Actual ingestion uses the separate compiled CLI integration test.
-    worker: { embedded: false },
+    worker: { embedded: false, required: false },
     scheduler: { enabled: false },
   }),
   { mode: 0o600 },

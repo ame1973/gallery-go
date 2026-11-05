@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"gallerygo/internal/auth"
+	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
@@ -30,6 +31,9 @@ type scanRuntime struct {
 
 func newScanRuntime(db *sql.DB, c Config) (*scanRuntime, error) {
 	if err := c.Scheduler.Validate(); err != nil {
+		return nil, err
+	}
+	if err := c.Worker.Validate(); err != nil {
 		return nil, err
 	}
 	authentication, err := auth.New(db, c.Auth)
@@ -72,6 +76,25 @@ func (r *scanRuntime) run(ctx context.Context, role string) error {
 	err := <-done
 	cancel()
 	return errors.Join(err, <-done)
+}
+
+// WorkerReadiness probes shared ingestion capacity without an HTTP listener. It
+// requires a fresh committed worker heartbeat even for metadata-only server config.
+// This is a dependency check, not identity/liveness proof for a particular process.
+func WorkerReadiness(ctx context.Context, c Config) (health.Readiness, error) {
+	db, err := store.Open(ctx, c.Database)
+	if err != nil {
+		return health.Readiness{}, err
+	}
+	defer db.Close()
+	if err := store.VerifySchema(ctx, db, migrations.Files); err != nil {
+		return health.Readiness{}, err
+	}
+	runtime, err := newScanRuntime(db, c)
+	if err != nil {
+		return health.Readiness{}, err
+	}
+	return health.New(db, runtime.queue, runtime.sources, true).Check(ctx)
 }
 
 // Worker consumes accepted scan intents without a listener or web asset dependency.

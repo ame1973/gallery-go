@@ -209,7 +209,9 @@ schedule active process-configured sources by default; initial/overdue full work
 and incremental polls share the same immutable source-intent keys as manual jobs.
 Disable `scheduler.enabled` in every consumer for manual-only operation. Private
 dispatch deadlines do not imply a healthy scan or advance full-publication evidence.
-Source/process readiness is not wired yet. Queued acceptance alone cannot prove
+[Readiness](health.md) reports degraded for unknown/unavailable/stale/mismatched
+source observations without probing NAS inside an HTTP request. It does not change
+source health or grant inventory authority. Queued acceptance alone cannot prove
 successful ingestion. Header inspection does not prove complete pixel/frame decoding. External
 codecs, EXIF, animation timing, variant generation, and indexed SIGKILL/reopened-DB
 recovery acceptance remain pending. These capabilities do not complete the

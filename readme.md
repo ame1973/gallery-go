@@ -11,7 +11,7 @@ Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
 publish read-only inventories and native JPEG/PNG/GIF header metadata. Management/
-browsing screens, source/process readiness, complete media processing, playback, and
+browsing screens, complete media processing, playback, and
 offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 
@@ -94,7 +94,8 @@ that same origin; keep Vite's `/api` proxy pointed at Go.
 | `gallerygo serve --config config.yaml`                            | Serve HTTP/assets and consume scans unless `worker.embedded: false`.   |
 | `gallerygo worker --config config.yaml`                           | Consume scans without a listener or web asset dependency.              |
 | `gallerygo doctor --config config.yaml`                           | Validate the migration history and run SQLite `quick_check`.           |
-| `gallerygo healthcheck --config config.yaml`                      | Request the running server's readiness endpoint; fail if unavailable.  |
+| `gallerygo healthcheck --config config.yaml`                      | Request HTTP database/worker/observed-source readiness.                |
+| `gallerygo healthcheck --worker --config config.yaml`             | Check shared worker/source readiness from local SQLite, without HTTP.  |
 | `gallerygo bootstrap-admin --config config.yaml --username owner` | Create the first administrator using hidden password input; runs once. |
 | `gallerygo version`                                               | Print the build version.                                               |
 
@@ -160,7 +161,8 @@ The public contract is [contracts/openapi.yaml](contracts/openapi.yaml).
 Only implemented endpoints are advertised:
 
 - `GET /api/v2/health/live`: HTTP process is alive.
-- `GET /api/v2/health/ready`: metadata database is reachable.
+- `GET /api/v2/health/ready`: database, required committed worker heartbeat, and
+  recent observed source readiness; source warnings degrade without disabling metadata.
 - `GET /api/v2/public/config`: non-sensitive version and capability information.
 - `POST /api/v2/auth/login`, `/auth/logout`, `/auth/password`: authentication and
   password changes with strict JSON, Origin, and session-bound CSRF protections.
@@ -199,7 +201,11 @@ Only implemented endpoints are advertised:
 HEAD is supported for these GET endpoints. API responses use
 `Cache-Control: private, no-store`. Errors use `application/problem+json` with a
 stable `code` and `request_id`; internal paths and SQL are not disclosed.
-Currently readiness does **not** claim NAS, worker, or codec readiness.
+Readiness exposes no private source/worker details and performs no NAS I/O in the
+HTTP request. Missing required workers return 503; unknown/stale/unavailable source
+observations return 200 with `status: degraded`. Explicit metadata-only mode uses
+`worker.embedded: false` and `worker.required: false`. See [health semantics](docs/health.md).
+Neither a heartbeat nor reachability proves inventory, codec, or physical NAS acceptance.
 
 ```sh
 pnpm api:lint

@@ -57,6 +57,10 @@ func runWithInput(ctx context.Context, args []string, input io.Reader, out io.Wr
 	configPath := flags.String("config", "config.yaml", "Path to the YAML configuration")
 	var username string
 	var passwordStdin bool
+	var workerCheck bool
+	if args[0] == "healthcheck" {
+		flags.BoolVar(&workerCheck, "worker", false, "Check shared worker readiness from the local database without HTTP")
+	}
 	if args[0] == "bootstrap-admin" {
 		flags.StringVar(&username, "username", "", "Initial administrator username")
 		flags.BoolVar(&passwordStdin, "password-stdin", false, "Read one password line from standard input instead of the terminal")
@@ -76,6 +80,13 @@ func runWithInput(ctx context.Context, args []string, input io.Reader, out io.Wr
 	}
 	if args[0] == "worker" {
 		return app.Worker(ctx, c)
+	}
+	if args[0] == "healthcheck" && workerCheck {
+		state, err := app.WorkerReadiness(ctx, c)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(out).Encode(state)
 	}
 	if args[0] == "healthcheck" {
 		host, port, _ := net.SplitHostPort(c.Listen)

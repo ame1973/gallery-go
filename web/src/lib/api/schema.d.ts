@@ -29,8 +29,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Check metadata database readiness
-         * @description Checks the local database. Source and worker readiness will be added when those services are implemented.
+         * Check database, worker, and observed source readiness
+         * @description Checks the local database and, by default, a fresh committed worker heartbeat. Active sources require matching process root pins and healthy observations newer than twice their poll interval; unknown, stale, future, unavailable, or unconfigured sources degrade the response without disabling metadata service. No NAS I/O, source counts, IDs, paths or pins are exposed. Missing required workers or dependency query failures return NOT_READY. Metadata-only mode must explicitly make the external worker optional.
          */
         get: operations["ready"];
         put?: never;
@@ -1271,6 +1271,16 @@ export interface components {
             /** @enum {string} */
             status: "ok";
         };
+        Readiness: {
+            /** @enum {string} */
+            status: "ok" | "degraded";
+            /** @enum {string} */
+            database: "ok";
+            /** @enum {string} */
+            worker: "ok" | "optional";
+            /** @enum {string} */
+            sources: "ok" | "degraded";
+        };
         PublicConfig: {
             version: string;
             offline_enabled: boolean;
@@ -1531,13 +1541,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The metadata database is reachable. */
+            /** @description Metadata service is available; status degraded means active source observations need attention, not healthy inventory or codec acceptance. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Health"];
+                    "application/json": components["schemas"]["Readiness"];
                 };
             };
             503: components["responses"]["Problem"];
