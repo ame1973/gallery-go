@@ -55,6 +55,12 @@ when evidence is absent:
   `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
   absent offset, or the unknown offset `-00:00` leaves it null. The server never
   substitutes file mtime, modification/digitization time, or its own timezone.
+  Optional `SubSecTimeOriginal` accepts bounded ASCII digits in inline/offset TIFF
+  values. Extra precision is truncated, not rounded, to milliseconds before immutable
+  staging and API/database publication. Missing/blank subseconds retain second
+  precision; a fraction never supplies a missing date or timezone. Empty or trailing
+  ASCII-space padding is allowed; non-digits, duplicate tags and unsafe counts/offsets
+  are rejected. The subsecond ASCII value is capped at 64 bytes including its NUL.
 
 Only the bounded JPEG APP1/PNG eXIf/WebP EXIF classic-TIFF orientation and original
 time/offset fields are read. PNG eXIf and WebP EXIF are capped at 64 KiB; PNG eXIf
@@ -63,8 +69,8 @@ Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
 and header/entry resource limits produce explicit invalid-media work without trusted
 metadata. GPS, MakerNote, embedded thumbnails, raw EXIF maps, metadata paths/URLs,
 and unrelated directories are not followed or exposed. This is not full EXIF
-support: subseconds, other image containers, and video capture metadata remain
-pending. No raw EXIF, XMP or color-profile map is exposed.
+support: other image containers and video capture metadata remain pending. No raw
+EXIF, XMP or color-profile map is exposed.
 
 The inspector version/resource policy and post-inspection full source hash bind
 metadata to immutable staging. Publication retains logical identity on a valid

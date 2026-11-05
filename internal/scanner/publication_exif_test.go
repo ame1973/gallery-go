@@ -119,7 +119,7 @@ func TestMetadataInspectorUpgradeCannotResumeAnOlderPin(t *testing.T) {
 		HeaderBytes  int64
 		Timeout      time.Duration
 	}{policy.MaxPixels, policy.MaxDimension, policy.HeaderBytes, policy.Timeout}
-	for _, older := range []int{1, 2, 3, 4} {
+	for _, older := range []int{1, 2, 3, 4, 5} {
 		legacyPolicy := any(oldPolicy)
 		if older >= 3 {
 			legacyPolicy = policy
@@ -167,5 +167,9 @@ func TestMetadataRejectsUntrustedOrientationAndNonUTCInstants(t *testing.T) {
 	capture = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
 	if validInspection(result) {
 		t.Fatal("unserializable capture entered staging")
+	}
+	capture = time.Date(2026, 11, 5, 4, 34, 56, 123456789, time.UTC)
+	if validInspection(result) {
+		t.Fatal("capture precision beyond DB milliseconds entered staging")
 	}
 }

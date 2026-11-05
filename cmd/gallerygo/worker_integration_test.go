@@ -142,7 +142,7 @@ func (c *scanHTTPSClient) waitJob(id string) jobs.Job {
 }
 
 func scanTIFF() []byte {
-	data := make([]byte, 95)
+	data := make([]byte, 107)
 	copy(data, "II")
 	order := binary.LittleEndian
 	order.PutUint16(data[2:4], 42)
@@ -156,11 +156,12 @@ func scanTIFF() []byte {
 	}
 	entry(10, 0x0112, 3, 1, 6)
 	entry(22, 0x8769, 4, 1, 38)
-	order.PutUint16(data[38:40], 2)
-	entry(40, 0x9003, 2, 20, 68)
-	entry(52, 0x9011, 2, 7, 88)
-	copy(data[68:88], "2026:11:05 12:34:56\x00")
-	copy(data[88:95], "+08:00\x00")
+	order.PutUint16(data[38:40], 3)
+	entry(40, 0x9003, 2, 20, 80)
+	entry(52, 0x9011, 2, 7, 100)
+	entry(64, 0x9291, 2, 4, 0x00333231)
+	copy(data[80:100], "2026:11:05 12:34:56\x00")
+	copy(data[100:107], "+08:00\x00")
 	return data
 }
 
@@ -492,7 +493,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			var capture media.Metadata
 			api.request("GET", "/media/"+exifID, nil, 200, &capture)
-			wantCapture := time.Date(2026, 11, 5, 4, 34, 56, 0, time.UTC)
+			wantCapture := time.Date(2026, 11, 5, 4, 34, 56, 123*int(time.Millisecond), time.UTC)
 			if capture.Orientation == nil || *capture.Orientation != 6 || capture.CaptureAt == nil || !capture.CaptureAt.Equal(wantCapture) || capture.Revision == nil {
 				t.Fatal("compiled JPEG inspection did not publish whitelisted UTC metadata", capture)
 			}

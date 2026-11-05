@@ -41,15 +41,16 @@ def png(width, height):
 
 
 def png_exif():
-    data = bytearray(95)
+    data = bytearray(107)
     data[:2] = b"II"
     struct.pack_into("<HIH", data, 2, 42, 8, 2)
     struct.pack_into("<HHII", data, 10, 0x0112, 3, 1, 6)
     struct.pack_into("<HHII", data, 22, 0x8769, 4, 1, 38)
-    struct.pack_into("<H", data, 38, 2)
-    struct.pack_into("<HHII", data, 40, 0x9003, 2, 20, 68)
-    struct.pack_into("<HHII", data, 52, 0x9011, 2, 7, 88)
-    data[68:88], data[88:95] = b"2026:11:05 12:34:56\x00", b"+08:00\x00"
+    struct.pack_into("<H", data, 38, 3)
+    struct.pack_into("<HHII", data, 40, 0x9003, 2, 20, 80)
+    struct.pack_into("<HHII", data, 52, 0x9011, 2, 7, 100)
+    struct.pack_into("<HHII", data, 64, 0x9291, 2, 4, 0x00333231)
+    data[80:100], data[100:107] = b"2026:11:05 12:34:56\x00", b"+08:00\x00"
     return bytes(data)
 
 
@@ -269,12 +270,12 @@ def run(image, directory, embedded):
         assert detail == animation, (detail, animation)
         apng = next(item for item in media["items"] if item["file_name"] == "animation.apng")
         assert (apng["animated"], apng["frame_count"], apng["loop_count"], apng["duration_ms"], apng["orientation"],
-                apng["capture_at"]) == (True, 2, 2, 300, 6, "2026-11-05T04:34:56Z"), apng
+                apng["capture_at"]) == (True, 2, 2, 300, 6, "2026-11-05T04:34:56.123Z"), apng
         detail, _ = api.request("GET", "/media/" + apng["id"])
         assert detail == apng, (detail, apng)
         webp = next(item for item in media["items"] if item["file_name"] == "animation.webp")
         assert (webp["width"], webp["height"], webp["animated"], webp["frame_count"], webp["loop_count"],
-                webp["duration_ms"], webp["orientation"], webp["capture_at"]) == (3, 2, True, 2, 2, 200, 6, "2026-11-05T04:34:56Z"), webp
+                webp["duration_ms"], webp["orientation"], webp["capture_at"]) == (3, 2, True, 2, 2, 200, 6, "2026-11-05T04:34:56.123Z"), webp
         detail, _ = api.request("GET", "/media/" + webp["id"])
         assert detail == webp, (detail, webp)
         for item in media["items"]:

@@ -56,7 +56,9 @@ become available after publication.
 [Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
 timezone from the host or mtime. JPEG header parsing uses bounded input passes and
 at most 512 entries in each of two permitted EXIF directories; it never follows
-GPS/MakerNote/thumbnail directories. Inspector version and resource policy are pinned
+GPS/MakerNote/thumbnail directories. Original EXIF subseconds normalize to UTC
+milliseconds before staging; high-precision/duplicate/unsafe values cannot bypass
+that storage contract. Inspector version and resource policy are pinned
 to immutable staging. A changed inspector cannot resume a differently pinned generation.
 Header/EXIF metadata is not full pixel/frame decoding, complete EXIF/animation
 support, a generated preview, or a READY variant. Unsupported/corrupt media remains

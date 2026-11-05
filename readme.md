@@ -11,8 +11,8 @@ Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
 publish read-only inventories, native JPEG/PNG/GIF/WebP dimensions, whitelisted
-JPEG/PNG/WebP EXIF orientation/explicitly zoned capture time, and bounded
-GIF/APNG/WebP frame/cycle/loop
+JPEG/PNG/WebP EXIF orientation/explicitly zoned capture time normalized to milliseconds,
+and bounded GIF/APNG/WebP frame/cycle/loop
 metadata. GPS/raw tags are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Management/browsing
 screens, complete media processing, playback, and

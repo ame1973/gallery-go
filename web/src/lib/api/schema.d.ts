@@ -1077,7 +1077,7 @@ export interface components {
             orientation: number | null;
             /**
              * Format: date-time
-             * @description UTC instant only for validated DateTimeOriginal with explicit OffsetTimeOriginal. Null for absent or unzoned camera time; never inferred from file mtime. No GPS/raw EXIF is exposed.
+             * @description UTC instant only for validated DateTimeOriginal with explicit OffsetTimeOriginal; optional SubSecTimeOriginal is truncated to millisecond precision before staging. Null for absent or unzoned camera time; never inferred from file mtime. No GPS/raw EXIF is exposed.
              */
             capture_at: string | null;
             /** @description Current owned revision ID; null while not yet available. */

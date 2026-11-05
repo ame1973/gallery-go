@@ -41,6 +41,101 @@ func exifBytes(order binary.ByteOrder, orientation uint16, date, zone string) []
 	return data
 }
 
+func exifWithSubseconds(order binary.ByteOrder, fraction string) []byte {
+	data := make([]byte, max(160, 140+len(fraction)))
+	copy(data, exifBytes(order, 6, "2026:11:05 12:34:56\x00", "+08:00\x00"))
+	order.PutUint16(data[50:52], 3)
+	order.PutUint32(data[60:64], 112)
+	order.PutUint32(data[72:76], 132)
+	copy(data[112:132], "2026:11:05 12:34:56\x00")
+	copy(data[132:139], "+08:00\x00")
+	order.PutUint16(data[76:78], 0x9291)
+	order.PutUint16(data[78:80], 2)
+	order.PutUint32(data[80:84], uint32(len(fraction)+1))
+	clear(data[84:92])
+	if len(fraction)+1 <= 4 {
+		copy(data[84:88], fraction+"\x00")
+	} else {
+		order.PutUint32(data[84:88], 139)
+		copy(data[139:], fraction+"\x00")
+	}
+	return data
+}
+
+func TestEXIFOriginalSubsecondsNormalizeToUTCMilliseconds(t *testing.T) {
+	for _, order := range []binary.ByteOrder{binary.LittleEndian, binary.BigEndian} {
+		for fraction, milliseconds := range map[string]int{"1": 100, "12": 120, "123": 123, "123456": 123, "000999999": 0, "999999999": 999, "123 ": 123, "": 0, "   ": 0, strings.Repeat("4", 63): 444} {
+			result := inspectFixture(t, jpegWithEXIF(t, exifWithSubseconds(order, fraction)), "capture.jpg", DefaultInspectPolicy())
+			want := time.Date(2026, 11, 5, 4, 34, 56, milliseconds*int(time.Millisecond), time.UTC)
+			if result.Status != "ok" || result.CaptureAt == nil || !result.CaptureAt.Equal(want) || result.CaptureAt.Nanosecond()%int(time.Millisecond) != 0 || result.Orientation == nil || *result.Orientation != 6 {
+				t.Fatal("EXIF inline/offset subseconds lost or leaked non-DB precision", fraction, result)
+			}
+		}
+	}
+}
+
+func TestEXIFSubsecondsRejectAmbiguityAndNeverSupplyTimezone(t *testing.T) {
+	for _, fraction := range []string{"12x", "-1", "1.2", "1 2", "1\x002", "１２３", strings.Repeat("1", 64)} {
+		result := inspectFixture(t, jpegWithEXIF(t, exifWithSubseconds(binary.LittleEndian, fraction)), "bad.jpg", DefaultInspectPolicy())
+		want := "INVALID_MEDIA"
+		if len(fraction) == 64 {
+			want = "MEDIA_LIMIT"
+		}
+		if result.Status != "invalid" || result.ErrorCode == nil || *result.ErrorCode != want || result.CaptureAt != nil || result.Orientation != nil || result.Width != nil {
+			t.Fatal("bad EXIF fraction gained trusted metadata", fraction, result)
+		}
+	}
+	for _, change := range []string{"type", "zero-count", "offset", "terminator", "duplicate"} {
+		data := exifWithSubseconds(binary.LittleEndian, "123456")
+		switch change {
+		case "type":
+			binary.LittleEndian.PutUint16(data[78:80], 4)
+		case "zero-count":
+			binary.LittleEndian.PutUint32(data[80:84], 0)
+		case "offset":
+			binary.LittleEndian.PutUint32(data[84:88], 0xffffffff)
+		case "terminator":
+			data[145] = 'x'
+		case "duplicate":
+			copy(data[64:76], data[76:88])
+		}
+		result := inspectFixture(t, jpegWithEXIF(t, data), "bad.jpg", DefaultInspectPolicy())
+		if result.Status != "invalid" || result.CaptureAt != nil || result.Orientation != nil {
+			t.Fatal("ambiguous/unbounded subsecond field was accepted", change, result)
+		}
+	}
+	for _, missing := range []string{"date", "zone", "unknown-zone"} {
+		data := exifWithSubseconds(binary.LittleEndian, "123456")
+		switch missing {
+		case "date":
+			binary.LittleEndian.PutUint16(data[52:54], 0x9004)
+		case "zone":
+			binary.LittleEndian.PutUint16(data[64:66], 0x9999)
+		case "unknown-zone":
+			copy(data[132:139], "-00:00\x00")
+		}
+		result := inspectFixture(t, jpegWithEXIF(t, data), "unknown.jpg", DefaultInspectPolicy())
+		if result.Status != "ok" || result.CaptureAt != nil {
+			t.Fatal("subseconds supplied an unproven original time/timezone", missing, result)
+		}
+	}
+}
+
+func TestEXIFMillisecondPrecisionIsSharedByPNGAndWebP(t *testing.T) {
+	exif := exifWithSubseconds(binary.LittleEndian, "123456789")
+	png := pngChunks(pngFixture(t, false))
+	png = append(png[:1], append([]testPNGChunk{{"eXIf", exif}}, png[1:]...)...)
+	webp := extendedWebP(t, "lossless", 8)
+	webp = append(webp, testWebPChunk{"EXIF", exif})
+	for _, data := range [][]byte{encodePNGChunks(png), encodeWebP(webp)} {
+		result := inspectFixture(t, data, "capture", DefaultInspectPolicy())
+		want := time.Date(2026, 11, 5, 4, 34, 56, 123*int(time.Millisecond), time.UTC)
+		if result.Status != "ok" || result.CaptureAt == nil || !result.CaptureAt.Equal(want) {
+			t.Fatal("container-specific EXIF precision diverged", result)
+		}
+	}
+}
+
 func jpegWithEXIF(t *testing.T, payloads ...[]byte) []byte {
 	t.Helper()
 	var encoded bytes.Buffer
@@ -186,6 +281,8 @@ func FuzzBoundedEXIF(f *testing.F) {
 	f.Add(exifBytes(binary.LittleEndian, 6, "2026:11:05 12:34:56\x00", "+08:00\x00"))
 	f.Add(exifBytes(binary.BigEndian, 1, "2024:02:29 00:00:01\x00", "-05:30\x00"))
 	f.Add([]byte("II\x2a\x00\xff\xff\xff\xff"))
+	f.Add(exifWithSubseconds(binary.LittleEndian, "123"))
+	f.Add(exifWithSubseconds(binary.BigEndian, "123456789"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 65533 {
 			data = data[:65533]
@@ -199,7 +296,7 @@ func FuzzBoundedEXIF(f *testing.F) {
 		}
 		if err == nil && capture != nil {
 			_, offset := capture.Zone()
-			if offset != 0 || capture.Year() < 1 || capture.Year() > 9999 {
+			if offset != 0 || capture.Year() < 1 || capture.Year() > 9999 || capture.Nanosecond()%1000000 != 0 {
 				t.Fatal("unbounded/non-UTC capture")
 			}
 			if _, err := capture.MarshalJSON(); err != nil {

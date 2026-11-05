@@ -16,6 +16,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded original EXIF subseconds in the shared JPEG/PNG/WebP whitelist, with
+  inline/offset ASCII handling, ambiguity/resource checks and UTC millisecond
+  normalization before immutable staging. Missing date/timezone remains unknown;
+  no host-time/mtime fallback or raw tag exposure. Inspector v6 rejects older pins
+  and non-millisecond staging values; actual CLI/container fixtures retain fractional
+  capture time through private APIs, unchanged originals and repeated scans.
+
 - Bounded streaming WebP RIFF/VP8/VP8L/VP8X metadata, ANIM/ANMF frame/canvas/padding/
   bitstream checks, direct total plays/declared-cycle timing and private-safe EXIF
   orientation/UTC. Reserved/future fields are ignored per format, zero timing stays
@@ -45,7 +52,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   timezones stay null; no GPS/raw tags, source paths, host timezone or mtime fallback.
   Inspector-version pins, immutable publication/rewrite tests, malformed/resource
   bounds, fuzz tests and real compiled CLI/HTTPS ingestion cover the new metadata.
-  Subseconds, other EXIF containers and external codecs remain pending.
+  Other EXIF containers and external codecs remain pending.
 
 - Actual native indexed-ingestion tests inside rootless/read-only containers for
   embedded and standalone consumers, with generated TLS/auth/API setup, private

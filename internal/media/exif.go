@@ -101,9 +101,9 @@ func jpegEXIF(ctx context.Context, file *os.File, budget int64) (*int64, *time.T
 	}
 }
 
-// parseEXIF reads only orientation and DateTimeOriginal+OffsetTimeOriginal from
-// classic TIFF. The byte slice is one bounded JPEG APP1 segment (at most 64 KiB).
-// A timezone-less camera wall clock is unknown, never host time or file mtime.
+// parseEXIF reads orientation and explicitly zoned original time/subseconds from
+// caller-bounded classic TIFF (JPEG APP1, PNG eXIf or WebP EXIF). Fractions are
+// normalized to DB milliseconds. An unzoned clock is never host time or file mtime.
 func parseEXIF(data []byte) (*int64, *time.Time, error) {
 	if len(data) < 8 {
 		return nil, nil, errEXIF
@@ -175,21 +175,26 @@ func parseEXIF(data []byte) (*int64, *time.Time, error) {
 		return nil, nil, err
 	}
 	text := func(entry []byte, length uint32) (string, error) {
-		if order.Uint16(entry[2:4]) != 2 || order.Uint32(entry[4:8]) != length {
+		if length < 1 || order.Uint16(entry[2:4]) != 2 || order.Uint32(entry[4:8]) != length {
 			return "", errEXIF
 		}
-		offset := uint64(order.Uint32(entry[8:12]))
-		if offset < 8 || offset+uint64(length) > uint64(len(data)) {
-			return "", errEXIF
+		var value []byte
+		if length <= 4 {
+			value = entry[8 : 8+length]
+		} else {
+			offset := uint64(order.Uint32(entry[8:12]))
+			if offset < 8 || offset+uint64(length) > uint64(len(data)) {
+				return "", errEXIF
+			}
+			value = data[offset : offset+uint64(length)]
 		}
-		value := data[offset : offset+uint64(length)]
 		if value[len(value)-1] != 0 || strings.ContainsRune(string(value[:len(value)-1]), 0) {
 			return "", errEXIF
 		}
 		return string(value[:len(value)-1]), nil
 	}
-	date, zone := "", ""
-	seenDate, seenZone := false, false
+	date, zone, fraction := "", "", ""
+	seenDate, seenZone, seenFraction := false, false, false
 	for len(fields) > 0 {
 		entry := fields[:12]
 		fields = fields[12:]
@@ -206,6 +211,22 @@ func parseEXIF(data []byte) (*int64, *time.Time, error) {
 			}
 			seenZone = true
 			zone, err = text(entry, 7)
+		case 0x9291:
+			if seenFraction {
+				return nil, nil, errEXIF
+			}
+			count := order.Uint32(entry[4:8])
+			if count > 64 {
+				return nil, nil, errMetadataLimit
+			}
+			seenFraction = true
+			fraction, err = text(entry, count)
+			fraction = strings.TrimRight(fraction, " ")
+			for _, digit := range fraction {
+				if digit < '0' || digit > '9' {
+					return nil, nil, errEXIF
+				}
+			}
 		}
 		if err != nil {
 			return nil, nil, err
@@ -230,7 +251,14 @@ func parseEXIF(data []byte) (*int64, *time.Time, error) {
 	if err != nil || captured.Year() < 1 {
 		return nil, nil, errEXIF
 	}
-	utc := captured.UTC()
+	var milliseconds int
+	for index := range 3 {
+		milliseconds *= 10
+		if index < len(fraction) {
+			milliseconds += int(fraction[index] - '0')
+		}
+	}
+	utc := captured.UTC().Add(time.Duration(milliseconds) * time.Millisecond)
 	if utc.Year() < 1 || utc.Year() > 9999 {
 		return nil, nil, errEXIF
 	}
