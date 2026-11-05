@@ -246,6 +246,12 @@ explicitly disable the embedded consumer using supported configuration. A separa
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
 both worker modes against fresh databases/read-only PNGs, including exact indexed
 metadata/originals, repeat identity, safe source outage and graceful process shutdown.
+A separate real SIGKILL regression interrupts native staging and partially published
+multi-source ingestion, closes all original DB handles, then reopens the server and
+worker. It verifies expired-attempt history, live replacement ownership, unchanged
+logical IDs/revisions, duplicate-free events and protected original bytes using
+isolated read-only PNGs plus bounded-memory sparse regular inputs. It does not
+represent physical NAS, power loss, complete codecs, or container ingestion.
 
 Tests cover migration rollback/checksum/future-schema detection, concurrent
 migration, per-connection pragmas, FTS5, foreign keys, config/path rejection,

@@ -16,6 +16,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Real compiled-worker SIGKILL recovery tests for native staging and partially
+  published multi-source scans, with all old DB connections closed before reopened
+  WAL recovery. Verify live replacement ownership, lease-expired attempt history,
+  stable owned logical IDs/revisions, source-byte preservation, and duplicate-free
+  versioned changes/outbox. No production checkpoint or test backdoor is added.
+
 - Privacy-safe database/worker/source readiness with committed heartbeat freshness,
   bounded observed-source paging, degraded metadata availability during source
   outages, explicit metadata-only mode, and a listener-free CLI worker probe.
@@ -31,14 +37,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 - Embedded scan execution in `serve` and a standalone `gallerygo worker` command
   using the same queue, immutable roots, native handler, and strict YAML resource
   limits. Coordinated shutdown and real compiled CLI/HTTPS ingestion, repeat
-  identity, source-outage and no-asset worker tests. External codecs and indexed
-  SIGKILL recovery remain pending.
+  identity, source-outage and no-asset worker tests. External codecs and actual
+  rootless container ingestion remain pending.
 
 - A versioned-intent scan handler connecting durable execution to read-only inventory,
   native metadata, and indexed publication. Multi-source failures retain healthy
   results, diagnostics and progress commit atomically, live source owners are not
-  stolen, and cancellation/configuration/lease fences remain mandatory. Indexed
-  process-crash acceptance remains pending.
+  stolen, and cancellation/configuration/lease fences remain mandatory. Native
+  process-crash recovery is covered by compiled-worker tests.
 
 - Administrator-only scan enqueue for full/incremental source, album-target, and
   all-source intents; bounded immutable configuration snapshots, distinct dedupe
@@ -54,7 +60,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   frozen unique rename matching, owned immutable media revisions, retained album/
   person overrides and interactions, source/path-bound people, scoped reconciliation,
   conservative missing/quarantine evidence, and atomic source/job/event completion.
-  Indexed process-crash recovery acceptance remains pending.
+  Native staging/partial-publication process-crash recovery is verified locally.
 
 - Immutable per-path metadata staging with inspector-policy pins, streamed hash
   revalidation, explicit skipped/failed outcomes, atomic progress/issue events, and

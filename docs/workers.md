@@ -145,6 +145,14 @@ recent source observations without probing NAS from HTTP. For metadata-only
 maintenance, explicitly set `worker.embedded: false` and `worker.required: false`;
 this never claims a healthy worker or successful ingestion. The CLI worker probe
 `healthcheck --worker` needs no listener or web assets and still requires a heartbeat.
-Complete external metadata and indexed SIGKILL/reopened-DB acceptance remain pending;
+Native indexed SIGKILL recovery is covered with the actual compiled worker, fresh
+SQLite/WAL databases, and read-only generated inputs. The regression interrupts both
+staging-only and multi-source partially published work, closes old connections,
+then reopens server/worker processes. Expired attempt history remains failed, the
+live successor rejects the killed owner's lease, abandoned staging is superseded,
+and already-published logical IDs/revisions remain unchanged without duplicate events.
+This is local process-crash evidence, not a NAS/kernel/power-loss or restore drill.
+
+Complete external metadata and actual rootless container ingestion remain pending;
 a successful startup or native scan is not the complete source-processing phase
 or a production-release claim.

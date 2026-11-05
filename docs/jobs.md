@@ -67,8 +67,11 @@ indexed, or decoded. `scheduler.enabled: true` dispatches initial/periodic full
 scans and intervening source polls. Identical active manual/scheduled source intents
 coalesce; mode, selection, configuration and reprocess boundaries stay distinct.
 System dispatch creates no administrator session or replay receipt. [Readiness](health.md)
-checks committed worker/source evidence without NAS I/O in HTTP. Indexed process-crash
-acceptance remains under development.
+checks committed worker/source evidence without NAS I/O in HTTP. Native indexed crash
+regressions kill an actual compiled worker during staging and after one source's
+nonterminal publication, close all old DB connections, and verify reopened recovery:
+failed lease-expired history, a live successor fencing the old owner, stable logical
+IDs/revisions, and no duplicate versioned changes or missing outbox events.
 
 ## Inspect history
 
