@@ -1583,7 +1583,19 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, album_id, kind, file_name, width, height, duration_ms, revision, offline_capable]
+        [
+          id,
+          album_id,
+          kind,
+          file_name,
+          width,
+          height,
+          duration_ms,
+          orientation,
+          capture_at,
+          revision,
+          offline_capable,
+        ]
       properties:
         id: { type: string }
         album_id: { type: string }
@@ -1592,6 +1604,19 @@ components:
         width: { type: [integer, 'null'], minimum: 1 }
         height: { type: [integer, 'null'], minimum: 1 }
         duration_ms: { type: [integer, 'null'], minimum: 0 }
+        orientation:
+          {
+            type: [integer, 'null'],
+            minimum: 1,
+            maximum: 8,
+            description: Validated source EXIF orientation; dimensions remain encoded source dimensions.,
+          }
+        capture_at:
+          {
+            type: [string, 'null'],
+            format: date-time,
+            description: UTC instant only for validated DateTimeOriginal with explicit OffsetTimeOriginal. Null for absent or unzoned camera time; never inferred from file mtime. No GPS/raw EXIF is exposed.,
+          }
         revision:
           {
             type: [string, 'null'],

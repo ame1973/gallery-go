@@ -37,7 +37,9 @@ func (policy InspectPolicy) Validate() error {
 // Inspection is bounded metadata, not a decoded/READY derivative or a claim that
 // every codec/frame is valid. Unsupported formats keep an explicit capability
 // error until the controlled external codec adapter is implemented and verified.
-// No EXIF/GPS/raw tags, paths, stderr, or worker capabilities enter this DTO.
+// No GPS/raw EXIF tags, paths, stderr, or worker capabilities enter this DTO.
+// CaptureAt is UTC only for explicit DateTimeOriginal+OffsetTimeOriginal evidence;
+// an unzoned camera clock stays unknown rather than assuming the server timezone.
 type Inspection struct {
 	Kind        string     `json:"kind"`
 	MIME        string     `json:"mime"`
@@ -55,6 +57,8 @@ type Inspection struct {
 func inspectionFailure(result Inspection, status, code string) Inspection {
 	result.Status = status
 	result.ErrorCode = &code
+	result.Width, result.Height, result.DurationMS, result.Orientation = nil, nil, nil, nil
+	result.CaptureAt, result.Animated = nil, nil
 	return result
 }
 
@@ -114,11 +118,14 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return Inspection{}, err
 		}
-		configuration, format, decodeErr := image.DecodeConfig(io.LimitReader(inspectReader{ctx, file}, policy.HeaderBytes))
+		reader := &io.LimitedReader{R: inspectReader{ctx, file}, N: policy.HeaderBytes}
+		configuration, format, decodeErr := image.DecodeConfig(reader)
 		if err := ctx.Err(); err != nil {
 			return Inspection{}, err
 		}
-		if decodeErr != nil || format != codec || configuration.Width < 1 || configuration.Height < 1 {
+		if decodeErr != nil && reader.N == 0 {
+			result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
+		} else if decodeErr != nil || format != codec || configuration.Width < 1 || configuration.Height < 1 {
 			result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
 		} else if configuration.Width > policy.MaxDimension || configuration.Height > policy.MaxDimension || int64(configuration.Width) > policy.MaxPixels/int64(configuration.Height) {
 			result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
@@ -128,6 +135,20 @@ func Inspect(ctx context.Context, file *os.File, name string, policy InspectPoli
 			if codec == "jpeg" {
 				animated := false
 				result.Animated = &animated
+				orientation, capture, metadataErr := jpegEXIF(ctx, file, policy.HeaderBytes)
+				if err := ctx.Err(); err != nil {
+					return Inspection{}, err
+				}
+				switch {
+				case errors.Is(metadataErr, errMetadataLimit):
+					result = inspectionFailure(result, "invalid", "MEDIA_LIMIT")
+				case errors.Is(metadataErr, errEXIF), errors.Is(metadataErr, io.EOF), errors.Is(metadataErr, io.ErrUnexpectedEOF):
+					result = inspectionFailure(result, "invalid", "INVALID_MEDIA")
+				case metadataErr != nil:
+					return Inspection{}, metadataErr
+				default:
+					result.Orientation, result.CaptureAt = orientation, capture
+				}
 			}
 		}
 	}

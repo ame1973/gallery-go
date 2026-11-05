@@ -144,6 +144,38 @@ func requireError(t *testing.T, err, want error) {
 	}
 }
 
+func TestMetadataOrientationAndCaptureUseTheSamePrivateVisibility(t *testing.T) {
+	f := fixture(t)
+	capture := time.Date(2026, 11, 5, 4, 34, 56, 0, time.UTC)
+	if _, err := f.db.Exec(`UPDATE media SET orientation=6,capture_at=? WHERE id=?`, capture.UnixMilli(), f.mediaID); err != nil {
+		t.Fatal(err)
+	}
+	value, err := f.svc.Get(t.Context(), f.reader, f.mediaID)
+	if err != nil || value.Orientation == nil || *value.Orientation != 6 || value.CaptureAt == nil || !value.CaptureAt.Equal(capture) || value.CaptureAt.Location() != time.UTC {
+		t.Fatal(value, err)
+	}
+	items, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, "", 30)
+	if err != nil || len(items) != 1 || items[0].Orientation == nil || *items[0].Orientation != 6 || items[0].CaptureAt == nil || !items[0].CaptureAt.Equal(capture) {
+		t.Fatal(items, err)
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil || !bytes.Contains(encoded, []byte(`"capture_at":"2026-11-05T04:34:56Z"`)) || bytes.Contains(encoded, []byte("GPS")) || bytes.Contains(encoded, []byte(f.source)) {
+		t.Fatal(string(encoded), err)
+	}
+	if _, err := f.db.Exec(`UPDATE media SET orientation=NULL,capture_at=NULL WHERE id=?`, f.mediaID); err != nil {
+		t.Fatal(err)
+	}
+	value, err = f.svc.Get(t.Context(), f.reader, f.mediaID)
+	if err != nil || value.Orientation != nil || value.CaptureAt != nil {
+		t.Fatal("unknown capture fell back to mtime", value, err)
+	}
+	if _, err := f.db.Exec(`DELETE FROM library_access`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.svc.Get(t.Context(), f.reader, f.mediaID)
+	requireError(t, err, sql.ErrNoRows)
+}
+
 func TestMetadataAndCurrentReadyContentAreRealAndReadOnly(t *testing.T) {
 	f := fixture(t)
 	metadata, err := f.svc.Get(t.Context(), f.reader, f.mediaID)

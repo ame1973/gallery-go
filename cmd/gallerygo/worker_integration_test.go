@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"net"
@@ -25,6 +27,7 @@ import (
 	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
+	"gallerygo/internal/media"
 	"gallerygo/internal/store"
 )
 
@@ -134,6 +137,40 @@ func (c *scanHTTPSClient) waitJob(id string) jobs.Job {
 	}
 }
 
+func scanJPEGWithEXIF(t *testing.T) []byte {
+	t.Helper()
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, image.NewNRGBA(image.Rect(0, 0, 12, 7)), nil); err != nil {
+		t.Fatal(err)
+	}
+	data := make([]byte, 95)
+	copy(data, "II")
+	order := binary.LittleEndian
+	order.PutUint16(data[2:4], 42)
+	order.PutUint32(data[4:8], 8)
+	order.PutUint16(data[8:10], 2)
+	entry := func(offset int, tag, kind uint16, count, value uint32) {
+		order.PutUint16(data[offset:offset+2], tag)
+		order.PutUint16(data[offset+2:offset+4], kind)
+		order.PutUint32(data[offset+4:offset+8], count)
+		order.PutUint32(data[offset+8:offset+12], value)
+	}
+	entry(10, 0x0112, 3, 1, 6)
+	entry(22, 0x8769, 4, 1, 38)
+	order.PutUint16(data[38:40], 2)
+	entry(40, 0x9003, 2, 20, 68)
+	entry(52, 0x9011, 2, 7, 88)
+	copy(data[68:88], "2026:11:05 12:34:56\x00")
+	copy(data[88:95], "+08:00\x00")
+	payload := append([]byte("Exif\x00\x00"), data...)
+	segment := []byte{0xff, 0xe1, 0, 0}
+	binary.BigEndian.PutUint16(segment[2:4], uint16(len(payload)+2))
+	result := append([]byte{}, encoded.Bytes()[:2]...)
+	result = append(result, segment...)
+	result = append(result, payload...)
+	return append(result, encoded.Bytes()[2:]...)
+}
+
 func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "gallerygo")
 	build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, ".")
@@ -158,6 +195,11 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			name := filepath.Join(root, "Album", "photo.png")
 			if err := os.WriteFile(name, input.Bytes(), 0o400); err != nil {
+				t.Fatal(err)
+			}
+			exifInput := scanJPEGWithEXIF(t)
+			exifName := filepath.Join(root, "Album", "capture.jpg")
+			if err := os.WriteFile(exifName, exifInput, 0o400); err != nil {
 				t.Fatal(err)
 			}
 			assets := filepath.Join(directory, "web")
@@ -295,7 +337,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			}
 			initialID := accepted.ID
 			result := api.waitJob(accepted.ID)
-			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 3 || result.Done != 3 || !result.TotalKnown {
+			if result.Status != "succeeded" || result.Attempts != 1 || result.Succeeded != 6 || result.Done != 6 || !result.TotalKnown {
 				t.Fatal("compiled native execution failed", result, result.Counts)
 			}
 			var readiness health.Readiness
@@ -322,18 +364,38 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal("scan did not expose exactly one authorized album", albums)
 			}
 			var medias struct {
-				Items []struct {
-					ID            string `json:"id"`
-					Width, Height *int64
-				} `json:"items"`
+				Items []media.Metadata `json:"items"`
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 1 || medias.Items[0].Width == nil || *medias.Items[0].Width != 12 || medias.Items[0].Height == nil || *medias.Items[0].Height != 7 {
+			if len(medias.Items) != 2 {
 				t.Fatal("native metadata was not indexed", medias)
 			}
-			id := medias.Items[0].ID
+			ids := make(map[string]string)
+			for _, item := range medias.Items {
+				ids[item.FileName] = item.ID
+				if item.Width == nil || *item.Width != 12 || item.Height == nil || *item.Height != 7 {
+					t.Fatal("EXIF changed encoded source dimensions", item)
+				}
+				if item.FileName == "photo.png" && (item.Orientation != nil || item.CaptureAt != nil) {
+					t.Fatal("unknown PNG metadata was invented", item)
+				}
+			}
+			id, exifID := ids["photo.png"], ids["capture.jpg"]
+			if id == "" || exifID == "" {
+				t.Fatal("source basenames were not preserved", medias)
+			}
+			var capture media.Metadata
+			api.request("GET", "/media/"+exifID, nil, 200, &capture)
+			wantCapture := time.Date(2026, 11, 5, 4, 34, 56, 0, time.UTC)
+			if capture.Orientation == nil || *capture.Orientation != 6 || capture.CaptureAt == nil || !capture.CaptureAt.Equal(wantCapture) || capture.Revision == nil {
+				t.Fatal("compiled JPEG inspection did not publish whitelisted UTC metadata", capture)
+			}
 			var original []byte
-			headers := api.request("GET", "/media/"+id+"/original", nil, 200, &original)
+			headers := api.request("GET", "/media/"+exifID+"/original", nil, 200, &original)
+			if !bytes.Equal(original, exifInput) || headers.Get("Content-Type") != "image/jpeg" {
+				t.Fatal("EXIF processing rewrote protected original bytes", headers)
+			}
+			headers = api.request("GET", "/media/"+id+"/original", nil, 200, &original)
 			if !bytes.Equal(original, input.Bytes()) || headers.Get("Content-Type") != "image/png" || headers.Get("Cache-Control") != "private, no-store" {
 				t.Fatal("actual protected original changed", headers)
 			}
@@ -342,8 +404,16 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(job, job.Counts)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 1 || medias.Items[0].ID != id {
-				t.Fatal("repeat execution duplicated logical media", medias)
+			if len(medias.Items) != 2 {
+				t.Fatal("repeat execution lost indexed media", medias)
+			}
+			for _, item := range medias.Items {
+				if ids[item.FileName] != item.ID {
+					t.Fatal("repeat execution duplicated logical media", item)
+				}
+				if item.ID == exifID && (item.Revision == nil || *item.Revision != *capture.Revision || item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(wantCapture)) {
+					t.Fatal("repeat execution lost source-bound EXIF", item)
+				}
 			}
 			api.request("GET", "/admin/sources/"+source.ID, nil, 200, &source)
 			generation := source.ScanGeneration
@@ -359,14 +429,22 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal("source outage blessed old inventory", source)
 			}
 			api.request("GET", "/albums/"+albums.Items[0].ID+"/media", nil, 200, &medias)
-			if len(medias.Items) != 1 || medias.Items[0].ID != id {
+			if len(medias.Items) != 2 {
 				t.Fatal("source outage purged old index", medias)
+			}
+			for _, item := range medias.Items {
+				if ids[item.FileName] != item.ID {
+					t.Fatal("source outage replaced indexed identity", item)
+				}
 			}
 			if _, err := os.Stat(marker); !os.IsNotExist(err) {
 				t.Fatal("process recreated missing mount marker", err)
 			}
 			if data, err := os.ReadFile(name); err != nil || !bytes.Equal(data, input.Bytes()) {
 				t.Fatal("process wrote source file", err)
+			}
+			if data, err := os.ReadFile(exifName); err != nil || !bytes.Equal(data, exifInput) {
+				t.Fatal("process wrote EXIF source file", err)
 			}
 			api.request("GET", "/health/ready", nil, 200, &readiness)
 			if readiness.Status != "degraded" || readiness.Sources != "degraded" || readiness.Worker != "ok" {

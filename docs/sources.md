@@ -167,9 +167,11 @@ share one fenced transaction; no raw source path or system error enters these DT
 ## Inventory processing boundaries
 
 The backend can stage a complete, bounded, root-confined filesystem manifest and
-native JPEG/PNG/GIF header metadata in private database tables. It revalidates
-streamed hashes instead of trusting equal sizes/timestamps, pins the inspector
-policy for retries, and records unsupported/corrupt inputs explicitly. Non-media
+native JPEG/PNG/GIF header metadata, including whitelisted JPEG EXIF orientation and
+explicitly zoned capture time, in private database tables. See [media metadata](media.md)
+for null/timezone/privacy rules. It revalidates streamed hashes instead of trusting
+equal sizes/timestamps, pins the inspector version and resource policy for retries,
+and records unsupported/corrupt inputs explicitly. Non-media
 paths stay in the manifest and count as skipped metadata work; invalid or unsupported
 media count as failed work, not successful decoding. Metadata, issues, generation
 counters, and job progress/events commit together in bounded batches.
@@ -212,8 +214,9 @@ dispatch deadlines do not imply a healthy scan or advance full-publication evide
 [Readiness](health.md) reports degraded for unknown/unavailable/stale/mismatched
 source observations without probing NAS inside an HTTP request. It does not change
 source health or grant inventory authority. Queued acceptance alone cannot prove
-successful ingestion. Header inspection does not prove complete pixel/frame decoding. External
-codecs, EXIF, animation timing and variant generation remain pending. Native compiled-worker
+successful ingestion. Header/whitelisted JPEG EXIF inspection does not prove complete
+pixel/frame decoding. External codecs, complete EXIF support, animation timing and
+variant generation remain pending. Native compiled-worker
 SIGKILL/reopened-WAL tests cover staging and partial multi-source publication,
 retained logical IDs/revisions, old owner rejection and duplicate-free events.
 Rootless/read-only container tests also exercise actual native publication/rename

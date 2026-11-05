@@ -258,13 +258,23 @@ func TestMediaHTTPAuthorizationRunsBeforeHeadRangeOrConditionalResponses(t *test
 
 func TestMediaHTTPMetadataReadyOwnershipAndSourceOutage(t *testing.T) {
 	f := protectedMedia(t)
-	item := decodeResponse[media.Metadata](t, mediaRequest(f.reader, "GET", "/api/v2/media/protected", nil), 200)
-	if item.ID != "protected" || item.FileName != "Portrait 中文.png" || item.OfflineCapable || item.Revision == nil {
-		t.Fatal("incorrect metadata", item)
+	response := mediaRequest(f.reader, "GET", "/api/v2/media/protected", nil)
+	item := decodeResponse[media.Metadata](t, response, 200)
+	if item.ID != "protected" || item.FileName != "Portrait 中文.png" || item.OfflineCapable || item.Revision == nil || item.Orientation != nil || item.CaptureAt != nil || !strings.Contains(response.Body.String(), `"orientation":null`) || !strings.Contains(response.Body.String(), `"capture_at":null`) {
+		t.Fatal("incorrect metadata or absent explicit unknown fields", item, response.Body.String())
+	}
+	captured := time.Date(2026, 11, 5, 4, 34, 56, 0, time.UTC)
+	if _, err := f.db.Exec(`UPDATE media SET orientation=6,capture_at=? WHERE id='protected'`, captured.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	response = mediaRequest(f.reader, "GET", "/api/v2/media/protected", nil)
+	item = decodeResponse[media.Metadata](t, response, 200)
+	if item.Orientation == nil || *item.Orientation != 6 || item.CaptureAt == nil || !item.CaptureAt.Equal(captured) || !strings.Contains(response.Body.String(), `"capture_at":"2026-11-05T04:34:56Z"`) || strings.Contains(response.Body.String(), f.source) || strings.Contains(response.Body.String(), "GPS") {
+		t.Fatal("whitelisted HTTP metadata lost UTC/privacy boundary", item, response.Body.String())
 	}
 	page := decodeResponse[listPage[media.Metadata]](t, mediaRequest(f.reader, "GET", "/api/v2/albums/media-album/media", nil), 200)
-	if len(page.Items) != 1 || page.Items[0].ID != item.ID {
-		t.Fatal("album/media visibility mismatch")
+	if len(page.Items) != 1 || page.Items[0].ID != item.ID || page.Items[0].Orientation == nil || *page.Items[0].Orientation != 6 || page.Items[0].CaptureAt == nil || !page.Items[0].CaptureAt.Equal(captured) {
+		t.Fatal("album/media visibility or metadata mismatch")
 	}
 	variants := decodeResponse[listPage[media.Variant]](t, mediaRequest(f.reader, "GET", "/api/v2/media/protected/variants", nil), 200)
 	if len(variants.Items) != 1 || variants.Items[0].ContentURL != f.variantURL || variants.Items[0].SHA256 != f.hash {

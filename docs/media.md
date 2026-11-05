@@ -4,12 +4,13 @@ Media metadata and read-only content endpoints use the same SQL visibility rules
 [album and library reads](access.md). There is no public source/cache filesystem
 mount, fallback credential, anonymous thumbnail URL, or original-download bypass.
 
-**Current scope:** the serving layer is implemented. Inventory scanning, codec
-processing, normal variant publication, gallery/player screens, and offline
-manifests are still under development. A fresh installation has no indexed media;
-test PNGs and ready rows are isolated test fixtures, not production seed data.
-The container does not yet include media codecs. Reading a generated PNG through
-HTTP is not evidence that video playback or all image codecs have been validated.
+**Current scope:** protected serving and native read-only inventory publication are
+implemented, including bounded JPEG/PNG/GIF dimensions and whitelisted JPEG EXIF.
+External codec processing, normal variant publication, gallery/player screens, and
+offline manifests are still under development. A fresh installation has no indexed
+media until a configured source is scanned; test fixtures are not production seed
+data. The container does not yet include external media codecs. Native metadata
+and original downloads do not establish complete image/video decoding or playback.
 
 All paths below are relative to `/api/v2` and require a valid HTTPS session cookie.
 Original download also requires the actual account's `download_original:true`,
@@ -22,8 +23,9 @@ The server rechecks these conditions before GET, HEAD, Range, or a conditional 3
 - `GET /albums/{album_id}/media` lists visible media in stable ID order. An empty
   authorized album returns an empty page; an unauthorized album returns 404.
 - `GET /media/{media_id}` returns ID, album ID, kind, display basename, nullable
-  dimensions/duration/current revision, and offline capability. No absolute path,
-  cache storage key, EXIF GPS field, password, or session capability is returned.
+  dimensions/duration/orientation/capture time/current revision, and offline capability.
+  No absolute path, cache storage key, EXIF GPS field, password, or session capability
+  is returned.
 - `GET /media/{media_id}/variants` lists the latest **ready** preset versions for
   the current owned media revision. Failed, retired, and other-revision variants
   are not advertised. Lists use default limit 30, maximum 100, and scope/collection-
@@ -37,6 +39,36 @@ Treat IDs, revisions, and account scopes as opaque.
 
 `offline_capable` remains false until explicit scoped offline manifests are
 implemented. A stable URL or a browser HTTP cache is not an offline grant.
+
+### Orientation and capture time
+
+Media detail and album-media pages return these fields, including explicit `null`
+when evidence is absent:
+
+- `width` and `height` are the source's encoded pixel dimensions. EXIF orientation
+  does not swap them or rewrite the original.
+- `orientation` is the JPEG EXIF orientation integer `1..8`; null means unknown,
+  not an inferred value of 1. Display clients must apply the corresponding transform
+  when they render an original. Generated, orientation-normalized variants are pending.
+- `capture_at` is a UTC RFC3339 instant derived only from validated JPEG
+  `DateTimeOriginal` plus an explicit `OffsetTimeOriginal`. Missing original time,
+  absent offset, or the unknown offset `-00:00` leaves it null. The server never
+  substitutes file mtime, modification/digitization time, or its own timezone.
+
+Only the bounded JPEG APP1/classic-TIFF orientation and original time/offset fields
+are read. Ambiguous duplicate EXIF/whitelisted fields, malformed required values,
+and header/entry resource limits produce explicit invalid-media work without trusted
+metadata. GPS, MakerNote, embedded thumbnails, raw EXIF maps, metadata paths/URLs,
+and unrelated directories are not followed or exposed. This is not full EXIF
+support: PNG EXIF, subseconds, other image containers, and video capture metadata
+remain pending. Native PNG/GIF animation timing is also not implemented.
+
+The inspector version/resource policy and post-inspection full source hash bind
+metadata to immutable staging. Publication retains logical identity on a valid
+rescan, creates a new owned revision for a changed source signature, and clears
+old orientation/capture values when replacement bytes contain no such evidence.
+All metadata remains subject to the same fresh session and shared SQL visibility;
+orientation/capture fields do not grant original-download permission.
 
 ## Read bytes
 

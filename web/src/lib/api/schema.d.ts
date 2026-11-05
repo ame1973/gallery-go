@@ -1066,6 +1066,13 @@ export interface components {
             width: number | null;
             height: number | null;
             duration_ms: number | null;
+            /** @description Validated source EXIF orientation; dimensions remain encoded source dimensions. */
+            orientation: number | null;
+            /**
+             * Format: date-time
+             * @description UTC instant only for validated DateTimeOriginal with explicit OffsetTimeOriginal. Null for absent or unzoned camera time; never inferred from file mtime. No GPS/raw EXIF is exposed.
+             */
+            capture_at: string | null;
             /** @description Current owned revision ID; null while not yet available. */
             revision: string | null;
             /** @description False until explicit scoped offline download manifests are enabled. */

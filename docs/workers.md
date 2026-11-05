@@ -50,11 +50,16 @@ intents rather than guessing roots or scopes. Queued work cannot progress withou
 a compatible embedded or standalone consumer.
 
 The native pipeline performs bounded manifests and streamed hashes, JPEG/PNG/GIF
-header metadata, and fenced indexed publication. Indexed resources and authorized
-original downloads become available after publication. Header metadata is not a
-full decode, EXIF/animation support, a generated preview, or a READY variant.
-Unsupported/corrupt media remains explicit failed work. External codecs and variant
-processing are still under development.
+header metadata, whitelisted JPEG EXIF, and fenced indexed publication. Indexed
+resources and authorized original downloads become available after publication.
+[Orientation and capture metadata](media.md) never expose GPS/raw tags or guess a
+timezone from the host or mtime. JPEG header parsing uses bounded input passes and
+at most 512 entries in each of two permitted EXIF directories; it never follows
+GPS/MakerNote/thumbnail directories. Inspector version and resource policy are pinned
+to immutable staging. A changed inspector cannot resume a differently pinned generation.
+Header/EXIF metadata is not full pixel/frame decoding, complete EXIF/animation
+support, a generated preview, or a READY variant. Unsupported/corrupt media remains
+explicit failed work. External codecs and variant processing are still under development.
 
 ## Strict YAML policies
 
@@ -110,8 +115,8 @@ scheduler:
 | `scanner.timeout`          | 1s..24h for one source's complete pipeline, including ownership waiting.                         |
 | `inspection.max_pixels`    | 1..1,000,000,000 image pixels. No native pixel allocation.                                       |
 | `inspection.max_dimension` | 1..1,000,000 pixels per dimension.                                                               |
-| `inspection.header_bytes`  | 512 bytes..32 MiB of native header inspection input.                                             |
-| `inspection.timeout`       | 1s..1m per native header inspection.                                                             |
+| `inspection.header_bytes`  | 512 bytes..32 MiB per native header pass; JPEG performs two passes.                              |
+| `inspection.timeout`       | 1s..1m per file's native header/EXIF inspection, including both JPEG passes.                     |
 | `scheduler.enabled`        | Boolean; enables automatic dispatch in consumers, default true.                                  |
 | `scheduler.interval`       | 1s..1m due-source polling, default 1s; not the source's scan interval.                           |
 

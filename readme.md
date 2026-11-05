@@ -10,8 +10,10 @@ password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
 and job history/cancel/retry APIs are available. Embedded/standalone scan workers can
-publish read-only inventories and native JPEG/PNG/GIF header metadata. Management/
-browsing screens, complete media processing, playback, and
+publish read-only inventories, native JPEG/PNG/GIF dimensions, and whitelisted JPEG
+EXIF orientation/explicitly zoned capture time without exposing GPS/raw tags or
+inventing a timezone. See [media metadata](docs/media.md). Management/browsing
+screens, complete media processing, playback, and
 offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 
@@ -245,8 +247,9 @@ Screenshots/traces live in ignored test-output directories. Tests never use priv
 source media or an existing user database. These control/seeded-content cases
 explicitly disable the embedded consumer using supported configuration. A separate
 compiled CLI integration test drives real HTTPS login/library/source/scan APIs and
-both worker modes against fresh databases/read-only PNGs, including exact indexed
-metadata/originals, repeat identity, safe source outage and graceful process shutdown.
+both worker modes against fresh databases/read-only PNGs and EXIF JPEGs, including
+encoded dimensions, UTC capture/orientation, null unknown metadata, unchanged
+protected originals, repeat identity, safe source outage and graceful process shutdown.
 A separate real SIGKILL regression interrupts native staging and partially published
 multi-source ingestion, closes all original DB handles, then reopens the server and
 worker. It verifies expired-attempt history, live replacement ownership, unchanged

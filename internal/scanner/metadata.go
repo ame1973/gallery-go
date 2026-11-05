@@ -16,7 +16,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-const inspectVersion = 1
+const inspectVersion = 2
 
 type inspectedFile struct {
 	file       File
@@ -167,6 +167,15 @@ func validInspection(result media.Inspection) bool {
 	}
 	if result.Height != nil && result.Width == nil {
 		return false
+	}
+	if result.Orientation != nil && (result.Status != "ok" || *result.Orientation < 1 || *result.Orientation > 8) {
+		return false
+	}
+	if result.CaptureAt != nil {
+		_, offset := result.CaptureAt.Zone()
+		if result.Status != "ok" || offset != 0 || result.CaptureAt.Year() < 1 || result.CaptureAt.Year() > 9999 {
+			return false
+		}
 	}
 	switch result.Status {
 	case "ok":

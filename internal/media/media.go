@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
@@ -62,24 +63,31 @@ func (s *Service) readTx(ctx context.Context, current auth.Session) (*sql.Tx, au
 }
 
 type Metadata struct {
-	ID             string  `json:"id"`
-	AlbumID        string  `json:"album_id"`
-	Kind           string  `json:"kind"`
-	FileName       string  `json:"file_name"`
-	Width          *int64  `json:"width"`
-	Height         *int64  `json:"height"`
-	DurationMS     *int64  `json:"duration_ms"`
-	Revision       *string `json:"revision"`
-	OfflineCapable bool    `json:"offline_capable"`
+	ID             string     `json:"id"`
+	AlbumID        string     `json:"album_id"`
+	Kind           string     `json:"kind"`
+	FileName       string     `json:"file_name"`
+	Width          *int64     `json:"width"`
+	Height         *int64     `json:"height"`
+	DurationMS     *int64     `json:"duration_ms"`
+	Orientation    *int64     `json:"orientation"`
+	CaptureAt      *time.Time `json:"capture_at"`
+	Revision       *string    `json:"revision"`
+	OfflineCapable bool       `json:"offline_capable"`
 }
 
-const mediaSelect = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id
+const mediaSelect = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id,m.orientation,m.capture_at
  FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
  LEFT JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id`
 
 func scanMedia(row interface{ Scan(...any) error }) (Metadata, error) {
 	var value Metadata
-	err := row.Scan(&value.ID, &value.AlbumID, &value.Kind, &value.FileName, &value.Width, &value.Height, &value.DurationMS, &value.Revision)
+	var captured sql.NullInt64
+	err := row.Scan(&value.ID, &value.AlbumID, &value.Kind, &value.FileName, &value.Width, &value.Height, &value.DurationMS, &value.Revision, &value.Orientation, &captured)
+	if captured.Valid {
+		instant := time.UnixMilli(captured.Int64).UTC()
+		value.CaptureAt = &instant
+	}
 	value.FileName = baseName(value.FileName)
 	// Offline capability stays false until scoped download manifests are enabled.
 	return value, err

@@ -16,6 +16,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded, whitelisted JPEG EXIF orientation and explicitly zoned original capture
+  time, normalized to UTC in authorized media detail/list responses. Unknown camera
+  timezones stay null; no GPS/raw tags, source paths, host timezone or mtime fallback.
+  Inspector-version pins, immutable publication/rewrite tests, malformed/resource
+  bounds, fuzz tests and real compiled CLI/HTTPS ingestion cover the new metadata.
+  PNG EXIF, subseconds, animation timing and external codecs remain pending.
+
 - Actual native indexed-ingestion tests inside rootless/read-only containers for
   embedded and standalone consumers, with generated TLS/auth/API setup, private
   tmpfs metadata/cache and read-only source mounts. Exercise frozen SQLite plans,
@@ -75,8 +82,9 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 - Bounded native JPEG/PNG/GIF header metadata with magic-based MIME, dimension/pixel
   guards, explicit invalid/unsupported diagnostics, and container-header fuzz tests.
-  External codecs, EXIF, and animation timing remain unimplemented; no metadata
-  inspection result is a READY variant or a full decode claim.
+  Whitelisted JPEG EXIF is supported; external codecs, complete EXIF, and animation
+  timing remain unimplemented. No metadata inspection result is a READY variant or
+  a full decode claim.
 
 - Bounded root-confined inventory walking with streamed hashes, read-only regular
   inputs, cycle/escape/FIFO safeguards, source-change detection, and resource limits.
