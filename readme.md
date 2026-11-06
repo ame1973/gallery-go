@@ -214,6 +214,9 @@ Only implemented endpoints are advertised:
 - `GET /api/v2/people`, `/people/{person_id}`, `/people/{person_id}/albums`:
   source-bound indexed creators, visible album counts/covers and bounded same-source
   album pages. No private mapped paths or download grant. See [docs/people.md](docs/people.md).
+- `GET/PATCH /api/v2/admin/people/{person_id}`: versioned Person display-name
+  overrides with actor-bound historical receipts, source/path identity preserved
+  across healthy scans and provable folder moves. No source writes or association changes.
 - `GET /api/v2/albums/{album_id}/media`, `/media/{media_id}`, and
   `/media/{media_id}/variants`: visible media and latest ready current-revision presets.
 - `GET/HEAD /api/v2/media/{media_id}/variants/{variant_id}/content` and
@@ -288,7 +291,9 @@ A real versioned source-mapping update then creates an indexed Person; all four
 modes verify list/detail/album counts, stable no-op metadata, anonymous denial and
 mount-marker loss without source probing or recreation. Versioned display/cover
 commands then verify no-op scan retention, a provable whole-folder move with stable
-IDs/overrides, historical receipt replay and unchanged source bytes/modes.
+IDs/overrides, historical receipt replay and unchanged source bytes/modes. Person
+label commands then verify the same invariants through another real folder move,
+including retained album/media IDs and clearing to the new indexed creator label.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

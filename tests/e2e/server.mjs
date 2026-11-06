@@ -15,7 +15,7 @@ const key = join(directory, 'tls.key');
 const certificate = join(directory, 'tls.pem');
 const password = process.env.GALLERYGO_TEST_PASSWORD;
 const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
-  ['media', 'outage', 'duplicates', 'people', 'album-metadata'].map((kind) => ({
+  ['media', 'outage', 'duplicates', 'people', 'album-metadata', 'person-metadata'].map((kind) => ({
     name: `${kind}-${project}`,
     root: join(directory, 'sources', `${kind}-${project}`),
     marker: '.marker',
@@ -166,7 +166,7 @@ try {
         "INSERT INTO albums(id,library_id,source_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,? ,'.',?,?)",
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
-    if (prefix.startsWith('people-')) {
+    if (prefix.startsWith('people-') || prefix.startsWith('person-metadata-')) {
       fixtureDB
         .prepare(
           'INSERT INTO people(id,source_id,relative_path,source_name,display_name,created_at) VALUES(?,?,?,?,?,?)',

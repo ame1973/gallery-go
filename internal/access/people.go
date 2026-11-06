@@ -2,8 +2,13 @@ package access
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"math"
+	"time"
 
 	"gallerygo/internal/auth"
+	"gallerygo/internal/store"
 )
 
 // PersonVisible uses outer alias p and the same fresh-session album predicate as
@@ -70,6 +75,99 @@ func (s *Service) Person(ctx context.Context, current auth.Session, id string) (
 	}
 	defer tx.Rollback()
 	return scanPerson(tx.QueryRowContext(ctx, personSelect+` WHERE `+PersonVisible+` AND p.id=?`, viewer.ID, viewer.ID, viewer.ID, id))
+}
+
+const personMetadataSelect = `SELECT p.id,p.source_id,p.source_name,p.display_name,p.version FROM people p`
+
+var ErrPersonMetadata = errors.New("provide a display_name override")
+
+type PersonMetadata struct {
+	ID          string  `json:"id"`
+	SourceID    string  `json:"source_id"`
+	SourceName  string  `json:"source_name"`
+	DisplayName *string `json:"display_name"`
+	Version     int64   `json:"version"`
+}
+
+// Empty strings clear the override; nil means omitted and is not a valid command.
+// HTTP null is rejected by the shared strict JSON decoder, not treated as a clear.
+type PersonMetadataPatch struct {
+	DisplayName *string `json:"display_name"`
+}
+
+func scanPersonMetadata(row interface{ Scan(...any) error }) (PersonMetadata, error) {
+	var value PersonMetadata
+	err := row.Scan(&value.ID, &value.SourceID, &value.SourceName, &value.DisplayName, &value.Version)
+	return value, err
+}
+
+func (s *Service) AdminPersonMetadata(ctx context.Context, current auth.Session, id string) (PersonMetadata, error) {
+	tx, actor, err := s.adminTx(ctx, current)
+	if err != nil {
+		return PersonMetadata{}, err
+	}
+	defer tx.Rollback()
+	return scanPersonMetadata(tx.QueryRowContext(ctx, personMetadataSelect+` WHERE `+PersonVisible+` AND p.id=?`, actor.ID, id))
+}
+
+func (s *Service) UpdatePersonMetadata(ctx context.Context, current auth.Session, id string, version int64, patch PersonMetadataPatch, key string) (PersonMetadata, error) {
+	if patch.DisplayName == nil {
+		return PersonMetadata{}, ErrPersonMetadata
+	}
+	if *patch.DisplayName != "" {
+		name, err := normalizedName(*patch.DisplayName)
+		if err != nil {
+			return PersonMetadata{}, err
+		}
+		patch.DisplayName = &name
+	}
+	tx, actor, err := s.adminTx(ctx, current)
+	if err != nil {
+		return PersonMetadata{}, err
+	}
+	defer tx.Rollback()
+	now := s.now().UTC().Truncate(time.Millisecond)
+	data, _ := json.Marshal(struct {
+		ID      string              `json:"id"`
+		Version int64               `json:"version"`
+		Patch   PersonMetadataPatch `json:"patch"`
+	}{id, version, patch})
+	command := store.Command{Actor: actor.ID, Key: key, Operation: "person.metadata.update", Metadata: string(data)}
+	var result PersonMetadata
+	if found, err := command.Replay(ctx, tx, now, &result); found || err != nil {
+		return result, err
+	}
+	result, err = scanPersonMetadata(tx.QueryRowContext(ctx, personMetadataSelect+` WHERE `+PersonVisible+` AND p.id=?`, actor.ID, id))
+	if err != nil {
+		return PersonMetadata{}, err
+	}
+	if result.Version != version {
+		return PersonMetadata{}, auth.ErrConflict
+	}
+	display := patch.DisplayName
+	if *display == "" {
+		display = nil
+	}
+	if !sameOverride(display, result.DisplayName) {
+		if version == math.MaxInt64 {
+			return PersonMetadata{}, auth.ErrConflict
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE people SET display_name=?,version=version+1,updated_at=max(updated_at,?) WHERE id=?`, display, now.UnixMilli(), id); err != nil {
+			return PersonMetadata{}, err
+		}
+		result.DisplayName = display
+		result.Version++
+		if err := store.Change(ctx, tx, "system", "person", id, "upsert", result.Version, map[string]any{"id": id, "source_id": result.SourceID, "source_name": result.SourceName, "display_name": result.DisplayName, "version": result.Version}, now); err != nil {
+			return PersonMetadata{}, err
+		}
+		if err := store.Audit(ctx, tx, actor.ID, "person_metadata_updated", "person", id, map[string]any{"display_name": result.DisplayName, "version": result.Version}, now); err != nil {
+			return PersonMetadata{}, err
+		}
+	}
+	if err := command.Save(ctx, tx, result, now); err != nil {
+		return PersonMetadata{}, err
+	}
+	return result, tx.Commit()
 }
 
 func (s *Service) PersonAlbums(ctx context.Context, current auth.Session, personID, after string, limit int) ([]Album, error) {

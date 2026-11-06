@@ -22,6 +22,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Versioned administrative Person display-name GET/PATCH with current source-bound
+  visibility, strong identity/version preconditions and actor-bound historical
+  receipts. Explicit empty strings clear the override, while missing/null/unknown
+  fields fail closed. Name/version/complete person event/outbox/audit/receipt commit
+  atomically, including no-op, concurrency and late-rollback cases. Actual native
+  scans retain overrides and logical identities across a provable folder move without
+  source writes, association edits, permission changes or content grants.
+
 - Versioned administrative album display/cover preference GET/PATCH with strong
   resource preconditions, current same-album/source cover validation and actor-bound
   historical command receipts. Empty strings explicitly clear overrides; null and

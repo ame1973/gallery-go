@@ -42,6 +42,39 @@ func (a authorization) person(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, person)
 }
 
+func (a authorization) personMetadata(w http.ResponseWriter, r *http.Request) {
+	value, err := a.service.AdminPersonMetadata(r.Context(), currentSession(r), r.PathValue("person_id"))
+	if err != nil {
+		requestError(w, err)
+		return
+	}
+	w.Header().Set("ETag", resourceETag("person", value.ID, value.Version))
+	writeJSON(w, 200, value)
+}
+
+func (a authorization) updatePersonMetadata(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("person_id")
+	version, ok := resourcePrecondition(w, r, "person", id)
+	if !ok {
+		return
+	}
+	key, ok := idempotencyKey(w, r)
+	if !ok {
+		return
+	}
+	var input access.PersonMetadataPatch
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	value, err := a.service.UpdatePersonMetadata(r.Context(), currentSession(r), id, version, input, key)
+	if err != nil {
+		requestError(w, err)
+		return
+	}
+	w.Header().Set("ETag", resourceETag("person", value.ID, value.Version))
+	writeJSON(w, 200, value)
+}
+
 func (a authorization) personAlbums(w http.ResponseWriter, r *http.Request) {
 	page, ok := personPage(w, r)
 	if !ok {

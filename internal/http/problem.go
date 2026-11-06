@@ -88,7 +88,7 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 429, "RATE_LIMITED", "Too many authentication attempts. Try again later.")
 	case errors.Is(err, auth.ErrConflict):
 		problem(w, 409, "VERSION_CONFLICT", "The resource changed while the request was being processed.")
-	case errors.Is(err, access.ErrAlbumMetadata), errors.Is(err, access.ErrAlbumCover):
+	case errors.Is(err, access.ErrAlbumMetadata), errors.Is(err, access.ErrAlbumCover), errors.Is(err, access.ErrPersonMetadata):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, media.ErrDuplicateQuery):
 		problem(w, 422, "VALIDATION_FAILED", "Use a supported duplicate selection and bounded page limit.")

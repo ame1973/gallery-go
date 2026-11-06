@@ -56,7 +56,7 @@ export interface paths {
         };
         /**
          * List visible indexed people and creators
-         * @description Requires a current session. A source-bound person is visible only through a same-source album that passes the shared library/additional-album policy. Counts and representative cover IDs use that same visible corpus; equal folder labels never merge identities. People without a concrete mapped path or visible album and inactive or inconsistent source relationships are hidden. No source paths or filesystem reads. This initial read surface supports only limit and cursor; management, search and full browsing UI remain separate work.
+         * @description Requires a current session. A source-bound person is visible only through a same-source album that passes the shared library/additional-album policy. Counts and representative cover IDs use that same visible corpus; equal folder labels never merge identities. People without a concrete mapped path or visible album and inactive or inconsistent source relationships are hidden. No source paths or filesystem reads. These read pages support only limit and cursor; creator associations, search and full browsing UI remain separate work. Administrator display-label commands use separate versioned endpoints.
          */
         get: operations["listPeople"];
         put?: never;
@@ -109,6 +109,32 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/people/{person_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a source-bound person's display preference
+         * @description Current administrator and shared Person visibility required. Concrete source/path identity with a visible same-source album only; inactive or inconsistent sources and empty or unclassified people are hidden. Returns only the opaque source ID and indexed label/display override/version, never a private path or content capability. Mount loss does not prevent indexed metadata access.
+         */
+        get: operations["getAdminPersonMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set or clear a versioned Person display-name override
+         * @description Online administrator-only metadata command with strong identity/version If-Match and actor-bound Idempotency-Key. Explicit empty string clears the display override; missing or null values are not implicit clears. Nonempty values use the existing trimmed display-label bounds, not search normalization. Business label/version/complete person change/outbox/audit/receipt co-commit. No-op saves only its receipt. Matching key/canonical body/original precondition returns the historical result and ETag after later edits or scans; fresh administrator authorization still applies and GET refreshes current state. Source name/path/identity, album associations, access policy and source files are not changed. Scans retain the manual display override.
+         */
+        patch: operations["updatePersonMetadata"];
         trace?: never;
     };
     "/admin/albums/{album_id}": {
@@ -1254,6 +1280,21 @@ export interface components {
             /** @description Currently eligible same-album/source media ID. Empty string clears the desired override and uses sticky automatic selection; omitted unchanged. Null is rejected. */
             cover_media_id?: string;
         };
+        PersonMetadata: {
+            id: string;
+            /** @description Opaque indexed source identity, never its private root or marker. */
+            source_id: string;
+            /** @description Indexed source label only; not editable here and never a full relative path. */
+            source_name: string;
+            /** @description Current display override; null uses the indexed source label. */
+            display_name: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        PersonMetadataPatch: {
+            /** @description Required explicit preference. Empty string clears the override; missing or null is not an implicit clear. Other values are trimmed and must then contain 1 to 100 Unicode characters and at most 400 UTF-8 bytes without control characters. This is not search normalization. */
+            display_name: string;
+        };
         Person: {
             /** @description Opaque indexed person identity; equal labels may have different IDs. */
             id: string;
@@ -1551,6 +1592,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted source-bound Person label metadata. Replayed mutation results are historical; GET refreshes current state. */
+        PersonMetadata: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PersonMetadata"];
+            };
+        };
         /** @description Current or historical actor-receipted album display/cover metadata. Replayed mutation results are historical; GET refreshes current state. */
         AlbumMetadata: {
             headers: {
@@ -1917,6 +1968,52 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdminPersonMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PersonMetadata"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updatePersonMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                person_id: components["parameters"]["PersonID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonMetadataPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PersonMetadata"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

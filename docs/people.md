@@ -5,10 +5,11 @@ A person is bound to its source and full mapped relative path, not to a globally
 unique display label. Equal names can legitimately return different opaque IDs;
 a proven whole-folder move can retain the identity and display override.
 
-The current API is a read-only indexed view. It supports person listing/detail and
-same-source album pages. Person management/association UI, richer filters/sorting,
-search and offline snapshots remain separate work; these endpoints support only
-`limit` and `cursor` on list pages, not an ignored search/filter parameter.
+The indexed read API supports person listing/detail and same-source album pages.
+Separate administrative commands below manage display-name overrides without
+changing source identities. Association management/UI, richer filters/sorting,
+search and offline snapshots remain separate work; read pages support only
+`limit` and `cursor`, not an ignored search/filter parameter.
 
 ## Endpoints and fields
 
@@ -77,3 +78,48 @@ no source filesystem I/O and never create a root/marker. Mount loss preserves
 committed identities/names/counts; it does not prove current source reachability or
 change original-download availability. Responses are `private, no-store`, never a
 public mount or globally cached private API response.
+
+## Administrative display-name overrides
+
+`GET /admin/people/{person_id}` requires a current administrator and the same
+source-bound visibility rule. It returns a strong ETag such as `"person:{id}:7"`
+and only `id`, opaque `source_id`, indexed `source_name`, nullable `display_name`
+and `version`. The indexed source label is not a full path and is not editable here.
+Ordinary users receive 403 and anonymous/expired/disabled/revoked sessions receive
+401 before resource existence is revealed. Empty/unmapped/hidden or inconsistent
+people remain 404, including for administrators. Mount loss alone does not hide
+committed metadata or prevent editing it.
+
+`PATCH /admin/people/{person_id}` requires the exact resource `If-Match`, an explicit
+unique `Idempotency-Key` of 16 to 128 ASCII letters/digits/underscores/hyphens, and the
+normal same-origin `Origin` plus session-bound `X-CSRF-Token`. For example:
+
+```json
+{
+  "display_name": "A creator display override"
+}
+```
+
+`display_name` is the only accepted field and must be provided. An explicit empty
+string clears the override; missing or **null is not an implicit clear**. Nonempty
+values use the existing display-label policy: trim whitespace, then 1 to 100 Unicode
+characters/at most 400 UTF-8 bytes without control characters. This is not NFKC/full
+case-fold search normalization. Source names/paths/IDs, album associations, covers
+and permissions cannot be mass-assigned through this command.
+
+Successful changes atomically commit the label/version, complete person change,
+outbox, audit and actor-bound result receipt. Identical preferences preserve the
+version and business events but still save their receipt. New stale commands receive
+409; missing strong preconditions receive 428 and invalid ones receive 400. A label
+edit does not rotate account scopes, clear album restrictions, reassign source/path
+or album identities, or grant original/variant/offline access. Source files are never
+read or written by these endpoints.
+
+Retry the same actor/key/canonical body/original precondition to retrieve the
+historical result and ETag, even after later edits or scans. Reusing the key for
+another target/body/precondition conflicts. Receipt replay still requires a current
+administrator and is never an authorization capability. GET refreshes current state.
+Healthy scans preserve manual display overrides; provable whole-folder moves may
+update the indexed label/version while retaining logical identities and the override.
+Clearing afterward uses the current indexed label, not an old folder name. Full
+creator-association management, tags, search and management UI remain separate work.

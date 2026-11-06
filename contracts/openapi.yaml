@@ -76,7 +76,7 @@ paths:
     get:
       operationId: listPeople
       summary: List visible indexed people and creators
-      description: Requires a current session. A source-bound person is visible only through a same-source album that passes the shared library/additional-album policy. Counts and representative cover IDs use that same visible corpus; equal folder labels never merge identities. People without a concrete mapped path or visible album and inactive or inconsistent source relationships are hidden. No source paths or filesystem reads. This initial read surface supports only limit and cursor; management, search and full browsing UI remain separate work.
+      description: Requires a current session. A source-bound person is visible only through a same-source album that passes the shared library/additional-album policy. Counts and representative cover IDs use that same visible corpus; equal folder labels never merge identities. People without a concrete mapped path or visible album and inactive or inconsistent source relationships are hidden. No source paths or filesystem reads. These read pages support only limit and cursor; creator associations, search and full browsing UI remain separate work. Administrator display-label commands use separate versioned endpoints.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -123,6 +123,40 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AlbumPage' }
         '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/people/{person_id}:
+    parameters: [{ $ref: '#/components/parameters/PersonID' }]
+    get:
+      operationId: getAdminPersonMetadata
+      summary: Read a source-bound person's display preference
+      description: Current administrator and shared Person visibility required. Concrete source/path identity with a visible same-source album only; inactive or inconsistent sources and empty or unclassified people are hidden. Returns only the opaque source ID and indexed label/display override/version, never a private path or content capability. Mount loss does not prevent indexed metadata access.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/PersonMetadata' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      operationId: updatePersonMetadata
+      summary: Set or clear a versioned Person display-name override
+      description: Online administrator-only metadata command with strong identity/version If-Match and actor-bound Idempotency-Key. Explicit empty string clears the display override; missing or null values are not implicit clears. Nonempty values use the existing trimmed display-label bounds, not search normalization. Business label/version/complete person change/outbox/audit/receipt co-commit. No-op saves only its receipt. Matching key/canonical body/original precondition returns the historical result and ETag after later edits or scans; fresh administrator authorization still applies and GET refreshes current state. Source name/path/identity, album associations, access policy and source files are not changed. Scans retain the manual display override.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonMetadataPatch' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonMetadata' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
         default: { $ref: '#/components/responses/Problem' }
   /admin/albums/{album_id}:
     parameters: [{ $ref: '#/components/parameters/AlbumID' }]
@@ -1295,6 +1329,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    PersonMetadata:
+      description: Current or historical actor-receipted source-bound Person label metadata. Replayed mutation results are historical; GET refreshes current state.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonMetadata' }
     AlbumMetadata:
       description: Current or historical actor-receipted album display/cover metadata. Replayed mutation results are historical; GET refreshes current state.
       headers:
@@ -1838,6 +1879,30 @@ components:
           type: string
           maxLength: 64
           description: Currently eligible same-album/source media ID. Empty string clears the desired override and uses sticky automatic selection; omitted unchanged. Null is rejected.
+    PersonMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, source_id, source_name, display_name, version]
+      properties:
+        id: { type: string }
+        source_id:
+          type: string
+          description: Opaque indexed source identity, never its private root or marker.
+        source_name:
+          type: string
+          description: Indexed source label only; not editable here and never a full relative path.
+        display_name:
+          type: [string, 'null']
+          description: Current display override; null uses the indexed source label.
+        version: { type: integer, format: int64, minimum: 1 }
+    PersonMetadataPatch:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          description: Required explicit preference. Empty string clears the override; missing or null is not an implicit clear. Other values are trimmed and must then contain 1 to 100 Unicode characters and at most 400 UTF-8 bytes without control characters. This is not search normalization.
     Person:
       type: object
       additionalProperties: false
