@@ -754,7 +754,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			verifyCompiledTagCatalog(t, api)
 			verifyCompiledAlbumTagAssociations(t, api, source, marker, workUnits)
 			verifyCompiledCreatorOverrides(t, api, source, marker, workUnits)
-			verifyCompiledTagBatchAcceptance(t, api, source, marker)
+			verifyCompiledTagBatchProcessing(t, api, source, marker)
 			if stopWorker != nil {
 				stopWorker()
 				api.request("GET", "/health/ready", nil, 503, nil)
@@ -768,11 +768,12 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(err)
 			}
 			defer db.Close()
-			var batchIntents, batchTargets, cancelledBatches int
+			var batchIntents, batchTargets, succeededBatches, batchResults int
 			if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM album_tag_batches),
  (SELECT COUNT(*) FROM album_tag_batch_targets WHERE album_version>0 AND source_id IS NOT NULL AND source_config_version>0),
- (SELECT COUNT(*) FROM jobs WHERE kind='batch_tags' AND status='cancelled' AND attempts=0 AND succeeded=0)`).Scan(&batchIntents, &batchTargets, &cancelledBatches); err != nil || batchIntents != 2 || batchTargets != 4 || cancelledBatches != 2 {
-				t.Fatal("closed-process/reopened database lost immutable queued batch history", batchIntents, batchTargets, cancelledBatches, err)
+ (SELECT COUNT(*) FROM jobs WHERE kind='batch_tags' AND status='succeeded' AND attempts=1 AND total=2 AND done=2),
+ (SELECT COUNT(*) FROM album_tag_batch_results WHERE outcome IN ('applied','unchanged') AND album_version>0)`).Scan(&batchIntents, &batchTargets, &succeededBatches, &batchResults); err != nil || batchIntents != 3 || batchTargets != 6 || succeededBatches != 3 || batchResults != 6 {
+				t.Fatal("closed-process/reopened database lost applied batch intent/results", batchIntents, batchTargets, succeededBatches, batchResults, err)
 			}
 			if scheduled {
 				var actor *string

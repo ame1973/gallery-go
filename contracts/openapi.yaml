@@ -747,7 +747,7 @@ paths:
     post:
       operationId: enqueueTagBatch
       summary: Accept an immutable album-tag batch intent
-      description: Administrator only. Freeze 1 to 100 unique visible album IDs, their current album versions, library/source IDs and source configuration epochs, plus an explicit set of at most 100 existing tag IDs. Empty tag_ids requests a future association clear, never catalog deletion. No filesystem I/O or album mutation occurs here. Identical active snapshots coalesce only for the same actor; changed selection, versions or epochs create distinct jobs. A 202 response is durable acceptance only. This release does not yet register a batch_tags consumer, so these jobs remain queued until explicitly cancelled or a compatible future consumer processes them. Historical actor/key/body retries return the original accepted job, not its current state. Use GET on Location to refresh.
+      description: Administrator only. Freeze 1 to 100 unique visible album IDs, their current album versions, library/source IDs and source configuration epochs, plus an explicit set of at most 100 existing tag IDs. Empty tag_ids requests association clearing, never catalog deletion. Enqueue performs no filesystem I/O or album mutation. Identical active snapshots coalesce only for the same actor; changed selection, versions or epochs create distinct jobs. A 202 response is acceptance, not completion. Embedded and standalone workers consume batch_tags, rechecking the current active original administrator, frozen resource/config versions and live lease for each unresolved target. Accepted work outlives the originating web session, not account disablement/demotion/removal. A retrying administrator never replaces the original actor. Historical actor/key/body retries return the original accepted job, not current status. Use GET on Location and the result collection to refresh.
       tags: [Jobs]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -789,6 +789,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TagBatchTargetPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/batches/{job_id}/results:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    get:
+      operationId: listTagBatchResults
+      summary: Read committed per-target batch outcomes across attempts
+      description: Current administrator only. Stable result-ID keysets, default 30 and maximum 100; only limit and cursor are supported. Each result and its real business change, job progress, complete album event/outbox and audit commit atomically. Applied and unchanged outcomes permanently resolve that frozen target; later attempts report already_applied without overwriting a later edit. Failed outcomes carry fixed safe diagnostics, never raw errors. Results span attempts and can contain the same target more than once. No row means no committed target outcome, not success; cancellation or interrupted attempts can close unprocessed budget as cancelled without inventing per-target records. Historical IDs/versions survive resource or original actor removal and are not current content grants.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded immutable outcomes; an accepted batch with no committed target outcomes returns an empty page. Unknown or non-batch jobs return 404.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagBatchResultPage' }
         default: { $ref: '#/components/responses/Problem' }
   /admin/jobs:
     get:
@@ -1951,6 +1970,38 @@ components:
       required: [items, next_cursor, has_more]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/TagBatchTarget' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    TagBatchResult:
+      type: object
+      additionalProperties: false
+      required: [id, album_id, attempt, outcome, album_version, error_code, message, created_at]
+      properties:
+        id: { type: string }
+        album_id: { type: string }
+        attempt: { type: integer, minimum: 1, maximum: 100 }
+        outcome:
+          type: string
+          enum: [applied, unchanged, already_applied, failed]
+          description: Applied increments succeeded; unchanged and already_applied increment skipped; failed increments failed. Each is one actual attempt work unit.
+        album_version:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          description: Historical resolved version, not a current ETag. Null for failures. Already-applied skips retain the original resolution version even after later edits.
+        error_code:
+          type: [string, 'null']
+          enum: [ACTOR_NOT_AUTHORIZED, TARGET_CHANGED, TAG_NOT_FOUND, PROCESSING_FAILED, null]
+        message:
+          type: [string, 'null']
+          description: Fixed safe English diagnostic selected by code, or null on non-failure; never raw SQL, paths or subprocess output.
+        created_at: { type: string, format: date-time }
+    TagBatchResultPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/TagBatchResult' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
     JobStatus:

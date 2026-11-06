@@ -117,6 +117,19 @@ func (s *Service) SetAlbumTags(ctx context.Context, current auth.Session, id str
 	if result.Version != version {
 		return AlbumTagSet{}, auth.ErrConflict
 	}
+	result, err = replaceAlbumTagsTx(ctx, tx, actor.ID, result, ids, data, now)
+	if err != nil {
+		return AlbumTagSet{}, err
+	}
+	if err := command.Save(ctx, tx, result, now); err != nil {
+		return AlbumTagSet{}, err
+	}
+	return result, tx.Commit()
+}
+
+// replaceAlbumTagsTx is shared by session-authorized commands and leased batches.
+// Callers must freshly authorize and fence the supplied current album in this TX.
+func replaceAlbumTagsTx(ctx context.Context, tx *sql.Tx, actor string, result AlbumTagSet, ids []string, data string, now time.Time) (AlbumTagSet, error) {
 	var count int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags WHERE id IN (SELECT value FROM json_each(?))`, data).Scan(&count); err != nil {
 		return AlbumTagSet{}, err
@@ -125,29 +138,26 @@ func (s *Service) SetAlbumTags(ctx context.Context, current auth.Session, id str
 		return AlbumTagSet{}, ErrUnknownTag
 	}
 	if !slices.Equal(result.TagIDs, ids) {
-		if version == math.MaxInt64 {
+		if result.Version == math.MaxInt64 {
 			return AlbumTagSet{}, auth.ErrConflict
 		}
 		previous := result.TagIDs
-		if _, err := tx.ExecContext(ctx, `DELETE FROM album_tags WHERE album_id=?`, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM album_tags WHERE album_id=?`, result.AlbumID); err != nil {
 			return AlbumTagSet{}, err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO album_tags(album_id,tag_id) SELECT ?,value FROM json_each(?)`, id, data); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO album_tags(album_id,tag_id) SELECT ?,value FROM json_each(?)`, result.AlbumID, data); err != nil {
 			return AlbumTagSet{}, err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE albums SET version=version+1,updated_at=max(updated_at,?) WHERE id=?`, now.UnixMilli(), id); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE albums SET version=version+1,updated_at=max(updated_at,?) WHERE id=?`, now.UnixMilli(), result.AlbumID); err != nil {
 			return AlbumTagSet{}, err
 		}
-		result.TagIDs, result.Version = ids, version+1
-		if err := JournalAlbumTx(ctx, tx, id, now); err != nil {
+		result.TagIDs, result.Version = ids, result.Version+1
+		if err := JournalAlbumTx(ctx, tx, result.AlbumID, now); err != nil {
 			return AlbumTagSet{}, err
 		}
-		if err := store.Audit(ctx, tx, actor.ID, "album_tags_changed", "album", id, map[string]any{"previous_tag_ids": previous, "tag_ids": ids, "version": result.Version}, now); err != nil {
+		if err := store.Audit(ctx, tx, actor, "album_tags_changed", "album", result.AlbumID, map[string]any{"previous_tag_ids": previous, "tag_ids": ids, "version": result.Version}, now); err != nil {
 			return AlbumTagSet{}, err
 		}
 	}
-	if err := command.Save(ctx, tx, result, now); err != nil {
-		return AlbumTagSet{}, err
-	}
-	return result, tx.Commit()
+	return result, nil
 }

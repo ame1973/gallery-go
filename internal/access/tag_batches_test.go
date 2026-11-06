@@ -95,7 +95,7 @@ func TestTagBatchEnqueueFreezesBoundedIntentAndCanonicalHistoricalReceipt(t *tes
 		t.Fatal("enqueue applied metadata or weakened album policy", version, restricted, err)
 	}
 	if _, err := batches.queue.Claim(t.Context(), "scan-only-test", []string{"scan"}); !errors.Is(err, jobs.ErrNoWork) {
-		t.Fatal("scan consumer claimed an unimplemented batch handler", err)
+		t.Fatal("scan-only kind selection claimed a batch job", err)
 	}
 	if _, err := batches.Enqueue(t.Context(), owner, TagBatchRequest{AlbumIDs: []string{"batch-a"}, TagIDs: input.TagIDs}, key); !errors.Is(err, store.ErrIdempotencyReuse) {
 		t.Fatal("receipt accepted a different target selection", err)

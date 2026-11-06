@@ -11,7 +11,8 @@ test:
 check:
 	python3 -I tests/integration/repository_hygiene.py
 	go vet ./...
-	go test -race -cover ./...
+	# Keep production-strength bcrypt; allow the full race matrix to finish.
+	go test -timeout=15m -race -cover ./...
 	test -z "$$(gofmt -l cmd internal migrations contracts)"
 	pnpm api:check
 	pnpm typecheck

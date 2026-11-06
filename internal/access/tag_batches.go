@@ -30,9 +30,8 @@ type TagBatchTarget struct {
 	TagIDs              []string `json:"tag_ids"`
 }
 
-// TagBatches accepts immutable queued intent only. A future consumer must fence
-// the original actor/targets/config and the existing queue lease before applying.
-// Accepted jobs are never advertised as completed metadata changes.
+// TagBatches freezes accepted intent and processes its metadata-only targets under
+// current original-actor authority and live queue leases. Enqueue is not completion.
 type TagBatches struct {
 	db    *sql.DB
 	auth  *auth.Service

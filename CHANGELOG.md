@@ -22,15 +22,17 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
-- Durable administrative album-tag batch acceptance and historical target pages.
-  Explicit bounded selections freeze album versions, source epochs and desired IDs;
-  canonical actor receipts and snapshot coalescing cannot expand existing targets.
-  New-job resource bindings, safe job events/outbox, audits and receipt are atomic.
-  Migration0017 retains opaque historical targets independently of live resources.
-  Source edits cancel bound jobs; queued cancellation never invents success. Real
-  SQLite migration/rollback, compiled TLS/CLI and typed browser checks accompany
-  the API. This is acceptance only: no `batch_tags` executor is registered and no
-  album tags are applied. Leased processing/results, cover/reprocess and UI remain.
+- Durable administrative album-tag batches with frozen bounded selections,
+  canonical actor receipts and historical target/result pages. Both worker modes
+  recheck the original active administrator, target versions/source epochs and live
+  lease; real links/version/complete album events/outbox/audit/results/progress
+  commit together. Resolved targets never apply twice or overwrite a later edit.
+  Per-attempt budgets/cumulative counters preserve failures, cancelled unfinished
+  work and already-applied skips through retry. Migrations0017/0018 retain immutable
+  job-owned intent and outcomes; source edits cancel bound work. Real SQLite late-
+  rollback/authority tests, native four-mode TLS/CLI apply/no-op/clear, actual SIGKILL/
+  closed-process/reopened recovery and typed HTTPS controls accompany the API.
+  Enqueue remains acceptance, not completion; cover/reprocess and manager UI remain.
 
 - Versioned album creator classification with explicit mapped/person/none modes,
   retained indexed provenance and same-source manual selection. Source scans preserve

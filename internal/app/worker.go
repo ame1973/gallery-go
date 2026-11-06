@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
 	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
@@ -25,6 +26,7 @@ type scanRuntime struct {
 	sources        *library.Sources
 	scans          *scanner.Scans
 	handler        jobs.Handler
+	batches        *access.TagBatches
 	roots          map[string]media.SourceRoot
 	schedule       scanner.SchedulePolicy
 }
@@ -58,12 +60,12 @@ func newScanRuntime(db *sql.DB, c Config) (*scanRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &scanRuntime{authentication, queue, sources, scans, handler, roots, c.Scheduler}, nil
+	return &scanRuntime{authentication, queue, sources, scans, handler, access.NewTagBatches(db, authentication, queue), roots, c.Scheduler}, nil
 }
 
 func (r *scanRuntime) run(ctx context.Context, role string) error {
 	consume := func(ctx context.Context) error {
-		return r.queue.Run(ctx, role, map[string]jobs.Handler{"scan": r.handler})
+		return r.queue.Run(ctx, role, map[string]jobs.Handler{"scan": r.handler, "batch_tags": r.batches.Process})
 	}
 	if !r.schedule.Enabled {
 		return consume(ctx)
@@ -97,8 +99,8 @@ func WorkerReadiness(ctx context.Context, c Config) (health.Readiness, error) {
 	return health.New(db, runtime.queue, runtime.sources, true).Check(ctx)
 }
 
-// Worker consumes accepted scan intents without a listener or web asset dependency.
-// It never migrates implicitly, creates source roots/markers, or scans without a job.
+// Worker consumes accepted scans and metadata batches without a listener or web
+// assets. It never migrates implicitly, creates roots/markers, or works without a job.
 func Worker(ctx context.Context, c Config) error {
 	db, err := store.Open(ctx, c.Database)
 	if err != nil {

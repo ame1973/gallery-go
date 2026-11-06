@@ -55,6 +55,17 @@ func (s *Service) RequireAdmin(ctx context.Context, tx *sql.Tx, current Session)
 	return current, nil
 }
 
+// RequireActiveAdminTx checks the current account for an already accepted private
+// durable intent. The caller must bind that original actor to a live fenced job;
+// this never authenticates an HTTP request or replaces its session/CSRF checks.
+func (s *Service) RequireActiveAdminTx(ctx context.Context, tx *sql.Tx, id string) (User, error) {
+	user, err := scanUser(tx.QueryRowContext(ctx, userSelect+` WHERE id=? AND active=1 AND role='admin'`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, ErrForbidden
+	}
+	return user, err
+}
+
 func (s *Service) adminNow(ctx context.Context, current Session) (Session, error) {
 	current, err := s.Authenticate(ctx, current.Token)
 	if err != nil {

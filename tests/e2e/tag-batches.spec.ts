@@ -51,6 +51,18 @@ test('HTTPS tag batch acceptance freezes metadata without applying it and preser
     });
     expect(response.headers().location).toBe(`/api/v2/admin/jobs/${accepted.id}`);
     const targetPath = `/api/v2/admin/batches/${accepted.id}/targets`;
+    const resultPath = `/api/v2/admin/batches/${accepted.id}/results`;
+    // This control suite intentionally disables consumers. Actual application and
+    // killed-worker recovery use the separate real compiled CLI integration tests.
+    expect((await request.get(resultPath)).status()).toBe(401);
+    expect((await context.request.get(resultPath)).status()).toBe(403);
+    const resultsResponse = await api.get(resultPath);
+    expect(resultsResponse.status()).toBe(200);
+    expect(resultsResponse.headers()['cache-control']).toBe('private, no-store');
+    const noResults = (await resultsResponse.json()) as components['schemas']['TagBatchResultPage'];
+    expect(noResults).toEqual({ items: [], next_cursor: null, has_more: false });
+    expect((await api.get(`${resultPath}?limit=101`)).status()).toBe(400);
+    expect((await api.get(`${resultPath}?attempt=1`)).status()).toBe(400);
     expect((await request.get(targetPath)).status()).toBe(401);
     const targetsResponse = await api.get(targetPath);
     expect(targetsResponse.status()).toBe(200);
@@ -94,6 +106,7 @@ test('HTTPS tag batch acceptance freezes metadata without applying it and preser
       succeeded: 0,
     });
     expect(await (await api.get(targetPath)).json()).toEqual(targets);
+    expect(await (await api.get(resultPath)).json()).toEqual(noResults);
     const replay = await api.post(path, { headers: commandHeaders, data: body });
     expect(replay.status()).toBe(202);
     expect(replay.headers().etag).toBe(response.headers().etag);

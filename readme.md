@@ -217,11 +217,12 @@ Only implemented endpoints are advertised:
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
   probed by enqueue; a compatible embedded or standalone worker executes the job.
-- `POST /api/v2/admin/batches/tags` and `GET /admin/batches/{job_id}/targets`:
-  durable bounded album/tag intent with frozen versions/source epochs and historical
-  target keysets. Acceptance only: no `batch_tags` executor is registered yet and no
-  tags are applied. Existing job controls can cancel queued work; source edits cancel
-  bound jobs. See [docs/tag-batches.md](docs/tag-batches.md).
+- `POST /api/v2/admin/batches/tags` and `GET /admin/batches/{job_id}/targets`,
+  `/admin/batches/{job_id}/results`: bounded frozen album/tag intent and historical
+  target/outcome keysets. Both worker modes apply unresolved targets with current
+  original-admin authority, resource/config/lease fences and atomic business/result/
+  progress/events/audit. Retry never reapplies a resolved target or overwrites a later
+  edit. `202` is not completion. See [docs/tag-batches.md](docs/tag-batches.md).
 - `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
   and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
 - `GET /api/v2/admin/duplicates/exact` and `/admin/duplicates/exact/{group_id}/media`:
@@ -319,11 +320,13 @@ association-version boundaries, historical receipts, explicit link-only clear an
 unchanged read-only source SHA/modes. Creator classification then adds one owned
 read-only PNG and runs 63-unit/21-file scans through mapped/person/none modes, two
 folder moves, current fallback restoration and historical receipts without confusing
-a selected creator with indexed rename provenance. Tag-batch acceptance then freezes
-both native albums during a test-owned mount-marker outage, checks bounded target
-pages and active coalescing, verifies source-epoch cancellation and historical
-receipts, and confirms zero applied tag changes with all 21 media files unchanged.
-No batch consumer or per-target processing acceptance is implied.
+a selected creator with indexed rename provenance. Tag-batch processing then freezes
+both native albums during a test-owned marker outage, drives real apply/no-op/clear
+jobs in both worker modes, checks bounded target/result pages and historical receipts,
+and preserves all 21 media IDs/revisions, bytes, modes and account scopes. Closing
+all app/worker handles and reopening SQLite retains three completed batch intents
+and six immutable results. Control browser fixtures deliberately disable consumers
+and never mistake their queued/cancelled empty-result pages for application.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published
@@ -332,6 +335,14 @@ worker. It verifies expired-attempt history, live replacement ownership, unchang
 logical IDs/revisions, duplicate-free events and protected original bytes using
 isolated read-only PNGs plus bounded-memory sparse regular inputs. It does not
 represent physical NAS, power loss, complete codecs, or container ingestion.
+A separate tag-batch SIGKILL regression freezes actual partial progress over 100
+albums/100 tags, kills only its own CLI child, closes every original DB/app handle
+and reopens with a live successor. It verifies old-owner rejection, preserved
+attempt/cancelled budgets, already-applied skips, exactly-once album versions and
+complete result/outbox history. Only a test-owned pinned monitor connection uses
+nonblocking writer acquisition; production busy/lease policy is unchanged. Bounded
+fixture-only SQL work makes the checkpoint observable without a production hook
+or rewriting lease/data state. This is local process recovery, not physical durability.
 
 Tests cover migration rollback/checksum/future-schema detection, concurrent
 migration, per-connection pragmas, FTS5, foreign keys, config/path rejection,
