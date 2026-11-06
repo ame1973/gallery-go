@@ -6,8 +6,8 @@ scan intents and schedule active sources by policy. Job UI is **not available ye
 A `202` response is
 not successful ingestion or codec processing. Source registration, folder
 mapping, and separate reachability checks are in [sources.md](sources.md).
-[Tag batches](tag-batches.md) freeze explicit album/tag snapshots and use this same
-queue, lease and cancel/retry lifecycle. Compatible embedded/standalone workers
+[Tag batches](tag-batches.md) and [cover batches](cover-batches.md) freeze explicit
+typed metadata snapshots and use this same queue, lease and cancel/retry lifecycle. Compatible embedded/standalone workers
 apply unresolved targets with fresh original-actor/resource fences and expose
 committed per-target results. Enqueue acceptance is not processing completion.
 

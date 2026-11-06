@@ -101,6 +101,20 @@ func (s *Service) UpdateAlbumMetadata(ctx context.Context, current auth.Session,
 	if state.value.Version != version {
 		return AlbumMetadata{}, auth.ErrConflict
 	}
+	result, err = applyAlbumMetadataTx(ctx, tx, actor.ID, state, patch, now)
+	if err != nil {
+		return AlbumMetadata{}, err
+	}
+	if err := command.Save(ctx, tx, result, now); err != nil {
+		return AlbumMetadata{}, err
+	}
+	return result, tx.Commit()
+}
+
+// applyAlbumMetadataTx preserves the manual metadata contract for leased batches.
+// The caller must freshly authorize and fence this current state in the same TX.
+func applyAlbumMetadataTx(ctx context.Context, tx *sql.Tx, actor string, state albumMetadataState, patch AlbumMetadataPatch, now time.Time) (AlbumMetadata, error) {
+	id, version := state.value.ID, state.value.Version
 	display, desired, cover := state.value.DisplayName, state.value.CoverOverrideID, state.rawCover
 	if patch.DisplayName != nil {
 		display = nil
@@ -109,28 +123,10 @@ func (s *Service) UpdateAlbumMetadata(ctx context.Context, current auth.Session,
 		}
 	}
 	if patch.CoverMediaID != nil {
-		desired = nil
-		if *patch.CoverMediaID != "" {
-			var selected string
-			if err := tx.QueryRowContext(ctx, `SELECT m.id FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
- WHERE `+MediaVisible+` AND m.album_id=? AND m.id=? AND COALESCE(json_extract(m.metadata_json,'$.status'),'unknown')!='not_media'`, actor.ID, id, *patch.CoverMediaID).Scan(&selected); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					return AlbumMetadata{}, ErrAlbumCover
-				}
-				return AlbumMetadata{}, err
-			}
-			desired = &selected
-		}
-		// Preserve the scanner's sticky automatic-cover order when clearing a
-		// desired override. No media is moved, generated, read or deleted here.
-		err := tx.QueryRowContext(ctx, `SELECT m.id FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
- WHERE `+MediaVisible+` AND m.album_id=? AND COALESCE(json_extract(m.metadata_json,'$.status'),'unknown')!='not_media'
- ORDER BY CASE WHEN m.id=? THEN 0 WHEN m.id=? THEN 1 ELSE 2 END,m.id LIMIT 1`, actor.ID, id, desired, state.rawCover).Scan(&cover)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		var err error
+		desired, cover, err = projectAlbumCoverTx(ctx, tx, actor, id, *patch.CoverMediaID, state.rawCover)
+		if err != nil {
 			return AlbumMetadata{}, err
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			cover = sql.NullString{}
 		}
 	}
 	changed := !sameOverride(display, state.value.DisplayName) || !sameOverride(desired, state.value.CoverOverrideID) || cover != state.rawCover
@@ -142,23 +138,45 @@ func (s *Service) UpdateAlbumMetadata(ctx context.Context, current auth.Session,
 			return AlbumMetadata{}, err
 		}
 	}
-	updated, err := scanAlbumMetadata(tx.QueryRowContext(ctx, albumMetadataSelect+` WHERE `+AlbumVisible+` AND a.id=?`, actor.ID, actor.ID, id))
+	updated, err := scanAlbumMetadata(tx.QueryRowContext(ctx, albumMetadataSelect+` WHERE `+AlbumVisible+` AND a.id=?`, actor, actor, id))
 	if err != nil {
 		return AlbumMetadata{}, err
 	}
-	result = updated.value
+	result := updated.value
 	if changed {
 		if err := JournalAlbumTx(ctx, tx, id, now); err != nil {
 			return AlbumMetadata{}, err
 		}
-		if err := store.Audit(ctx, tx, actor.ID, "album_metadata_updated", "album", id, map[string]any{"display_name": result.DisplayName, "cover_override_id": result.CoverOverrideID, "cover_media_id": result.CoverMediaID, "version": result.Version}, now); err != nil {
+		if err := store.Audit(ctx, tx, actor, "album_metadata_updated", "album", id, map[string]any{"display_name": result.DisplayName, "cover_override_id": result.CoverOverrideID, "cover_media_id": result.CoverMediaID, "version": result.Version}, now); err != nil {
 			return AlbumMetadata{}, err
 		}
 	}
-	if err := command.Save(ctx, tx, result, now); err != nil {
-		return AlbumMetadata{}, err
+	return result, nil
+}
+
+// projectAlbumCoverTx uses the scanner's sticky preference/current/stable-ID
+// order, including explicit clear. It never reads, generates, moves or deletes bytes.
+func projectAlbumCoverTx(ctx context.Context, tx *sql.Tx, actor, id, requested string, previous sql.NullString) (*string, sql.NullString, error) {
+	var desired *string
+	if requested != "" {
+		var selected string
+		if err := tx.QueryRowContext(ctx, `SELECT m.id FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
+ WHERE `+MediaVisible+` AND m.album_id=? AND m.id=? AND COALESCE(json_extract(m.metadata_json,'$.status'),'unknown')!='not_media'`, actor, id, requested).Scan(&selected); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, sql.NullString{}, ErrAlbumCover
+			}
+			return nil, sql.NullString{}, err
+		}
+		desired = &selected
 	}
-	return result, tx.Commit()
+	var cover sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT m.id FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
+ WHERE `+MediaVisible+` AND m.album_id=? AND COALESCE(json_extract(m.metadata_json,'$.status'),'unknown')!='not_media'
+ ORDER BY CASE WHEN m.id=? THEN 0 WHEN m.id=? THEN 1 ELSE 2 END,m.id LIMIT 1`, actor, id, desired, previous).Scan(&cover)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, sql.NullString{}, err
+	}
+	return desired, cover, nil
 }
 
 func nullableMetadataString(value sql.NullString) *string {

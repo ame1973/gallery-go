@@ -17,7 +17,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-func tagBatchFixture(t *testing.T) (*Service, auth.Session, *TagBatches) {
+func tagBatchFixture(t *testing.T) (*Service, auth.Session, *AlbumBatches) {
 	t.Helper()
 	s, owner := fixture(t)
 	if _, err := s.db.Exec(`INSERT INTO libraries(id,name,created_at) VALUES('batch-library','Batch',0),('batch-other','Other',0);
@@ -32,7 +32,7 @@ func tagBatchFixture(t *testing.T) (*Service, auth.Session, *TagBatches) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, owner, NewTagBatches(s.db, s.auth, queue)
+	return s, owner, NewAlbumBatches(s.db, s.auth, queue)
 }
 
 func tagBatchCounts(t *testing.T, s *Service) [9]int64 {

@@ -22,6 +22,17 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded durable album-cover preferences with explicit per-album selection/clear,
+  frozen sticky projection and media version/revision pins. Rewrites, moves, changed
+  eligibility or clear fallback reject rather than retarget. A shared DB-only manual
+  projector/setter preserves names/tags/creators/policy and never creates READY
+  pixels or content grants. Exactly two compiled tag/cover families share queue/
+  lease/budget/outcome mechanics while independent typed0019cover tables retain
+  immutable history; no old tag data/schema rewrite, second queue or dynamic SQL
+  selectors. Actual four-mode native scan/cover apply/no-op/clear, both-family
+  SIGKILL/reopened recovery, SQLite/HTTP rollback and typed HTTPS controls accompany
+  the APIs. Reprocessing and full manager UI remain separate work.
+
 - Durable administrative album-tag batches with frozen bounded selections,
   canonical actor receipts and historical target/result pages. Both worker modes
   recheck the original active administrator, target versions/source epochs and live
@@ -32,7 +43,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   job-owned intent and outcomes; source edits cancel bound work. Real SQLite late-
   rollback/authority tests, native four-mode TLS/CLI apply/no-op/clear, actual SIGKILL/
   closed-process/reopened recovery and typed HTTPS controls accompany the API.
-  Enqueue remains acceptance, not completion; cover/reprocess and manager UI remain.
+  Enqueue remains acceptance, not completion; reprocessing and manager UI remain.
 
 - Versioned album creator classification with explicit mapped/person/none modes,
   retained indexed provenance and same-source manual selection. Source scans preserve

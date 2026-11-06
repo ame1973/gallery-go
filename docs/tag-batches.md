@@ -3,8 +3,9 @@
 Administrators can freeze a bounded selection, let embedded or standalone workers
 apply its album-tag replacement, and inspect committed per-target results. A `202`
 response means accepted, **not applied or completed**. Targets commit independently;
-a batch can partially apply before a failure or cancellation. The manager UI,
-cover batches and media reprocessing remain under development. The existing
+a batch can partially apply before a failure or cancellation. The manager UI and
+media reprocessing remain under development. [Cover batches](cover-batches.md) use
+independent typed snapshots and the same bounded worker/result mechanics. The existing
 [single-album tag API](tags.md#versioned-album-association-replacement) remains
 available for synchronous versioned edits.
 
@@ -184,5 +185,6 @@ Replaying an enqueue receipt does not undo cancellation; retry does not refresh
 frozen targets or overwrite prior resolutions.
 
 This implements backend tag-batch execution/results, not a full media-manager UI,
-cover batch, codec reprocessing, variant rendering or full-product acceptance.
+codec reprocessing, variant rendering or full-product acceptance. Cover metadata
+uses the separate [cover-batch contract](cover-batches.md).
 Source media remains read-only throughout.

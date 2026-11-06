@@ -223,6 +223,11 @@ Only implemented endpoints are advertised:
   original-admin authority, resource/config/lease fences and atomic business/result/
   progress/events/audit. Retry never reapplies a resolved target or overwrites a later
   edit. `202` is not completion. See [docs/tag-batches.md](docs/tag-batches.md).
+- `POST /api/v2/admin/batches/covers` and `GET /admin/batches/{job_id}/covers`:
+  explicit per-album cover/clear preferences with frozen projected media version/
+  revision, current original-admin and resource/lease fences, shared outcome pages
+  and sticky clear behavior. Rewrites/moves/changed fallbacks are rejected, never
+  guessed. Metadata only, no READY/pixel/content grant. See [docs/cover-batches.md](docs/cover-batches.md).
 - `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
   and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
 - `GET /api/v2/admin/duplicates/exact` and `/admin/duplicates/exact/{group_id}/media`:
@@ -327,6 +332,11 @@ and preserves all 21 media IDs/revisions, bytes, modes and account scopes. Closi
 all app/worker handles and reopening SQLite retains three completed batch intents
 and six immutable results. Control browser fixtures deliberately disable consumers
 and never mistake their queued/cancelled empty-result pages for application.
+Cover batches then freeze actual projected media/revision epochs during a marker
+outage, apply/no-op/clear both native albums in both worker modes, retain preferences
+through a real no-op scan, and preserve all 21 media identities/revisions/SHA/modes.
+Closing every app/worker handle and reopening SQLite retains three cover intents
+and six committed outcomes without creating any rendered/READY bytes.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published
@@ -335,9 +345,9 @@ worker. It verifies expired-attempt history, live replacement ownership, unchang
 logical IDs/revisions, duplicate-free events and protected original bytes using
 isolated read-only PNGs plus bounded-memory sparse regular inputs. It does not
 represent physical NAS, power loss, complete codecs, or container ingestion.
-A separate tag-batch SIGKILL regression freezes actual partial progress over 100
-albums/100 tags, kills only its own CLI child, closes every original DB/app handle
-and reopens with a live successor. It verifies old-owner rejection, preserved
+Separate tag/cover batch SIGKILL regressions freeze actual partial progress over
+100 albums with 100 tags or projected media preferences, kill only their own CLI
+child, close every original DB/app handle and reopen with a live successor. They verify old-owner rejection, preserved
 attempt/cancelled budgets, already-applied skips, exactly-once album versions and
 complete result/outbox history. Only a test-owned pinned monitor connection uses
 nonblocking writer acquisition; production busy/lease policy is unchanged. Bounded

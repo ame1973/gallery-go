@@ -12,7 +12,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-func claimTagBatch(t *testing.T, b *TagBatches, owner auth.Session, input TagBatchRequest) jobs.Lease {
+func claimTagBatch(t *testing.T, b *AlbumBatches, owner auth.Session, input TagBatchRequest) jobs.Lease {
 	t.Helper()
 	accepted, err := b.Enqueue(t.Context(), owner, input, store.NewID())
 	if err != nil {

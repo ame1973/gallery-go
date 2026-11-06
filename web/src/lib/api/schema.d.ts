@@ -656,6 +656,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/batches/covers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept bounded immutable album-cover preferences
+         * @description Current administrator only. Provide 1 to 100 unique album targets with an explicit cover_media_id string per target; empty clears only the desired preference. Same-album eligible media is required. Freeze current album/library/source/configuration pins plus the actual sticky cover projection and its nullable media version/revision. No filesystem I/O, source writes, pixel generation or READY publication. Queue acceptance is not completion. Both worker modes recheck the original active administrator, resource/config/media pins and live lease before applying; a changed projection is never guessed. Canonical actor receipts replay the original accepted job, while new active coalescing includes the frozen media epoch. Tag and cover intents never coalesce.
+         */
+        post: operations["enqueueCoverBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/batches/{job_id}/covers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read frozen cover preferences and projected media epochs
+         * @description Current administrator only. Stable album-ID keysets with default 30/maximum 100 and only limit/cursor. Historical cover preference/projection and media version/revision are metadata, never current visibility, content permission or READY proof. Clear retains an explicit empty desired string and nullable projected media. Unknown jobs and non-cover batches return 404. Current processing results share the generic batch result collection.
+         */
+        get: operations["listCoverBatchTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/batches/{job_id}/targets": {
         parameters: {
             query?: never;
@@ -1364,7 +1406,41 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
-        TagBatchResult: {
+        CoverBatchRequest: {
+            /** @description Unique album IDs with explicit per-album preferences. Duplicate albums are rejected even when their desired cover differs. */
+            targets: {
+                album_id: string;
+                /** @description Eligible same-album media ID, or empty string to clear the override. Missing/null is rejected; IDs are at most 64 UTF-8 bytes. */
+                cover_media_id: string;
+            }[];
+        };
+        CoverBatchTarget: {
+            album_id: string;
+            /** Format: int64 */
+            album_version: number;
+            library_id: string;
+            source_id: string | null;
+            /** Format: int64 */
+            source_config_version: number | null;
+            /** @description Frozen desired preference; empty explicitly clears, not a missing request field. */
+            cover_media_id: string;
+            /** @description Actual accepted sticky preference/current/stable-ID projection. Not a content grant or READY proof. */
+            projected_cover_media_id: string | null;
+            /**
+             * Format: int64
+             * @description Frozen projected media version, or null exactly when no projected cover exists.
+             */
+            media_version: number | null;
+            /** @description Frozen projected current revision, possibly null for indexed metadata without a revision. Never a download/renderer capability. */
+            revision_id: string | null;
+        };
+        CoverBatchTargetPage: {
+            items: components["schemas"]["CoverBatchTarget"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        TagBatchResult: components["schemas"]["AlbumBatchResult"];
+        AlbumBatchResult: {
             id: string;
             album_id: string;
             attempt: number;
@@ -1379,7 +1455,7 @@ export interface components {
              */
             album_version: number | null;
             /** @enum {string|null} */
-            error_code: "ACTOR_NOT_AUTHORIZED" | "TARGET_CHANGED" | "TAG_NOT_FOUND" | "PROCESSING_FAILED" | null;
+            error_code: "ACTOR_NOT_AUTHORIZED" | "TARGET_CHANGED" | "TAG_NOT_FOUND" | "COVER_CHANGED" | "PROCESSING_FAILED" | null;
             /** @description Fixed safe English diagnostic selected by code, or null on non-failure; never raw SQL, paths or subprocess output. */
             message: string | null;
             /** Format: date-time */
@@ -3217,6 +3293,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    enqueueCoverBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Immutable intent accepted or identical active snapshot coalesced; inspect current job/results for real processing outcomes. */
+            202: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    /** @description Session-protected current job metadata URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCoverBatchTargets: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded immutable cover targets retained independently of live media/source rows. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverBatchTargetPage"];
                 };
             };
             default: components["responses"]["Problem"];

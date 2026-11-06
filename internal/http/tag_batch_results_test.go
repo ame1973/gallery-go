@@ -16,7 +16,7 @@ func TestTagBatchHTTPResultsReflectRealApplicationAndPreserveHistoricalVersions(
 	const enqueue = "/api/v2/admin/batches/tags"
 	job := decodeResponse[jobs.Job](t, f.admin.request("POST", enqueue, map[string]any{"album_ids": []string{"media-album", "other-tag-album"}, "tag_ids": []string{"tag-one"}}, "", store.NewID()), 202)
 	path := "/api/v2/admin/batches/" + job.ID + "/results"
-	empty := decodeResponse[listPage[access.TagBatchResult]](t, f.admin.request("GET", path, nil, "", ""), 200)
+	empty := decodeResponse[listPage[access.AlbumBatchResult]](t, f.admin.request("GET", path, nil, "", ""), 200)
 	if empty.Items == nil || len(empty.Items) != 0 || empty.HasMore || empty.NextCursor != nil {
 		t.Fatal("queued intent invented applied target results", empty)
 	}
@@ -32,11 +32,11 @@ func TestTagBatchHTTPResultsReflectRealApplicationAndPreserveHistoricalVersions(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := access.NewTagBatches(f.db, a, q).Process(t.Context(), lease); err != nil {
+	if err := access.NewAlbumBatches(f.db, a, q).Process(t.Context(), lease); err != nil {
 		t.Fatal(err)
 	}
 	response := f.admin.request("GET", path, nil, "", "")
-	results := decodeResponse[listPage[access.TagBatchResult]](t, response, 200)
+	results := decodeResponse[listPage[access.AlbumBatchResult]](t, response, 200)
 	if len(results.Items) != 2 || results.HasMore || results.NextCursor != nil || response.Header().Get("Cache-Control") != "private, no-store" {
 		t.Fatal("committed results missing/private caching broken", results, response.Header())
 	}
@@ -55,7 +55,7 @@ func TestTagBatchHTTPResultsReflectRealApplicationAndPreserveHistoricalVersions(
 	if _, err := f.db.Exec(`UPDATE sources SET is_active=0 WHERE id='media-source'`); err != nil {
 		t.Fatal(err)
 	}
-	history := decodeResponse[listPage[access.TagBatchResult]](t, f.admin.request("GET", path, nil, "", ""), 200)
+	history := decodeResponse[listPage[access.AlbumBatchResult]](t, f.admin.request("GET", path, nil, "", ""), 200)
 	if len(history.Items) != 2 || history.Items[0].AlbumVersion == nil || *history.Items[0].AlbumVersion != 2 {
 		t.Fatal("source state erased historical results", history)
 	}
@@ -97,15 +97,15 @@ func TestTagBatchHTTPResultKeysetsBindJobAccountAndScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := access.NewTagBatches(f.db, a, q).Process(t.Context(), lease); err != nil {
+	if err := access.NewAlbumBatches(f.db, a, q).Process(t.Context(), lease); err != nil {
 		t.Fatal(err)
 	}
 	path := "/api/v2/admin/batches/" + job.ID + "/results"
-	first := decodeResponse[listPage[access.TagBatchResult]](t, f.admin.request("GET", path, nil, "", ""), 200)
+	first := decodeResponse[listPage[access.AlbumBatchResult]](t, f.admin.request("GET", path, nil, "", ""), 200)
 	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
 		t.Fatal("result page lacked bounded defaults", first)
 	}
-	last := decodeResponse[listPage[access.TagBatchResult]](t, f.admin.request("GET", path+"?limit=100&cursor="+*first.NextCursor, nil, "", ""), 200)
+	last := decodeResponse[listPage[access.AlbumBatchResult]](t, f.admin.request("GET", path+"?limit=100&cursor="+*first.NextCursor, nil, "", ""), 200)
 	if len(last.Items) != 70 || last.HasMore || last.NextCursor != nil || last.Items[0].ID <= first.Items[29].ID {
 		t.Fatal("result keysets duplicated/lost committed rows", last)
 	}
@@ -145,7 +145,7 @@ func TestTagBatchHTTPUnknownStoredFailureCodeNeverBecomesRawDiagnostics(t *testi
 		t.Fatal(err)
 	}
 	response := f.admin.request("GET", "/api/v2/admin/batches/"+job.ID+"/results", nil, "", "")
-	results := decodeResponse[listPage[access.TagBatchResult]](t, response, 200)
+	results := decodeResponse[listPage[access.AlbumBatchResult]](t, response, 200)
 	if len(results.Items) != 1 || results.Items[0].ErrorCode == nil || *results.Items[0].ErrorCode != "PROCESSING_FAILED" || results.Items[0].Message == nil || strings.Contains(response.Body.String(), "/private") || strings.Contains(response.Body.String(), "SQL") {
 		t.Fatal("stored diagnostic was exposed verbatim", response.Body.String())
 	}

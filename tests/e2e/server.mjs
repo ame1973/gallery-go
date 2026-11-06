@@ -24,6 +24,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'person-metadata',
     'album-tags',
     'tag-batches',
+    'cover-batches',
     'creators',
   ].map((kind) => ({
     name: `${kind}-${project}`,

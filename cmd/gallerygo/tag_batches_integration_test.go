@@ -115,9 +115,9 @@ func verifyCompiledTagBatchProcessing(t *testing.T, api *scanHTTPSClient, source
 		}
 	}
 	type resultPage struct {
-		Items      []access.TagBatchResult `json:"items"`
-		NextCursor *string                 `json:"next_cursor"`
-		HasMore    bool                    `json:"has_more"`
+		Items      []access.AlbumBatchResult `json:"items"`
+		NextCursor *string                   `json:"next_cursor"`
+		HasMore    bool                      `json:"has_more"`
 	}
 	resultPath := "/admin/batches/" + accepted.ID + "/results"
 	var resultFirst, resultLast resultPage

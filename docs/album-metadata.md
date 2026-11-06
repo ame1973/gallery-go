@@ -4,6 +4,8 @@ Administrators can override an indexed album's display label and preferred cover
 without renaming, copying, deleting or writing any source file. This current online
 API is metadata-only: tags, creator/source/library reassignment, access policy,
 batch reprocessing and management screens remain separate operations/work.
+For explicit durable multi-album cover preferences, use [cover batches](cover-batches.md);
+they share the same eligibility/sticky-clear metadata semantics and do not render bytes.
 
 All routes below are relative to `/api/v2`, require a current administrator HTTPS
 session, and share active library/source visibility. An unavailable mount does not

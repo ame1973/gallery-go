@@ -56,7 +56,7 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "USERNAME_TAKEN", "Choose a different username.")
 	case errors.Is(err, access.ErrCreatorMode), errors.Is(err, access.ErrCreatorSelection):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
-	case errors.Is(err, access.ErrTagSet), errors.Is(err, access.ErrUnknownTag), errors.Is(err, access.ErrTagBatchSelection):
+	case errors.Is(err, access.ErrTagSet), errors.Is(err, access.ErrUnknownTag), errors.Is(err, access.ErrTagBatchSelection), errors.Is(err, access.ErrCoverBatchSelection):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, access.ErrTagNameTaken):
 		problem(w, 409, "TAG_NAME_TAKEN", "Choose a different exact tag label.")

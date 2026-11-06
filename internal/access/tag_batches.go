@@ -30,20 +30,20 @@ type TagBatchTarget struct {
 	TagIDs              []string `json:"tag_ids"`
 }
 
-// TagBatches freezes accepted intent and processes its metadata-only targets under
+// AlbumBatches freezes accepted intent and processes its metadata-only targets under
 // current original-actor authority and live queue leases. Enqueue is not completion.
-type TagBatches struct {
+type AlbumBatches struct {
 	db    *sql.DB
 	auth  *auth.Service
 	queue *jobs.Queue
 	now   func() time.Time
 }
 
-func NewTagBatches(db *sql.DB, authentication *auth.Service, queue *jobs.Queue) *TagBatches {
-	return &TagBatches{db: db, auth: authentication, queue: queue, now: time.Now}
+func NewAlbumBatches(db *sql.DB, authentication *auth.Service, queue *jobs.Queue) *AlbumBatches {
+	return &AlbumBatches{db: db, auth: authentication, queue: queue, now: time.Now}
 }
 
-func (b *TagBatches) Enqueue(ctx context.Context, current auth.Session, input TagBatchRequest, key string) (jobs.Job, error) {
+func (b *AlbumBatches) Enqueue(ctx context.Context, current auth.Session, input TagBatchRequest, key string) (jobs.Job, error) {
 	tx, err := b.db.BeginTx(ctx, nil)
 	if err != nil {
 		return jobs.Job{}, err
@@ -133,7 +133,7 @@ func (b *TagBatches) Enqueue(ctx context.Context, current auth.Session, input Ta
 	return job, tx.Commit()
 }
 
-func (b *TagBatches) Targets(ctx context.Context, current auth.Session, id, after string, limit int) ([]TagBatchTarget, error) {
+func (b *AlbumBatches) Targets(ctx context.Context, current auth.Session, id, after string, limit int) ([]TagBatchTarget, error) {
 	if !pageLimit(limit) {
 		return nil, ErrTagBatchSelection
 	}

@@ -771,6 +771,53 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Job' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/batches/covers:
+    post:
+      operationId: enqueueCoverBatch
+      summary: Accept bounded immutable album-cover preferences
+      description: Current administrator only. Provide 1 to 100 unique album targets with an explicit cover_media_id string per target; empty clears only the desired preference. Same-album eligible media is required. Freeze current album/library/source/configuration pins plus the actual sticky cover projection and its nullable media version/revision. No filesystem I/O, source writes, pixel generation or READY publication. Queue acceptance is not completion. Both worker modes recheck the original active administrator, resource/config/media pins and live lease before applying; a changed projection is never guessed. Canonical actor receipts replay the original accepted job, while new active coalescing includes the frozen media epoch. Tag and cover intents never coalesce.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CoverBatchRequest' }
+      responses:
+        '202':
+          description: Immutable intent accepted or identical active snapshot coalesced; inspect current job/results for real processing outcomes.
+          headers:
+            ETag: { $ref: '#/components/headers/ResourceETag' }
+            Location:
+              description: Session-protected current job metadata URL.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/batches/{job_id}/covers:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    get:
+      operationId: listCoverBatchTargets
+      summary: Read frozen cover preferences and projected media epochs
+      description: Current administrator only. Stable album-ID keysets with default 30/maximum 100 and only limit/cursor. Historical cover preference/projection and media version/revision are metadata, never current visibility, content permission or READY proof. Clear retains an explicit empty desired string and nullable projected media. Unknown jobs and non-cover batches return 404. Current processing results share the generic batch result collection.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded immutable cover targets retained independently of live media/source rows.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoverBatchTargetPage' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/batches/{job_id}/targets:
     parameters:
       - { $ref: '#/components/parameters/JobID' }
@@ -1972,7 +2019,72 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/TagBatchTarget' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
+    CoverBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [targets]
+      properties:
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Unique album IDs with explicit per-album preferences. Duplicate albums are rejected even when their desired cover differs.
+          items:
+            type: object
+            additionalProperties: false
+            required: [album_id, cover_media_id]
+            properties:
+              album_id: { type: string, minLength: 1, maxLength: 64 }
+              cover_media_id:
+                type: string
+                maxLength: 64
+                description: Eligible same-album media ID, or empty string to clear the override. Missing/null is rejected; IDs are at most 64 UTF-8 bytes.
+    CoverBatchTarget:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          album_id,
+          album_version,
+          library_id,
+          source_id,
+          source_config_version,
+          cover_media_id,
+          projected_cover_media_id,
+          media_version,
+          revision_id,
+        ]
+      properties:
+        album_id: { type: string }
+        album_version: { type: integer, format: int64, minimum: 1 }
+        library_id: { type: string }
+        source_id: { type: [string, 'null'] }
+        source_config_version: { type: [integer, 'null'], format: int64, minimum: 1 }
+        cover_media_id:
+          type: string
+          description: Frozen desired preference; empty explicitly clears, not a missing request field.
+        projected_cover_media_id:
+          type: [string, 'null']
+          description: Actual accepted sticky preference/current/stable-ID projection. Not a content grant or READY proof.
+        media_version:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          description: Frozen projected media version, or null exactly when no projected cover exists.
+        revision_id:
+          type: [string, 'null']
+          description: Frozen projected current revision, possibly null for indexed metadata without a revision. Never a download/renderer capability.
+    CoverBatchTargetPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CoverBatchTarget' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     TagBatchResult:
+      $ref: '#/components/schemas/AlbumBatchResult'
+    AlbumBatchResult:
       type: object
       additionalProperties: false
       required: [id, album_id, attempt, outcome, album_version, error_code, message, created_at]
@@ -1991,7 +2103,15 @@ components:
           description: Historical resolved version, not a current ETag. Null for failures. Already-applied skips retain the original resolution version even after later edits.
         error_code:
           type: [string, 'null']
-          enum: [ACTOR_NOT_AUTHORIZED, TARGET_CHANGED, TAG_NOT_FOUND, PROCESSING_FAILED, null]
+          enum:
+            [
+              ACTOR_NOT_AUTHORIZED,
+              TARGET_CHANGED,
+              TAG_NOT_FOUND,
+              COVER_CHANGED,
+              PROCESSING_FAILED,
+              null,
+            ]
         message:
           type: [string, 'null']
           description: Fixed safe English diagnostic selected by code, or null on non-failure; never raw SQL, paths or subprocess output.

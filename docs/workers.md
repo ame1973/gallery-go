@@ -1,6 +1,7 @@
 # Worker operation and resource limits
 
-GalleryGo consumes native scans and [album-tag batches](tag-batches.md) inside
+GalleryGo consumes native scans, [album-tag batches](tag-batches.md) and
+[cover preferences](cover-batches.md) inside
 `serve` by default. To use a dedicated
 process instead, set `worker.embedded: false` in the server's private YAML, then run:
 
@@ -46,11 +47,12 @@ published inventory/health merely because an intent was accepted. Inactive or
 mismatched registry pins are skipped. Source edits cancel old dependent jobs and
 reset dispatch deadlines; the next accepted intent binds the new epoch.
 
-A worker claims only supported `scan` and `batch_tags` jobs. It rejects malformed
-private intents rather than guessing roots/scopes or expanding frozen selections.
-Tag batches use current original-administrator authority and DB-only per-target
-resource/lease fences; they never invoke codecs or read source media. Queued work
-cannot progress without a compatible embedded or standalone consumer.
+A worker claims only supported `scan`, `batch_tags` and `batch_covers` jobs. It
+rejects malformed private intents rather than guessing roots/scopes or expanding
+frozen selections. Metadata batches use current original-administrator authority
+and DB-only per-target resource/media/lease fences; they never invoke codecs or
+read source media. Queued work cannot progress without a compatible embedded or
+standalone consumer.
 
 The pipeline performs bounded manifests and streamed hashes, native JPEG/PNG/GIF/WebP
 metadata, whitelisted image EXIF/animation, controlled AVIF primary items/sequences,

@@ -60,6 +60,8 @@ var Operations = []Operation{
 	{Method: "POST", Path: "/admin/sources/{source_id}/check", ID: "checkSource"},
 	{Method: "POST", Path: "/admin/scans", ID: "enqueueScan"},
 	{Method: "POST", Path: "/admin/batches/tags", ID: "enqueueTagBatch"},
+	{Method: "POST", Path: "/admin/batches/covers", ID: "enqueueCoverBatch"},
+	{Method: "GET", Path: "/admin/batches/{job_id}/covers", ID: "listCoverBatchTargets"},
 	{Method: "GET", Path: "/admin/batches/{job_id}/targets", ID: "listTagBatchTargets"},
 	{Method: "GET", Path: "/admin/batches/{job_id}/results", ID: "listTagBatchResults"},
 	{Method: "GET", Path: "/admin/jobs", ID: "listJobs"},
@@ -125,7 +127,7 @@ type PublicConfig struct {
 
 // New serves only application assets and explicitly registered APIs. Private
 // source files and generated media must never be mounted through this handler.
-func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources, scanService *scanner.Scans, readiness *health.Service, batches *access.TagBatches) http.Handler {
+func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin string, mediaService *media.Service, jobService *jobs.Admin, sourceService *library.Sources, scanService *scanner.Scans, readiness *health.Service, batches *access.AlbumBatches) http.Handler {
 	mux := http.NewServeMux()
 	authentication := authentication{service: service, origin: origin}
 	authorization := authorization{service: access.New(db, service)}
@@ -133,7 +135,7 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 	work := jobHandler{service: jobService}
 	sources := sourceHandler{service: sourceService}
 	scans := scanHandler{service: scanService}
-	tagBatches := tagBatchHandler{service: batches}
+	tagBatches := albumBatchHandler{service: batches}
 	handlers := map[string]http.HandlerFunc{
 		"login":                    authentication.login,
 		"logout":                   authentication.logout,
@@ -162,6 +164,8 @@ func New(db *sql.DB, assets fs.FS, version string, service *auth.Service, origin
 		"checkSource":              sources.check,
 		"enqueueScan":              scans.enqueue,
 		"enqueueTagBatch":          tagBatches.enqueue,
+		"enqueueCoverBatch":        tagBatches.enqueueCovers,
+		"listCoverBatchTargets":    tagBatches.coverTargets,
 		"listTagBatchTargets":      tagBatches.targets,
 		"listTagBatchResults":      tagBatches.results,
 		"listJobs":                 work.list,

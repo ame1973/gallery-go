@@ -6,9 +6,9 @@ import (
 	"gallerygo/internal/access"
 )
 
-type tagBatchHandler struct{ service *access.TagBatches }
+type albumBatchHandler struct{ service *access.AlbumBatches }
 
-func (h tagBatchHandler) enqueue(w http.ResponseWriter, r *http.Request) {
+func (h albumBatchHandler) enqueue(w http.ResponseWriter, r *http.Request) {
 	key, ok := idempotencyKey(w, r)
 	if !ok {
 		return
@@ -27,7 +27,7 @@ func (h tagBatchHandler) enqueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, job)
 }
 
-func (h tagBatchHandler) targets(w http.ResponseWriter, r *http.Request) {
+func (h albumBatchHandler) targets(w http.ResponseWriter, r *http.Request) {
 	page, ok := readPage(w, r)
 	if !ok {
 		return
@@ -46,7 +46,7 @@ func (h tagBatchHandler) targets(w http.ResponseWriter, r *http.Request) {
 	writePage(w, page, items, func(target access.TagBatchTarget) string { return target.AlbumID })
 }
 
-func (h tagBatchHandler) results(w http.ResponseWriter, r *http.Request) {
+func (h albumBatchHandler) results(w http.ResponseWriter, r *http.Request) {
 	page, ok := readPage(w, r)
 	if !ok {
 		return
@@ -62,5 +62,5 @@ func (h tagBatchHandler) results(w http.ResponseWriter, r *http.Request) {
 		requestError(w, err)
 		return
 	}
-	writePage(w, page, items, func(result access.TagBatchResult) string { return result.ID })
+	writePage(w, page, items, func(result access.AlbumBatchResult) string { return result.ID })
 }

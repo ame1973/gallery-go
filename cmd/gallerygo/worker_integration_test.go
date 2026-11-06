@@ -755,6 +755,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			verifyCompiledAlbumTagAssociations(t, api, source, marker, workUnits)
 			verifyCompiledCreatorOverrides(t, api, source, marker, workUnits)
 			verifyCompiledTagBatchProcessing(t, api, source, marker)
+			verifyCompiledCoverBatches(t, api, source, marker, workUnits)
 			if stopWorker != nil {
 				stopWorker()
 				api.request("GET", "/health/ready", nil, 503, nil)
@@ -774,6 +775,10 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
  (SELECT COUNT(*) FROM jobs WHERE kind='batch_tags' AND status='succeeded' AND attempts=1 AND total=2 AND done=2),
  (SELECT COUNT(*) FROM album_tag_batch_results WHERE outcome IN ('applied','unchanged') AND album_version>0)`).Scan(&batchIntents, &batchTargets, &succeededBatches, &batchResults); err != nil || batchIntents != 3 || batchTargets != 6 || succeededBatches != 3 || batchResults != 6 {
 				t.Fatal("closed-process/reopened database lost applied batch intent/results", batchIntents, batchTargets, succeededBatches, batchResults, err)
+			}
+			var coverIntents, coverTargets, coverResults, completedCovers int
+			if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM album_cover_batches),(SELECT COUNT(*) FROM album_cover_batch_targets),(SELECT COUNT(*) FROM album_cover_batch_results),(SELECT COUNT(*) FROM jobs WHERE kind='batch_covers' AND status='succeeded' AND attempts=1 AND total=2 AND done=2)`).Scan(&coverIntents, &coverTargets, &coverResults, &completedCovers); err != nil || coverIntents != 3 || coverTargets != 6 || coverResults != 6 || completedCovers != 3 {
+				t.Fatal("reopened database lost real cover batch outcomes", coverIntents, coverTargets, coverResults, completedCovers, err)
 			}
 			if scheduled {
 				var actor *string

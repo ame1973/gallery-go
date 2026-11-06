@@ -103,6 +103,23 @@ func freezeTagBatchCheckpoint(t *testing.T, db *sql.DB, id string, attempt int) 
 }
 
 func TestCompiledTagBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testing.T) {
+	runCompiledAlbumBatchCrash(t, false)
+}
+
+func TestCompiledCoverBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testing.T) {
+	runCompiledAlbumBatchCrash(t, true)
+}
+
+func runCompiledAlbumBatchCrash(t *testing.T, covers bool) {
+	t.Helper()
+	resultsTable := "album_tag_batch_results"
+	businessCount := `SELECT COUNT(*) FROM album_tags`
+	expectedBusiness := 10000
+	if covers {
+		resultsTable = "album_cover_batch_results"
+		businessCount = `SELECT COUNT(*) FROM albums WHERE cover_override_id IS NOT NULL AND cover_media_id=cover_override_id`
+		expectedBusiness = 100
+	}
 	binary := filepath.Join(t.TempDir(), "gallerygo")
 	if output, err := exec.CommandContext(t.Context(), "go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build CLI: %v\n%s", err, output)
@@ -179,8 +196,13 @@ func TestCompiledTagBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testi
 		if _, err := tx.Exec(`INSERT INTO tags(id,name) VALUES(?,?)`, tags[index], tags[index]); err != nil {
 			t.Fatal(err)
 		}
+		if covers {
+			if _, err := tx.Exec(`INSERT INTO media(id,album_id,kind,file_name,created_at,updated_at) VALUES(?,?,'image','fixture.jpg',0,0)`, "batch-crash-media-"+ids[index], ids[index]); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	if _, err := tx.Exec(`CREATE TRIGGER batch_test_work BEFORE INSERT ON album_tag_batch_results BEGIN SELECT (WITH RECURSIVE steps(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM steps WHERE i<100000) SELECT sum(i) FROM steps); END`); err != nil {
+	if _, err := tx.Exec(`CREATE TRIGGER batch_test_work BEFORE INSERT ON ` + resultsTable + ` BEGIN SELECT (WITH RECURSIVE steps(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM steps WHERE i<100000) SELECT sum(i) FROM steps); END`); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -200,7 +222,15 @@ func TestCompiledTagBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testi
 	api.request("GET", "/auth/csrf", nil, 200, &csrf)
 	api.csrf = csrf.Token
 	var accepted jobs.Job
-	api.request("POST", "/admin/batches/tags", access.TagBatchRequest{AlbumIDs: ids, TagIDs: tags}, 202, &accepted)
+	if covers {
+		request := access.CoverBatchRequest{Targets: []access.CoverBatchSelection{}}
+		for _, id := range ids {
+			request.Targets = append(request.Targets, access.CoverBatchSelection{AlbumID: id, CoverMediaID: new("batch-crash-media-" + id)})
+		}
+		api.request("POST", "/admin/batches/covers", request, 202, &accepted)
+	} else {
+		api.request("POST", "/admin/batches/tags", access.TagBatchRequest{AlbumIDs: ids, TagIDs: tags}, 202, &accepted)
+	}
 	monitor, err := store.Open(t.Context(), dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +248,7 @@ func TestCompiledTagBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testi
 	}
 	oldLease := jobs.Lease{Job: before, Owner: owner}
 	committed := map[string]int64{}
-	rows, err := freeze.Query(`SELECT album_id,album_version FROM album_tag_batch_results WHERE job_id=? AND outcome='applied'`, accepted.ID)
+	rows, err := freeze.Query(`SELECT album_id,album_version FROM `+resultsTable+` WHERE job_id=? AND outcome='applied'`, accepted.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +312,7 @@ func TestCompiledTagBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testi
 		t.Fatal("per-attempt recovery history lost real outcomes", history)
 	}
 	var resolved, links, versions, outcomes, orphan, duplicates int
-	if err := reopened.QueryRow(`SELECT (SELECT COUNT(*) FROM album_tag_batch_results WHERE job_id=? AND outcome='applied'),(SELECT COUNT(*) FROM album_tags),(SELECT COUNT(*) FROM albums WHERE version=2),(SELECT COUNT(*) FROM album_tag_batch_results WHERE job_id=?),(SELECT COUNT(*) FROM change_log c WHERE NOT EXISTS(SELECT 1 FROM outbox_events o WHERE o.change_seq=c.seq)),(SELECT COUNT(*) FROM (SELECT resource_id,version,COUNT(*) n FROM change_log WHERE kind='album' GROUP BY resource_id,version HAVING n>1))`, accepted.ID, accepted.ID).Scan(&resolved, &links, &versions, &outcomes, &orphan, &duplicates); err != nil || resolved != 100 || links != 10000 || versions != 100 || int64(outcomes) != 100+before.Done || orphan != 0 || duplicates != 0 {
+	if err := reopened.QueryRow(`SELECT (SELECT COUNT(*) FROM `+resultsTable+` WHERE job_id=? AND outcome='applied'),(`+businessCount+`),(SELECT COUNT(*) FROM albums WHERE version=2),(SELECT COUNT(*) FROM `+resultsTable+` WHERE job_id=?),(SELECT COUNT(*) FROM change_log c WHERE NOT EXISTS(SELECT 1 FROM outbox_events o WHERE o.change_seq=c.seq)),(SELECT COUNT(*) FROM (SELECT resource_id,version,COUNT(*) n FROM change_log WHERE kind='album' GROUP BY resource_id,version HAVING n>1))`, accepted.ID, accepted.ID).Scan(&resolved, &links, &versions, &outcomes, &orphan, &duplicates); err != nil || resolved != 100 || links != expectedBusiness || versions != 100 || int64(outcomes) != 100+before.Done || orphan != 0 || duplicates != 0 {
 		t.Fatal("reopened business/result/event state is inconsistent", resolved, links, versions, outcomes, orphan, duplicates, err)
 	}
 	for id, version := range committed {
@@ -294,8 +324,8 @@ func TestCompiledTagBatchSIGKILLReopensWithoutRepeatingCommittedTargets(t *testi
 	var seen int
 	for cursor := ""; ; {
 		var page struct {
-			Items      []access.TagBatchResult `json:"items"`
-			NextCursor *string                 `json:"next_cursor"`
+			Items      []access.AlbumBatchResult `json:"items"`
+			NextCursor *string                   `json:"next_cursor"`
 		}
 		path := "/admin/batches/" + accepted.ID + "/results?limit=100"
 		if cursor != "" {

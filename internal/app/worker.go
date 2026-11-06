@@ -26,7 +26,7 @@ type scanRuntime struct {
 	sources        *library.Sources
 	scans          *scanner.Scans
 	handler        jobs.Handler
-	batches        *access.TagBatches
+	batches        *access.AlbumBatches
 	roots          map[string]media.SourceRoot
 	schedule       scanner.SchedulePolicy
 }
@@ -60,12 +60,12 @@ func newScanRuntime(db *sql.DB, c Config) (*scanRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &scanRuntime{authentication, queue, sources, scans, handler, access.NewTagBatches(db, authentication, queue), roots, c.Scheduler}, nil
+	return &scanRuntime{authentication, queue, sources, scans, handler, access.NewAlbumBatches(db, authentication, queue), roots, c.Scheduler}, nil
 }
 
 func (r *scanRuntime) run(ctx context.Context, role string) error {
 	consume := func(ctx context.Context) error {
-		return r.queue.Run(ctx, role, map[string]jobs.Handler{"scan": r.handler, "batch_tags": r.batches.Process})
+		return r.queue.Run(ctx, role, map[string]jobs.Handler{"scan": r.handler, "batch_tags": r.batches.Process, "batch_covers": r.batches.Process})
 	}
 	if !r.schedule.Enabled {
 		return consume(ctx)

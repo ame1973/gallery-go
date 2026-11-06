@@ -76,13 +76,13 @@ func testScans(t *testing.T, db *sql.DB, authentication *auth.Service) *scanner.
 	return scanner.NewScans(db, authentication, queue)
 }
 
-func testTagBatches(t *testing.T, db *sql.DB, authentication *auth.Service) *access.TagBatches {
+func testTagBatches(t *testing.T, db *sql.DB, authentication *auth.Service) *access.AlbumBatches {
 	t.Helper()
 	queue, err := jobs.New(db, jobs.DefaultPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return access.NewTagBatches(db, authentication, queue)
+	return access.NewAlbumBatches(db, authentication, queue)
 }
 
 func testReadiness(t *testing.T, db *sql.DB, authentication *auth.Service, roots map[string]media.SourceRoot) *health.Service {
