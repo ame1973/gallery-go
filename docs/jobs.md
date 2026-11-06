@@ -172,6 +172,23 @@ under development; this API does not complete the operations UI.
   `PROCESSING_FAILED`, `JOB_TIMEOUT`, `LEASE_EXPIRED`, `WORKER_STOPPED`, and
   `INTERNAL_ERROR`. They are not authorization capabilities.
 
+## Private temporary-maintenance boundary
+
+The internal `reconcile_temps` protocol is **not registered** as an application
+consumer and has no public enqueue API or CLI command. It reuses this queue rather
+than creating another scheduler, reservation ledger or progress model. See
+[private temporary-file reconciliation](media.md#bounded-private-temporary-file-reconciliation)
+for exact scope, retention, source-warning, lease and filesystem constraints.
+
+Its units are bounded known job scopes, not deleted-file counts or a full cache
+sweep. Enumeration limits fail the affected scope instead of claiming all bytes
+were inspected. Per-attempt `total_known` reserves the budget once. Confirmed
+scope progress/event/outbox/audit commits atomically; physical unlinks cannot be
+rolled back if a later journal/cancellation/lease check fails. Unconfirmed work is
+cancelled on interruption and an absent file is not recounted as a successful
+removal on retry. No source/index purge, READY generation, full orphan collector
+or additional media/download authorization is implied.
+
 ## Cancel or retry
 
 Read the job and copy its exact quoted tag, `"job:<id>:<version>"`, to `If-Match`.

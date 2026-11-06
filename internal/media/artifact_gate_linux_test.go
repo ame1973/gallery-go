@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"gallerygo/internal/store"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -374,6 +376,10 @@ func TestArtifactGateProcessHelper(t *testing.T) {
 	if cache == "" || nonce == "" {
 		t.Skip("only the owning test launches this helper")
 	}
+	marker, err := os.ReadFile(filepath.Join(cache, ".artifact-gate-test"))
+	if err != nil || string(marker) != nonce {
+		t.Fatal("missing parent-owned artifact gate test marker")
+	}
 	svc := New(nil, nil, cache, nil)
 	data := webpFixture(t, "lossless")
 	artifact, err := validateStillArtifact(t.Context(), "gate-process-revision", "thumb_320", stillSource(3, 2, nil), data)
@@ -396,7 +402,10 @@ func TestArtifactGateExcludesOtherProcessAndReleasesAfterOwnedSIGKILL(t *testing
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestArtifactGateProcessHelper$", "-test.timeout=12s")
-	nonce := filepath.Base(t.TempDir())
+	nonce := store.NewID()
+	if err := os.WriteFile(filepath.Join(svc.cacheRoot, ".artifact-gate-test"), []byte(nonce), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	command.Env = append(os.Environ(), "GALLERYGO_ARTIFACT_GATE_TEST_ROOT="+svc.cacheRoot, "GALLERYGO_ARTIFACT_GATE_TEST_NONCE="+nonce)
 	stdout, err := command.StdoutPipe()
 	if err != nil {

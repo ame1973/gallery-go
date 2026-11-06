@@ -22,6 +22,17 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded private Linux temporary-artifact reconciliation under exclusive cache
+  exclusion, using the existing live queue/attempt budget and atomic progress/
+  change/outbox/audit. Known terminal static jobs, exact media/source dependencies,
+  old generated private single-link temp inodes and absence of every DB variant
+  reference are required. Active source warnings stop deletion; unknown/live/
+  referenced/unsafe entries, shared directories, sources and final variants remain.
+  Scope work units, explicit enumeration limits, irreversible unlink versus later
+  journal failure, retry and actual owned-process SIGKILL/reopened recovery retain
+  truthful counts. No public enqueue, consumer, scheduled/full cache sweep, renderer
+  or READY publisher is enabled; no new migration, dependency or secondary queue.
+
 - Private Linux cache-wide staging/reconciliation exclusion using shared/exclusive
   advisory locks, not another queue or DB reservation. A closeable nonserialized
   stored-artifact capsule keeps shared exclusion through a future fenced publication;

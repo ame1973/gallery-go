@@ -104,11 +104,55 @@ This filesystem boundary is not yet connected to a production renderer or DB
 publisher. Unreferenced bytes are not listed or downloadable, even when a complete
 file exists at an immutable key. Failure after a rename can leave a private orphan;
 job directories remain for later lease-aware reconciliation, never recursive or
-source cleanup. No orphan deletion or background reconciler is enabled by the
-shared/exclusive gate; reference/liveness policy and truthful lease-aware cleanup
-still require implementation. Unsupported platforms fail before writing instead of substituting
-an overwriting rename. Contexts stop work between I/O operations, but cannot promise
-to interrupt a kernel-stalled filesystem flush or rename.
+source cleanup. No full orphan collector or background cleanup consumer is enabled;
+final immutable-orphan reconciliation remains required, separate from the bounded
+private temporary-file batch below. Unsupported platforms fail before writing
+instead of substituting an overwriting rename. Contexts stop work between I/O
+operations, but cannot promise to interrupt a kernel-stalled filesystem flush or rename.
+
+### Bounded private temporary-file reconciliation
+
+An internal Linux-only `reconcile_temps` batch can remove eligible interrupted
+static-output temporary files. **No public enqueue endpoint, CLI command,
+application consumer or scheduled cleanup is enabled.** It is not a full cache
+sweep, source/index purge, final-variant collector, decoder or READY publisher.
+The canonical private work identity binds the cache, job-ID continuation and
+explicit bounds to the live job/owner/attempt and creation-bound cache dependency.
+
+Each batch examines 1..100 known DB job scopes in stable ID order, after its private
+cursor and before the cleanup job's own ID. Enumeration is bounded to 1..1000
+entries with at most one lookahead; a limit is reported as failed/incomplete work,
+not a successful full sweep. Unknown/live/nonmatching jobs are skipped. Only
+terminal finite-v1 static jobs with original media/source dependencies can own an
+eligible `tmp/{job_id}` scope. Any currently active source observation that is not
+healthy stops destructive maintenance; no NAS probe occurs and reachability is
+not inventory completion or permission to purge indexed data.
+
+An eligible file must have the generated lowercase UUIDv7 `.tmp` name, be regular,
+mode 0600, single-link, same UID/device, at most 8 MiB and at least 24 hours past its
+last write. Root/tmp/job directories are private and pinned; named inode/stat changes,
+symlinks, unknown names/types, non-private permissions, hard links, newer/future or
+oversized files are retained. **Any DB variant reference**, including a retired or
+old-revision row, prevents removal. Sources, final variants, unknown job folders,
+shared directories and the persistent gate file are never removed.
+
+The batch retains exclusive cache exclusion across fresh DB reference/liveness/
+lease checks and basename-only `unlinkat`/directory fsync. Kernel flags forbid
+directory removal. No filesystem I/O or lock waiting occurs inside a SQLite writer.
+A cooperative retry must obtain a shared gate and create a new temporary name;
+queueing a retry cannot reattach a protected old temp inode while exclusion is held.
+Unsupported hosts fail without DB/filesystem mutation or a weaker fallback.
+
+One **job scope**, not one file, is a cumulative work unit. A scope with confirmed
+unlinks and no error succeeds; a no-op/retained scope skips; errors or enumeration
+limits fail. `total_known` reserves that attempt's budget once, even when it is
+empty. Safe progress/change/outbox/audit and final completion use the existing
+queue transactions. Filesystem unlink cannot roll back after a later SQL/cancel/
+lease failure: it is not recorded as successful work without its final live
+transaction. Interrupted unfinished units become cancelled; a retry receives a
+fresh budget and skips absent files rather than inventing successful removals.
+This is not an atomic filesystem/DB transaction or a promise to cancel an in-flight
+kernel call at the exact expiry instant.
 
 ### Private revision-bound source preparation
 
