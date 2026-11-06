@@ -195,6 +195,10 @@ Only implemented endpoints are advertised:
   version preconditions and scope revocation.
 - `GET/POST /api/v2/admin/libraries`, `GET/PATCH/DELETE /admin/libraries/{library_id}`:
   library configuration; only empty libraries can be deleted.
+- `GET/POST /api/v2/admin/tags` and `GET/PATCH/DELETE /admin/tags/{tag_id}`:
+  bounded administrator-only exact-label catalog, versioned command receipts and
+  no implicit deletion of assigned tags. No association/content grant or source I/O.
+  See [docs/tags.md](docs/tags.md).
 - `GET/PATCH /api/v2/admin/albums/{album_id}`: versioned display/cover overrides
   with actor-bound command receipts, same-album cover ownership and retained source
   labels/preferences across scans. No source writes. See [docs/album-metadata.md](docs/album-metadata.md).
@@ -294,6 +298,9 @@ commands then verify no-op scan retention, a provable whole-folder move with sta
 IDs/overrides, historical receipt replay and unchanged source bytes/modes. Person
 label commands then verify the same invariants through another real folder move,
 including retained album/media IDs and clearing to the new indexed creator label.
+Tag catalog commands then verify versioned create/rename/no-op/delete, duplicate
+label conflict, historical receipts versus current GET, anonymous denial and unchanged
+account scope through the same compiled HTTPS entrypoints.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

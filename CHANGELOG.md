@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Versioned administrative tag catalog with bounded scope-bound keysets, exact
+  trimmed binary-label uniqueness, current-admin checks and actor-bound historical
+  create/rename/delete receipts. Tag version/tombstone/change/outbox/audit/receipt
+  writes are atomic; no-op saves only a receipt and assigned tags reject deletion
+  without cascading album links. Migration
+  0015 preserves existing identities/associations, adds positive versions and a
+  reverse-edge lookup index. Search normalization, association/batch manager/UI and
+  source/content capabilities remain separate work.
+
 - Versioned administrative Person display-name GET/PATCH with current source-bound
   visibility, strong identity/version preconditions and actor-bound historical
   receipts. Explicit empty strings clear the override, while missing/null/unknown

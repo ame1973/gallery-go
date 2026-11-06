@@ -686,6 +686,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the administrative tag catalog in stable ID order
+         * @description Current administrator required, including for unused or privately associated labels. Ordinary users cannot enumerate this global catalog. Default 30/max 100 account/scope/collection-bound keysets; only limit and cursor are supported. This is live indexed metadata, not a search, association, offline or content grant.
+         */
+        get: operations["listTags"];
+        put?: never;
+        /**
+         * Create an exact-label catalog tag without assigning albums
+         * @description Uses the existing bounded trimmed display-label policy. Exact binary labels are unique; case and Unicode variants can have different IDs. This is not shared multilingual search normalization. Current admin, same-origin CSRF and explicit Idempotency-Key required. Tag/change/outbox/audit/actor receipt co-commit. Matching canonical actor/key/body retries return the original metadata and ETag even after rename/deletion; GET refreshes current state. No source access, association or permission change.
+         */
+        post: operations["createTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        /** Read one current administrative tag and its strong ETag */
+        get: operations["getTag"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete only an unassigned catalog tag with a versioned receipt
+         * @description Current admin, strong If-Match, explicit Idempotency-Key and no request body required. Any album association, including an inactive/hidden album, returns TAG_IN_USE without removing the tag or edges. A successful deletion co-commits a monotonic tombstone/change/outbox/audit/receipt. Matching actor/key/original target/precondition safely replays 204 after deletion and still reauthorizes the admin. No implicit cascade, source cleanup, account-scope or content-policy change.
+         */
+        delete: operations["deleteTag"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a versioned catalog tag without changing associations
+         * @description Current admin, exact identity/version If-Match and explicit actor-bound Idempotency-Key required. Matching canonical target/body/original precondition retries return the historical result. No-op saves only its receipt; new stale commands conflict. Exact trimmed label uniqueness is preserved, not NFKC/full-fold search identity. Existing album links and policies are unchanged. Tag/version/complete change/outbox/audit/receipt co-commit.
+         */
+        patch: operations["renameTag"];
+        trace?: never;
+    };
     "/admin/groups": {
         parameters: {
             query?: never;
@@ -1395,6 +1446,18 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
+        Tag: {
+            id: string;
+            /** @description Bounded trimmed exact binary label; case/Unicode variants can be different tags. Not a search-normalization or content capability. */
+            name: string;
+            /** Format: int64 */
+            version: number;
+        };
+        TagPage: {
+            items: components["schemas"]["Tag"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
         NameRequest: {
             /** @description Trimmed name of 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters. */
             name: string;
@@ -1592,6 +1655,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted catalog tag metadata. GET refreshes current state. */
+        Tag: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Tag"];
+            };
+        };
         /** @description Current or historical actor-receipted source-bound Person label metadata. Replayed mutation results are historical; GET refreshes current state. */
         PersonMetadata: {
             headers: {
@@ -2889,6 +2962,141 @@ export interface operations {
         requestBody?: never;
         responses: {
             202: components["responses"]["Job"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTags: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded private tag catalog page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            /** @description Created tag or its historical idempotent result. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    Location: components["headers"]["CreatedLocation"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Tag"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unassigned tag removed or the historical actor-bound deletion replayed; no body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    renameTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["Tag"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

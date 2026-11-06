@@ -751,6 +751,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			verifyCompiledPersonMapping(t, api, source, marker, workUnits)
 			verifyCompiledAlbumOverrides(t, api, source, marker, workUnits)
 			verifyCompiledPersonOverrides(t, api, source, marker, workUnits)
+			verifyCompiledTagCatalog(t, api)
 			if stopWorker != nil {
 				stopWorker()
 				api.request("GET", "/health/ready", nil, 503, nil)

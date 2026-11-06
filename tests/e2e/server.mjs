@@ -126,6 +126,12 @@ try {
         )
         .run(`acl-${project}-${name}`, library, `Fixture ${name}`, Date.now(), Date.now());
     }
+    fixtureDB
+      .prepare('INSERT INTO tags(id,name) VALUES(?,?)')
+      .run(`tags-${project}-assigned`, `Private assigned tag-${project}`);
+    fixtureDB
+      .prepare('INSERT INTO album_tags(album_id,tag_id) VALUES(?,?)')
+      .run(`acl-${project}-restricted`, `tags-${project}-assigned`);
   }
   // A real one-pixel PNG encoded with Go's image/png, not a codec mock. These
   // ready records are test setup only; the production scanner/publisher is separate.

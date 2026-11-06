@@ -54,6 +54,10 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "LAST_ACTIVE_ADMIN", "Keep at least one active administrator before making this change.")
 	case errors.Is(err, auth.ErrUsernameTaken):
 		problem(w, 409, "USERNAME_TAKEN", "Choose a different username.")
+	case errors.Is(err, access.ErrTagNameTaken):
+		problem(w, 409, "TAG_NAME_TAKEN", "Choose a different exact tag label.")
+	case errors.Is(err, access.ErrTagInUse):
+		problem(w, 409, "TAG_IN_USE", "Remove the tag's album associations explicitly before deleting it.")
 	case errors.Is(err, access.ErrNameTaken):
 		problem(w, 409, "GROUP_NAME_TAKEN", "Choose a different permission group name.")
 	case errors.Is(err, access.ErrLibraryNotEmpty):
