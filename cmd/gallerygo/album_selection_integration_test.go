@@ -48,19 +48,23 @@ func assertCompiledAlbumOrder(t *testing.T, api *scanHTTPSClient, sourceID strin
 	var corpus compiledAlbumPage
 	api.request("GET", "/albums?"+query.Encode(), nil, 200, &corpus)
 	if len(corpus.Items) != wantCount || corpus.HasMore || corpus.NextCursor != nil {
-		t.Fatal("native chronological fixture lost actual published albums", corpus, wantCount)
+		t.Fatal("native ordered fixture lost actual published albums", corpus, wantCount)
 	}
 	// Sorting these at-most-two expected fixture cards is not a production catalog
 	// sort. The real socket endpoint must independently page the SQL order.
-	for _, order := range []string{"oldest", "latest"} {
+	for _, order := range []string{"oldest", "latest", "name_asc", "name_desc"} {
 		expected := slices.Clone(corpus.Items)
 		slices.SortFunc(expected, func(a, b access.Album) int {
-			if compared := a.IndexedAt.Compare(b.IndexedAt); compared != 0 {
+			if strings.HasPrefix(order, "name_") {
+				if compared := strings.Compare(a.Title, b.Title); compared != 0 {
+					return compared
+				}
+			} else if compared := a.IndexedAt.Compare(b.IndexedAt); compared != 0 {
 				return compared
 			}
 			return strings.Compare(a.ID, b.ID)
 		})
-		if order == "latest" {
+		if order == "latest" || order == "name_desc" {
 			slices.Reverse(expected)
 		}
 		query.Set("sort", order)
@@ -70,15 +74,15 @@ func assertCompiledAlbumOrder(t *testing.T, api *scanHTTPSClient, sourceID strin
 			var page compiledAlbumPage
 			headers := api.request("GET", "/albums?"+query.Encode(), nil, 200, &page)
 			if len(page.Items) != 1 || !reflect.DeepEqual(page.Items[0], want) || headers.Get("Cache-Control") != "private, no-store" {
-				t.Fatal("actual native chronological page changed tuple order or public projection", order, page, want)
+				t.Fatal("actual native ordered page changed tuple order or public projection", order, page, want)
 			}
 			if index == len(expected)-1 {
 				if page.HasMore || page.NextCursor != nil {
-					t.Fatal("native chronological terminal page has an extra continuation", page)
+					t.Fatal("native ordered terminal page has an extra continuation", page)
 				}
 			} else {
 				if !page.HasMore || page.NextCursor == nil {
-					t.Fatal("native chronological page lost its frozen continuation", page)
+					t.Fatal("native ordered page lost its frozen continuation", page)
 				}
 				query.Set("cursor", *page.NextCursor)
 			}

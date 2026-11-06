@@ -20,9 +20,10 @@ type pageCursor struct {
 }
 
 type pagination struct {
-	limit  int
-	cursor pageCursor
-	query  url.Values
+	limit       int
+	cursorLimit int
+	cursor      pageCursor
+	query       url.Values
 }
 
 type listPage[T any] struct {
@@ -32,8 +33,14 @@ type listPage[T any] struct {
 }
 
 func readPage(w http.ResponseWriter, r *http.Request) (pagination, bool) {
+	return readBoundedPage(w, r, 512, 32)
+}
+
+// Album title keys need a larger finite envelope; every other collection retains
+// the existing 512/32 bounds. Both paths share the same binding/limit algorithm.
+func readBoundedPage(w http.ResponseWriter, r *http.Request, cursorLimit, positionLimit int) (pagination, bool) {
 	current := currentSession(r)
-	page := pagination{limit: 30, cursor: pageCursor{Scope: current.User.ScopeID, User: current.User.ID, Collection: r.URL.Path}}
+	page := pagination{limit: 30, cursorLimit: cursorLimit, cursor: pageCursor{Scope: current.User.ScopeID, User: current.User.ID, Collection: r.URL.Path}}
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil || len(query["limit"]) > 1 || len(query["cursor"]) > 1 {
 		problem(w, 400, "INVALID_PAGINATION", "Use one limit and one cursor with valid query encoding.")
@@ -57,13 +64,13 @@ func readPage(w http.ResponseWriter, r *http.Request) (pagination, bool) {
 		}
 	}
 	if encoded := query.Get("cursor"); encoded != "" {
-		if len(encoded) > 512 {
+		if len(encoded) > cursorLimit {
 			problem(w, 400, "INVALID_CURSOR", "The page cursor is invalid.")
 			return page, false
 		}
 		var cursor pageCursor
 		data, err := base64.RawURLEncoding.DecodeString(encoded)
-		if err != nil || json.Unmarshal(data, &cursor) != nil || cursor.Scope != page.cursor.Scope || cursor.User != page.cursor.User || cursor.Collection != page.cursor.Collection || len(cursor.After) == 0 || len(cursor.After) > 64 || len(cursor.Position) > 32 {
+		if err != nil || json.Unmarshal(data, &cursor) != nil || cursor.Scope != page.cursor.Scope || cursor.User != page.cursor.User || cursor.Collection != page.cursor.Collection || len(cursor.After) == 0 || len(cursor.After) > 64 || len(cursor.Position) > positionLimit {
 			problem(w, 400, "INVALID_CURSOR", "The page cursor is invalid for this account or collection.")
 			return page, false
 		}
@@ -79,6 +86,10 @@ func writePage[T any](w http.ResponseWriter, page pagination, items []T, id func
 		page.cursor.After = id(result.Items[page.limit-1])
 		data, _ := json.Marshal(page.cursor) // Only strings; encoding cannot fail.
 		next := base64.RawURLEncoding.EncodeToString(data)
+		if len(next) > page.cursorLimit {
+			problem(w, 500, "INTERNAL_ERROR", "The page continuation could not be encoded within its bound.")
+			return
+		}
 		result.NextCursor = &next
 	}
 	writeJSON(w, 200, result)

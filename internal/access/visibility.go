@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"time"
+	"unicode/utf8"
 
 	"gallerygo/internal/auth"
 )
@@ -80,7 +81,9 @@ type Album struct {
 	Version      int64     `json:"version"`
 }
 
-const albumColumns = `SELECT a.id,COALESCE(NULLIF(a.display_name,''),a.source_name),a.library_id,
+// Keep the effective public title identical to the expression in migration0023.
+const albumTitle = `COALESCE(NULLIF(a.display_name,''),a.source_name)`
+const albumColumns = `SELECT a.id,` + albumTitle + `,a.library_id,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaVisible + `),
  (SELECT COUNT(*) FROM media m WHERE m.album_id=a.id AND ` + MediaVisible + `),
  (SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.created_at,a.version`
@@ -93,6 +96,9 @@ func scanAlbum(row interface{ Scan(...any) error }) (Album, error) {
 	err := row.Scan(&album.ID, &album.Title, &album.LibraryID, &album.CoverMediaID, &album.MediaCount, &album.RatingAvg, &indexed, &album.Version)
 	if err != nil {
 		return album, err
+	}
+	if !utf8.ValidString(album.Title) || len(album.Title) > MaxAlbumTitleBytes {
+		return Album{}, errors.New("stored album title is outside the public UTF-8 bound")
 	}
 	album.IndexedAt = time.UnixMilli(indexed).UTC()
 	if album.IndexedAt.Year() < 1 || album.IndexedAt.Year() > 9999 {

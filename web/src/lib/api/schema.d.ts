@@ -1116,7 +1116,7 @@ export interface paths {
         };
         /**
          * List visible albums with authorized media counts and covers
-         * @description Default album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. Optional latest/oldest order uses public indexed_at, the immutable server first-indexed UTC-millisecond instant, with album IDs as same-direction ties; it never means capture time, NAS mtime or a recent metadata edit. Chronological cursors freeze the public time key and ID without rereading a mutable/deleted anchor. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search, name and interaction-based album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter/sort values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
+         * @description Default album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. latest/oldest order uses public indexed_at, the immutable server first-indexed UTC-millisecond instant, never capture/NAS mtime or recent metadata edits. name_asc/name_desc order uses the exact effective public title with SQLite BINARY UTF-8 byte comparison, not case folding, NFKC, locale or natural numeric order. Both primary keys use same-direction album-ID ties; cursors freeze the full public time/title key and ID without rereading a mutable/deleted anchor or hashing/truncating names. Public titles are at most 4096 UTF-8 bytes; encoded name keys avoid control/HTML escaping expansion. The bounded 8192-character AlbumCursor is specific to this collection; other cursors retain their 512-character limit. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search and interaction-based album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter/sort values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
          */
         get: operations["listAlbums"];
         put?: never;
@@ -1827,6 +1827,7 @@ export interface components {
         };
         Album: {
             id: string;
+            /** @description Literal effective display override or indexed source name, at most 4096 UTF-8 bytes. No read-side trimming, normalization or case folding. */
             title: string;
             library_id: string;
             cover_media_id: string | null;
@@ -2202,6 +2203,8 @@ export interface components {
         Limit: number;
         /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
         Cursor: string;
+        /** @description Album-only opaque continuation, bounded to 8192 characters to preserve complete public literal title keys. Bound to the account, current scope, collection and canonical filter/sort values. Other collections retain the smaller Cursor limit. */
+        AlbumCursor: string;
         /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
         Origin: string;
         Csrf: string;
@@ -4109,8 +4112,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
-                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
-                cursor?: components["parameters"]["Cursor"];
+                /** @description Album-only opaque continuation, bounded to 8192 characters to preserve complete public literal title keys. Bound to the account, current scope, collection and canonical filter/sort values. Other collections retain the smaller Cursor limit. */
+                cursor?: components["parameters"]["AlbumCursor"];
                 /** @description One exact library ID; omitted means no additional library restriction. */
                 library_id?: string;
                 /** @description One exact indexed source ID, not a configured root name or filesystem path. */
@@ -4119,8 +4122,8 @@ export interface operations {
                 person_id?: string;
                 /** @description One exact assigned tag ID; unused or hidden global labels are never returned. */
                 tag_id?: string;
-                /** @description First-indexed server time with same-direction stable album-ID ties. Omit sort for album-ID ascending order. */
-                sort?: "latest" | "oldest";
+                /** @description Literal BINARY public-title or first-indexed server-time order, with same-direction stable album-ID ties. Omit sort for album-ID ascending order. */
+                sort?: "latest" | "oldest" | "name_asc" | "name_desc";
             };
             header?: never;
             path?: never;

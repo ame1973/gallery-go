@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Literal album name keysets (`name_asc`/`name_desc`) using the exact public
+  effective title and BINARY/ID tuples in both directions. Case/composition/numeric
+  distinctions remain explicit, never masquerading as normalized or locale search.
+  Full bounded title keys survive empty/maximal/escaped values and renamed/deleted
+  anchors; only album collections use the larger bounded cursor, with ordinary
+  limits unchanged and no unfollowable output. Migration0023 adds four expression
+  indexes maintained by existing transactional title producers, preserving history.
+  No source I/O, permission change, new normalization dependency or fake ranks.
+
 - Chronological album collection keysets (`sort=latest|oldest`) using public
   `indexed_at`, the immutable first-indexed server instant, with same-direction ID
   ties and frozen public time positions. No capture/NAS mtime/edit-time fallback or

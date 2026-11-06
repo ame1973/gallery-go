@@ -222,8 +222,9 @@ Only implemented endpoints are advertised:
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
   SQL-authorized metadata, counts, and covers. Album collections intersect exact
   `library_id`, `source_id`, `person_id` and `tag_id` selectors before indexed ID or
-  first-indexed-time keyset pagination (`sort=latest|oldest`). Public `indexed_at`
-  is server publication time, not capture/NAS mtime or an edit timestamp. Hidden/
+  first-indexed-time/literal-title keyset pagination (`latest`, `oldest`, `name_asc`,
+  `name_desc`). Public `indexed_at` is server publication time, not capture/NAS mtime
+  or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
@@ -336,10 +337,12 @@ association-version boundaries, historical receipts, explicit link-only clear an
 unchanged read-only source SHA/modes. Exact library/source/person/tag album selection
 is checked against those real mapped IDs before/after no-op scans, the folder move,
 a tag rename and marker loss, including detail-equivalent counts/covers and empty
-results after link removal. First-indexed server timestamps and both chronological
-keyset directions are checked against actual native albums, preserved through the
-same no-op/move/tag/creator commands and marker loss; separate seeded browser time
-ties are not native timestamp evidence. Creator classification then adds one owned
+results after link removal. First-indexed server timestamps and chronological/
+literal-title keysets are checked against actual native albums, preserved through
+real override/clear/no-op/move/tag/creator commands and marker loss. Seeded browser
+time ties are not native timestamp evidence; real HTTPS override commands also
+exercise maximal Unicode display keys and continuation after a title change.
+Creator classification then adds one owned
 read-only PNG and runs 63-unit/21-file scans through mapped/person/none modes, two
 folder moves, current fallback restoration and historical receipts without confusing
 a selected creator with indexed rename provenance. Tag-batch processing then freezes

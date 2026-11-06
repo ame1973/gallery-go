@@ -164,7 +164,7 @@ func TestAlbumSelectionHTTPRejectsUnsupportedSelectorsAndPreservesAnonymousDenia
 		}
 		expectCode(t, f.reader.request("GET", path+"?"+field+"=one&"+field+"=two", nil, "", ""), 400, "INVALID_FILTER")
 	}
-	for _, query := range []string{"q=anything", "sort=name_asc", "kind=image", "library_id[]=%20", "Person_ID=selection-person", "tag_ids=one,two"} {
+	for _, query := range []string{"q=anything", "sort=popular", "kind=image", "library_id[]=%20", "Person_ID=selection-person", "tag_ids=one,two"} {
 		expectCode(t, f.reader.request("GET", path+"?"+query, nil, "", ""), 400, "INVALID_FILTER")
 	}
 	for _, query := range []string{"limit=0", "limit=101", "limit=1&limit=2", "cursor=x&cursor=y", "limit=%zz"} {

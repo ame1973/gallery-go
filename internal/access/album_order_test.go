@@ -60,7 +60,7 @@ func TestAlbumOrderUsesPublicFirstIndexedTimeAndReversesStableTies(t *testing.T)
 					break
 				}
 				seen = append(seen, page[0].ID)
-				after = AlbumPosition{ID: page[0].ID, Indexed: strconv.FormatInt(page[0].IndexedAt.UnixMilli(), 10)}
+				after = AlbumPosition{ID: page[0].ID, Key: strconv.FormatInt(page[0].IndexedAt.UnixMilli(), 10)}
 			}
 			if !slices.Equal(seen, want) {
 				t.Fatal("chronological tuple pages lost or repeated a tie", order, seen, want)
@@ -92,7 +92,7 @@ func TestAlbumOrderPositionSurvivesDeletedAndChangedAnchors(t *testing.T) {
 	if err != nil || len(first) != 1 || first[0].ID != "date-anchor" {
 		t.Fatal(first, err)
 	}
-	after := AlbumPosition{ID: first[0].ID, Indexed: strconv.FormatInt(first[0].IndexedAt.UnixMilli(), 10)}
+	after := AlbumPosition{ID: first[0].ID, Key: strconv.FormatInt(first[0].IndexedAt.UnixMilli(), 10)}
 	if _, err := f.svc.db.Exec(`DELETE FROM albums WHERE id='date-anchor'`); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestAlbumOrderPositionSurvivesDeletedAndChangedAnchors(t *testing.T) {
 	}
 	// Only isolated SQL fixture data changes. Real APIs never edit first-index time;
 	// a live-page continuation must nevertheless retain its already returned key.
-	after = AlbumPosition{ID: next[0].ID, Indexed: strconv.FormatInt(next[0].IndexedAt.UnixMilli(), 10)}
+	after = AlbumPosition{ID: next[0].ID, Key: strconv.FormatInt(next[0].IndexedAt.UnixMilli(), 10)}
 	if _, err := f.svc.db.Exec(`UPDATE albums SET created_at=-9999 WHERE id='person-no-path-album'`); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestAlbumOrderPositionSurvivesDeletedAndChangedAnchors(t *testing.T) {
 }
 
 func TestAlbumOrderRejectsAmbiguousSortPositionsAndInvalidStoredTime(t *testing.T) {
-	for _, order := range []string{"id_desc", "name_asc", "popular", "top_rated", "LATEST", " latest", "oldest;DROP TABLE albums"} {
+	for _, order := range []string{"id_desc", "NAME_ASC", "popular", "top_rated", "LATEST", " latest", "oldest;DROP TABLE albums"} {
 		if !errors.Is((AlbumFilter{Sort: order}).Validate(), ErrAlbumSelection) {
 			t.Fatal("unimplemented/ambiguous album sort accepted", order)
 		}
@@ -121,21 +121,21 @@ func TestAlbumOrderRejectsAmbiguousSortPositionsAndInvalidStoredTime(t *testing.
 	for _, order := range []string{"latest", "oldest"} {
 		filter := AlbumFilter{Sort: order}
 		for _, key := range []string{"", "unknown", "01", "-0", "+1", "1.0", "1e3", " 1", "253402300800000", "-62135596800001", "9223372036854775807", strings.Repeat("1", 33)} {
-			if _, err := (AlbumPosition{ID: "album", Indexed: key}).indexedKey(filter); !errors.Is(err, ErrAlbumPosition) {
+			if _, err := (AlbumPosition{ID: "album", Key: key}).orderKey(filter); !errors.Is(err, ErrAlbumPosition) {
 				t.Fatal("invalid public indexed-time key accepted", key, err)
 			}
 		}
 		for _, key := range []string{"0", "-1", "-62135596800000", "253402300799999"} {
-			if _, err := (AlbumPosition{ID: "album", Indexed: key}).indexedKey(filter); err != nil {
+			if _, err := (AlbumPosition{ID: "album", Key: key}).orderKey(filter); err != nil {
 				t.Fatal("valid bounded public indexed-time key rejected", key, err)
 			}
 		}
-		if _, err := (AlbumPosition{}).indexedKey(filter); err != nil {
+		if _, err := (AlbumPosition{}).orderKey(filter); err != nil {
 			t.Fatal("first chronological page requires an invented anchor", err)
 		}
 	}
-	for _, position := range []AlbumPosition{{ID: "album", Indexed: "0"}, {Indexed: "0"}, {ID: strings.Repeat("a", 65)}, {ID: string([]byte{0xff})}} {
-		if _, err := position.indexedKey(AlbumFilter{}); !errors.Is(err, ErrAlbumPosition) {
+	for _, position := range []AlbumPosition{{ID: "album", Key: "0"}, {Key: "0"}, {ID: strings.Repeat("a", 65)}, {ID: string([]byte{0xff})}} {
+		if _, err := position.orderKey(AlbumFilter{}); !errors.Is(err, ErrAlbumPosition) {
 			t.Fatal("ID-only position accepted an unrelated or unbounded key", position, err)
 		}
 	}

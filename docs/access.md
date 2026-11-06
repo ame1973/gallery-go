@@ -198,8 +198,42 @@ always known for valid stored albums, so there is no synthetic unknown-time key
 or capture/mtime fallback. ID-only cursors reject an unrelated time position, and
 chronological cursors reject missing, noncanonical or out-of-range keys with
 `400 INVALID_CURSOR`. Treat cursors as opaque rather than constructing their JSON.
-Name, popular and top-rated album ordering and full text search are still required
-but not implemented; unsupported values fail explicitly, never become fake ranks.
+Popular and top-rated album ordering and full text search are still required but
+not implemented; unsupported values fail explicitly, never become fake ranks.
+
+### Album literal name ordering
+
+`sort=name_asc` and `sort=name_desc` compare the **exact public title**, followed by
+album ID in the same direction. The title is the nonempty display override, or the
+indexed source name when no override is set. SQLite `BINARY` compares its UTF-8 bytes:
+uppercase/lowercase, composed/decomposed Unicode and leading/trailing source-name
+spacing stay distinct; `10` precedes `2`. This is not a language-aware, natural
+numeric, case-insensitive, NFKC or full-fold comparison. It does not implement or
+substitute for the separately required normalized online/offline search behavior.
+
+Public titles are valid UTF-8 and bounded to 4096 bytes, including empty stored
+source-title values. Display overrides retain their existing smaller 100-character/
+400-byte write bound. The larger public bound preserves source mapping's path-based
+limit instead of silently assuming a 255-byte filesystem component on every host.
+Names are never cropped or hashed into a different lexical order.
+
+Name cursors freeze the **entire public title** and ID. An internal canonical
+encoding distinguishes empty titles from missing positions and prevents JSON
+control/HTML escaping from making a valid maximal key unfollowable. Only `GET /albums`
+uses the dedicated `AlbumCursor` limit of 8192 characters; other list endpoints keep
+512-character cursors and 32-byte sort positions. Invalid, noncanonical or overlong
+keys fail with `400 INVALID_CURSOR`. No response emits a continuation beyond its
+endpoint's bound. Treat all cursors as opaque, not URLs or download capabilities.
+Reverse proxies must allow at least 16 KiB request lines/headers for maximal album
+continuations plus selectors; do not configure a shorter URI limit that rejects
+valid protected API pages.
+
+Expression indexes use the same effective-title/BINARY tuple as the public card.
+Real metadata override/clear and source rename transactions update those keys
+atomically without a separate cache or source probe. A returned continuation does
+not reread its anchor after a rename/deletion. These remain live pages: concurrent
+title changes can move records across the boundary or repeat/skip a record compared
+with an earlier view; immutable offline snapshots are not enabled.
 
 Lists use the standard `{items,next_cursor,has_more}` envelope, default limit 30,
 maximum 100, and stable indexed keyset order. Visibility and selection run in SQL

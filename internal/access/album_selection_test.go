@@ -163,8 +163,8 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
  INSERT INTO people(id,source_id,relative_path,source_name,created_at) VALUES('scale-p1','scale-s1','one','Same',0),('scale-p2','scale-s1','two','Same',0),('scale-p3','scale-s2','other','Other',0);
  INSERT INTO tags(id,name) VALUES('scale-common','Common'),('scale-sparse','Sparse');
  WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<99999)
- INSERT INTO albums(id,library_id,source_id,person_id,source_name,created_at,updated_at)
- SELECT printf('scale-%06d',i),CASE WHEN i%2=0 THEN 'scale-l1' ELSE 'scale-l2' END,CASE WHEN i%2=0 THEN 'scale-s1' ELSE 'scale-s2' END,CASE WHEN i%4=0 THEN 'scale-p1' WHEN i%4=2 THEN 'scale-p2' ELSE 'scale-p3' END,'Large catalog',i%11,0 FROM n;
+ INSERT INTO albums(id,library_id,source_id,person_id,source_name,display_name,created_at,updated_at)
+ SELECT printf('scale-%06d',i),CASE WHEN i%2=0 THEN 'scale-l1' ELSE 'scale-l2' END,CASE WHEN i%2=0 THEN 'scale-s1' ELSE 'scale-s2' END,CASE WHEN i%4=0 THEN 'scale-p1' WHEN i%4=2 THEN 'scale-p2' ELSE 'scale-p3' END,printf('Name %02d',i%11),CASE WHEN i%3=0 THEN printf('Override %02d',i%7) END,i%11,0 FROM n;
  INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-common' FROM albums WHERE library_id='scale-l1';
  INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-sparse' FROM albums WHERE CAST(substr(id,7) AS INTEGER)%997=0`); err != nil {
 		t.Fatal(err)
@@ -175,13 +175,22 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1"},
 		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-sparse"},
 	} {
-		for _, order := range []string{"", "latest", "oldest"} {
+		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc"} {
 			filter.Sort = order
 			after, indexedKey := AlbumPosition{ID: "scale-050000"}, int64(0)
-			if order != "" {
-				after.Indexed, indexedKey = "5", 5
+			var sortKey any = int64(0)
+			nameKey := ""
+			switch order {
+			case "latest", "oldest":
+				after.Key, indexedKey, sortKey = "5", 5, int64(5)
+			case "name_asc", "name_desc":
+				nameKey = "Name 05"
+				if order == "name_desc" {
+					nameKey = "Override 02"
+				}
+				after.Key, sortKey = AlbumNameKey(nameKey), nameKey
 			}
-			query, arguments := albumSelection(owner.User.ID, filter, after, indexedKey, 11)
+			query, arguments := albumSelection(owner.User.ID, filter, after, sortKey, 11)
 			rows, err := s.db.QueryContext(t.Context(), `EXPLAIN QUERY PLAN `+query, arguments...)
 			if err != nil {
 				t.Fatal(err)
@@ -219,6 +228,9 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 				case filter.LibraryID != "":
 					wantIndex = "idx_album_library_indexed_page"
 				}
+				if strings.HasPrefix(order, "name_") {
+					wantIndex = strings.Replace(wantIndex, "indexed", "title", 1)
+				}
 			}
 			if err != nil || strings.Contains(plan.String(), "TEMP B-TREE") || !strings.Contains(plan.String(), wantIndex) || strings.Contains(query, "OFFSET") {
 				t.Fatal("album selection lost selective ordered keysets", filter, plan.String(), err)
@@ -227,7 +239,7 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			if err != nil || len(items) != 11 {
 				t.Fatal("large selection did not return only its bounded cards", filter, len(items), err)
 			}
-			previousID, previousKey := after.ID, indexedKey
+			previousID, previousKey, previousTitle := after.ID, indexedKey, nameKey
 			for _, item := range items {
 				key := item.IndexedAt.UnixMilli()
 				ordered := item.ID > previousID
@@ -235,11 +247,15 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 					ordered = key > previousKey || (key == previousKey && item.ID > previousID)
 				} else if order == "latest" {
 					ordered = key < previousKey || (key == previousKey && item.ID < previousID)
+				} else if order == "name_asc" {
+					ordered = item.Title > previousTitle || (item.Title == previousTitle && item.ID > previousID)
+				} else if order == "name_desc" {
+					ordered = item.Title < previousTitle || (item.Title == previousTitle && item.ID < previousID)
 				}
 				if !ordered || item.MediaCount != 0 || item.CoverMediaID != nil {
 					t.Fatal("large selection repeated keys or invented count/cover", filter, item)
 				}
-				previousID, previousKey = item.ID, key
+				previousID, previousKey, previousTitle = item.ID, key, item.Title
 			}
 		}
 	}

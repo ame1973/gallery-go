@@ -56,6 +56,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	if changed.Version != before.Version+1 || changed.DisplayName == nil || *changed.DisplayName != "Persisted display" || changed.CoverOverrideID == nil || *changed.CoverOverrideID != selected || changed.CoverMediaID == nil || *changed.CoverMediaID != selected {
 		t.Fatal("compiled versioned override did not persist its metadata", before, changed)
 	}
+	assertCompiledAlbumOrder(t, api, source.ID, 1)
 	scan := func() {
 		t.Helper()
 		var accepted jobs.Job
@@ -70,6 +71,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	if !reflect.DeepEqual(stable, changed) {
 		t.Fatal("unchanged scan overwrote display/cover preference or version", stable, changed)
 	}
+	assertCompiledAlbumOrder(t, api, source.ID, 1)
 	// Simulate only an external rename of this test's own temporary 0400 source
 	// folder. The application must preserve logical album/person/media identities.
 	if err := os.Rename(filepath.Join(root, "Album"), filepath.Join(root, "RenamedAlbum")); err != nil {
@@ -80,6 +82,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	if stable.ID != albumID || stable.SourceName != "RenamedAlbum" || stable.DisplayName == nil || *stable.DisplayName != "Persisted display" || stable.CoverOverrideID == nil || *stable.CoverOverrideID != selected || stable.CoverMediaID == nil || *stable.CoverMediaID != selected || stable.Version <= changed.Version {
 		t.Fatal("provable folder move lost immutable identity or manual overrides", stable, changed)
 	}
+	assertCompiledAlbumOrder(t, api, source.ID, 1)
 	var replay access.AlbumMetadata
 	replayedHeaders := api.request("PATCH", path, patch, 200, &replay, headers)
 	if !reflect.DeepEqual(replay, changed) || replayedHeaders.Get("ETag") == latest.Get("ETag") {
@@ -95,6 +98,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	if public.Title != "RenamedAlbum" || public.CoverMediaID == nil || *public.CoverMediaID != selected {
 		t.Fatal("current public album projection diverged from cleared preferences", public)
 	}
+	assertCompiledAlbumOrder(t, api, source.ID, 1)
 	anonymous := *api.client
 	anonymous.Jar = nil
 	(&scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}).request("GET", path, nil, 401, nil)

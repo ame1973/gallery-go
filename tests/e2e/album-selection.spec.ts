@@ -30,6 +30,16 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
     expect(response.headers()['cache-control']).toBe('private, no-store');
     return (await response.json()) as components['schemas']['AlbumPage'];
   };
+  const patchDisplay = async (displayName: string) => {
+    const path = `/api/v2/admin/albums/${albums[0]}`;
+    const current = await api.get(path);
+    expect(current.status()).toBe(200);
+    const changed = await api.patch(path, {
+      headers: { ...headers, 'If-Match': current.headers().etag!, 'Idempotency-Key': randomUUID() },
+      data: { display_name: displayName },
+    });
+    expect(changed.status()).toBe(200);
+  };
   const empty = { items: [], next_cursor: null, has_more: false };
   try {
     expect((await request.get('/api/v2/albums?source_id=unknown')).status()).toBe(401);
@@ -128,6 +138,38 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
       );
       expect(changedOrder.status()).toBe(400);
       expect(await changedOrder.json()).toMatchObject({ code: 'INVALID_CURSOR' });
+    }
+    await patchDisplay('😀'.repeat(100));
+    try {
+      for (const sort of ['name_asc', 'name_desc'] as const) {
+        const expected = sort === 'name_desc' ? albums.slice(0, 2) : albums.slice(0, 2).reverse();
+        const ordered = await selected({ ...filter, sort, limit: 1 });
+        expect(ordered.items.map((album) => album.id)).toEqual(expected.slice(0, 1));
+        expect(ordered.next_cursor).not.toBeNull();
+        expect(ordered.next_cursor!.length).toBeLessThanOrEqual(8192);
+        if (sort === 'name_desc') expect(ordered.next_cursor!.length).toBeGreaterThan(512);
+        const position = JSON.parse(
+          Buffer.from(ordered.next_cursor!, 'base64url').toString('utf8'),
+        ) as { position: string };
+        expect(position.position).toBe(
+          'n:' + Buffer.from(ordered.items[0]!.title, 'utf8').toString('base64url'),
+        );
+        const final = await selected({ ...filter, sort, cursor: ordered.next_cursor!, limit: 100 });
+        expect(final.items.map((album) => album.id)).toEqual(expected.slice(1));
+        expect(final).toMatchObject({ has_more: false, next_cursor: null });
+      }
+      const anchor = await selected({ ...filter, sort: 'name_desc', limit: 1 });
+      expect(anchor.items[0]!.id).toBe(albums[0]);
+      await patchDisplay('AA renamed');
+      const continued = await selected({
+        ...filter,
+        sort: 'name_desc',
+        cursor: anchor.next_cursor!,
+        limit: 1,
+      });
+      expect(continued.items[0]!.id).toBe(albums[1]);
+    } finally {
+      await patchDisplay('');
     }
     const admin = await api.get(`/api/v2/albums?${queryString(filter)}`);
     expect(admin.status()).toBe(200);

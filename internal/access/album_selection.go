@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strconv"
 	"strings"
@@ -17,6 +18,10 @@ var (
 	ErrAlbumPosition  = errors.New("the album page position is invalid for this sort")
 )
 
+// Display overrides are at most 400 bytes; indexed source basenames are bounded by
+// the scanner's 4096-byte relative path, not an assumed OS 255-byte component limit.
+const MaxAlbumTitleBytes = 4096
+
 // Selectors intersect already-visible albums; they never grant access or resolve
 // a global private catalog label. Empty fields mean omitted, not an HTTP value.
 type AlbumFilter struct {
@@ -29,7 +34,7 @@ type AlbumFilter struct {
 
 func (filter AlbumFilter) Validate() error {
 	switch filter.Sort {
-	case "", "latest", "oldest":
+	case "", "latest", "oldest", "name_asc", "name_desc":
 	default:
 		return ErrAlbumSelection
 	}
@@ -46,46 +51,70 @@ func (filter AlbumFilter) Validate() error {
 	return nil
 }
 
-// Indexed is the public indexed_at UTC-millisecond key, never a source timestamp.
-// Freeze it when returning a page; do not resolve a mutable/deleted anchor row.
+// Key freezes a public UTC-millisecond indexed_at or a framed literal title. Never
+// resolve a mutable/deleted anchor or hash/truncate titles into a different order.
 type AlbumPosition struct {
-	ID      string
-	Indexed string
+	ID  string
+	Key string
 }
 
-func (position AlbumPosition) indexedKey(filter AlbumFilter) (int64, error) {
-	if len(position.ID) > 64 || !utf8.ValidString(position.ID) || len(position.Indexed) > 32 || ((position.ID == "" || filter.Sort == "") && position.Indexed != "") {
-		return 0, ErrAlbumPosition
+// Encoding the exact public title avoids JSON control/HTML-escaping expansion and
+// distinguishes an empty title from a missing position. This is not a capability.
+func AlbumNameKey(title string) string {
+	return "n:" + base64.RawURLEncoding.EncodeToString([]byte(title))
+}
+
+func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
+	if len(position.ID) > 64 || !utf8.ValidString(position.ID) || ((position.ID == "" || filter.Sort == "") && position.Key != "") {
+		return nil, ErrAlbumPosition
 	}
 	if position.ID == "" || filter.Sort == "" {
-		return 0, nil
+		return int64(0), nil
 	}
-	value, err := strconv.ParseInt(position.Indexed, 10, 64)
-	if err != nil || strconv.FormatInt(value, 10) != position.Indexed {
-		return 0, ErrAlbumPosition
+	if strings.HasPrefix(filter.Sort, "name_") {
+		if len(position.Key) > 2+base64.RawURLEncoding.EncodedLen(MaxAlbumTitleBytes) || !strings.HasPrefix(position.Key, "n:") {
+			return nil, ErrAlbumPosition
+		}
+		data, err := base64.RawURLEncoding.Strict().DecodeString(position.Key[2:])
+		title := string(data)
+		if err != nil || len(title) > MaxAlbumTitleBytes || !utf8.ValidString(title) || AlbumNameKey(title) != position.Key {
+			return nil, ErrAlbumPosition
+		}
+		return title, nil
+	}
+	if len(position.Key) > 32 {
+		return nil, ErrAlbumPosition
+	}
+	value, err := strconv.ParseInt(position.Key, 10, 64)
+	if err != nil || strconv.FormatInt(value, 10) != position.Key {
+		return nil, ErrAlbumPosition
 	}
 	instant := time.UnixMilli(value).UTC()
 	if instant.Year() < 1 || instant.Year() > 9999 {
-		return 0, ErrAlbumPosition
+		return nil, ErrAlbumPosition
 	}
 	return value, nil
 }
 
-func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, indexedKey int64, limit int) (string, []any) {
+func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sortKey any, limit int) (string, []any) {
 	from, key, relations := ` FROM albums a`, `a.id`, albumRelations
+	named := strings.HasPrefix(filter.Sort, "name_")
 	if filter.Sort != "" {
-		index := "idx_album_indexed_page"
+		orderIndex, prefix := "indexed", ""
+		if named {
+			orderIndex = "title"
+		}
 		switch {
 		case filter.PersonID != "":
-			index = "idx_album_person_indexed_page"
+			prefix = "person_"
 		case filter.SourceID != "":
-			index = "idx_album_source_indexed_page"
+			prefix = "source_"
 		case filter.LibraryID != "":
-			index = "idx_album_library_indexed_page"
+			prefix = "library_"
 		}
-		// Finite compiled index/order fragments only. Chronological tag selection
-		// probes an indexed edge from this ordered driver, not an ID-sorted edge.
-		from += ` INDEXED BY ` + index
+		// Only finite compiled fragments enter the index/order vocabulary. Ordered
+		// tag selection probes an indexed edge, never an ID-sorted tag driver.
+		from += ` INDEXED BY idx_album_` + prefix + orderIndex + `_page`
 	} else {
 		switch {
 		case filter.TagID != "":
@@ -130,15 +159,18 @@ func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, inde
 		query += ` AND ` + key + `>? ORDER BY ` + key
 		arguments = append(arguments, after.ID)
 	} else {
-		comparison, direction := ">", "ASC"
-		if filter.Sort == "latest" {
+		comparison, direction, orderKey := ">", "ASC", `a.created_at`
+		if named {
+			orderKey = albumTitle + ` COLLATE BINARY`
+		}
+		if filter.Sort == "latest" || filter.Sort == "name_desc" {
 			comparison, direction = "<", "DESC"
 		}
 		if after.ID != "" {
-			query += ` AND (a.created_at,a.id)` + comparison + `(?,?)`
-			arguments = append(arguments, indexedKey, after.ID)
+			query += ` AND (` + orderKey + `,a.id)` + comparison + `(?,?)`
+			arguments = append(arguments, sortKey, after.ID)
 		}
-		query += ` ORDER BY a.created_at ` + direction + `,a.id ` + direction
+		query += ` ORDER BY ` + orderKey + ` ` + direction + `,a.id ` + direction
 	}
 	return query + ` LIMIT ?`, append(arguments, limit)
 }
@@ -150,7 +182,7 @@ func (s *Service) Albums(ctx context.Context, current auth.Session, filter Album
 	if err := filter.Validate(); err != nil {
 		return nil, err
 	}
-	indexedKey, err := after.indexedKey(filter)
+	sortKey, err := after.orderKey(filter)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +191,7 @@ func (s *Service) Albums(ctx context.Context, current auth.Session, filter Album
 		return nil, err
 	}
 	defer tx.Rollback()
-	query, arguments := albumSelection(viewer.ID, filter, after, indexedKey, limit)
+	query, arguments := albumSelection(viewer.ID, filter, after, sortKey, limit)
 	rows, err := tx.QueryContext(ctx, query, arguments...)
 	if err != nil {
 		return nil, err
