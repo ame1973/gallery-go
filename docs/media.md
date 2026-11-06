@@ -89,6 +89,41 @@ source cleanup. Unsupported platforms fail before writing instead of substitutin
 an overwriting rename. Contexts stop work between I/O operations, but cannot promise
 to interrupt a kernel-stalled filesystem flush or rename.
 
+### Private revision-bound source preparation
+
+A Linux amd64/arm64-only internal source capsule can prepare an existing indexed
+image for a future static producer. This is **not a renderer, decoded-pixel proof,
+READY publisher, download grant or enabled worker operation**. No public endpoint
+or application consumer for the private `variant_still` work identity is registered.
+
+Preparation requires the exact live media/revision/finite-preset job identity and
+its original creation-bound media/source dependencies. Library/source activity,
+source health/configuration/root pin, present entry, current media-owned revision,
+entry/revision size/mtime/full SHA and positive resource versions must agree. A
+successful reachability probe alone cannot bless stale indexed inventory. Invalid
+metadata, unknown presets or input-byte budgets outside the explicit worker bound
+are rejected. Work remains bounded by the input limit, streaming memory and context;
+the internal upper deadline is 15 minutes, not a new user configuration or capability.
+
+All root/marker/file opening and full input SHA streaming occur **outside** SQLite
+writer transactions. Canonical rooted read-only descriptors reject missing roots,
+markers, root aliases, escaping paths and non-regular files without creating them.
+Current named inode, file size/mtime/ctime/mode and marker/root identity are checked
+around the hash. Same-stat overwritten bytes still require the indexed full SHA;
+mtime or a file extension is not proof. A fresh transaction rejects resource, epoch
+or lease changes that occurred during I/O. The descriptor is rewound for a future
+producer and remains non-writable regardless of source permissions.
+
+The same capsule can rehash/revalidate after producer work, then supply DB-only
+identity/lease checks inside a future publication transaction. It never writes
+business rows, progress, audits, variants or source bytes. Unsupported platforms
+fail closed without a weaker fallback. Closing the capsule invalidates reuse;
+private paths, hashes and lease owners have no serialized/public representation.
+These checks do not provide an atomic NAS snapshot or interrupt arbitrary kernel
+filesystem stalls. A real verified isolated decoder/renderer and atomic READY/
+outbox/progress-last publication/orphan recovery are still required; metadata and
+this read-only capsule cannot substitute for those missing capabilities.
+
 ### Orientation and capture time
 
 Media detail and album-media pages return these fields, including explicit `null`

@@ -22,6 +22,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Private Linux read-only static input capsules bound to the exact leased media/
+  current-owned revision/finite preset and creation-bound source dependencies.
+  Full source SHA streaming and root/marker/named inode/stat/ctime/mode checks run
+  outside SQLite writers; fresh indexed configuration/version/lease fences follow
+  the I/O. Post-work rehash and DB-only publication guards retain
+  those private pins without serializing source paths or lease credentials.
+  Unsupported hosts fail closed; preparation never changes source/business/
+  progress/READY rows. This is source preparation only, not an enabled consumer,
+  public API, decoder/renderer, pixel proof or variant publication capability.
+
 - Bounded durable album-cover preferences with explicit per-album selection/clear,
   frozen sticky projection and media version/revision pins. Rewrites, moves, changed
   eligibility or clear fallback reject rather than retarget. A shared DB-only manual
