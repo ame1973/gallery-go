@@ -177,6 +177,40 @@ paths:
               schema: { $ref: '#/components/schemas/TagPage' }
         '404': { $ref: '#/components/responses/Problem' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/albums/{album_id}/creator:
+    parameters: [{ $ref: '#/components/parameters/AlbumID' }]
+    get:
+      operationId: getAlbumCreator
+      summary: Read an album's current, mapped and explicit creator preferences
+      description: Current administrator and shared album/library/source visibility required. Returns only opaque creator IDs, mode and shared album version, never source paths or labels. Mapped provenance is distinct from a manual choice. These IDs do not grant content or creator visibility; public Person aggregates still require current same-source visible albums. Mount loss alone does not prevent indexed metadata access.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AlbumCreator' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: setAlbumCreator
+      summary: Select mapped, explicit person or no-creator classification
+      description: Online administrator-only command with strong album If-Match, explicit Idempotency-Key and same-origin CSRF. Mapped mode restores the latest indexed fallback; person mode requires one concrete same-source creator; none explicitly unclassifies without deleting provenance. Missing/null/ambiguous fields are rejected. Scans preserve modes/preferences and whole-folder identity planning uses mapped provenance, never the manual override. Real changes co-commit preference/current projection/shared album version/complete album event/outbox/audit/receipt. A visible creator-graph change rotates affected library and administrator scopes with old-scope revokes, without changing grants or revoking valid sessions; preference-only/no-op changes do not rotate unchanged scopes. Matching canonical actor/key/target/body/original precondition returns historical IDs/version/ETag after later changes and still reauthorizes the admin. No source/library rehome, source writes, label merge, normalization or content grant.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumCreatorRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumCreator' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/albums/{album_id}/tags:
     parameters: [{ $ref: '#/components/parameters/AlbumID' }]
     get:
@@ -1475,6 +1509,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    AlbumCreator:
+      description: Current or historical actor-receipted creator IDs/mode and shared album version. GET refreshes current state.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AlbumCreator' }
     AlbumTagSet:
       description: Current or historical actor-receipted album tag IDs and shared album version. GET refreshes current state; tag labels are not part of this body.
       headers:
@@ -2251,6 +2292,45 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/Variant' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
+    AlbumCreator:
+      type: object
+      additionalProperties: false
+      required: [album_id, mode, person_id, mapped_person_id, override_person_id, version]
+      properties:
+        album_id: { type: string }
+        mode: { type: string, enum: [mapped, person, none] }
+        person_id:
+          type: [string, 'null']
+          description: Current projected creator ID; not a label, path, permission or content grant.
+        mapped_person_id:
+          type: [string, 'null']
+          description: Latest committed source-mapping fallback. Scans update provenance even while an override or explicit none mode remains active.
+        override_person_id:
+          type: [string, 'null']
+          description: Persisted explicit preference for person mode; null in mapped/none modes. It grants no content authority.
+        version: { type: integer, format: int64, minimum: 1 }
+    AlbumCreatorRequest:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [mode]
+          properties:
+            mode: { type: string, const: mapped }
+        - type: object
+          additionalProperties: false
+          required: [mode]
+          properties:
+            mode: { type: string, const: none }
+        - type: object
+          additionalProperties: false
+          required: [mode, person_id]
+          properties:
+            mode: { type: string, const: person }
+            person_id:
+              type: string
+              minLength: 1
+              maxLength: 64
+              description: Existing concrete same-source creator ID, at most 64 UTF-8 bytes. Foreign/unbound/unknown selections fail without disclosing paths.
     AlbumTagSet:
       type: object
       additionalProperties: false

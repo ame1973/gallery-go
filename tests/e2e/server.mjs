@@ -23,6 +23,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'album-metadata',
     'person-metadata',
     'album-tags',
+    'creators',
   ].map((kind) => ({
     name: `${kind}-${project}`,
     root: join(directory, 'sources', `${kind}-${project}`),
@@ -180,6 +181,24 @@ try {
         "INSERT INTO albums(id,library_id,source_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,? ,'.',?,?)",
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
+    if (prefix.startsWith('creators-')) {
+      for (const name of ['mapped', 'manual']) {
+        fixtureDB
+          .prepare(
+            'INSERT INTO people(id,source_id,relative_path,source_name,created_at) VALUES(?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-${name}`,
+            `${prefix}-source`,
+            `Private/${name}`,
+            `${name} creator`,
+            Date.now(),
+          );
+      }
+      fixtureDB
+        .prepare('UPDATE albums SET person_id=?,mapped_person_id=? WHERE id=?')
+        .run(`${prefix}-mapped`, `${prefix}-mapped`, album);
+    }
     if (prefix.startsWith('people-') || prefix.startsWith('person-metadata-')) {
       fixtureDB
         .prepare(

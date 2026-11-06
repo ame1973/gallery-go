@@ -7,8 +7,10 @@ a proven whole-folder move can retain the identity and display override.
 
 The indexed read API supports person listing/detail and same-source album pages.
 Separate administrative commands below manage display-name overrides without
-changing source identities. Association management/UI, richer filters/sorting,
-search and offline snapshots remain separate work; read pages support only
+changing source identities. Versioned [album creator classification](album-creators.md)
+separately supports mapped fallback, same-source manual selection and explicit none.
+Full management UI, richer filters/sorting, search and offline snapshots remain
+separate work; read pages support only
 `limit` and `cursor`, not an ignored search/filter parameter.
 
 ## Endpoints and fields
@@ -121,5 +123,6 @@ another target/body/precondition conflicts. Receipt replay still requires a curr
 administrator and is never an authorization capability. GET refreshes current state.
 Healthy scans preserve manual display overrides; provable whole-folder moves may
 update the indexed label/version while retaining logical identities and the override.
-Clearing afterward uses the current indexed label, not an old folder name. Full
-creator-association management, tags, search and management UI remain separate work.
+Clearing afterward uses the current indexed label, not an old folder name. Album
+[creator associations](album-creators.md) and [tags](tags.md) use separate versioned
+commands; full search and management UI remain separate work.

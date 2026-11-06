@@ -148,12 +148,12 @@ func (s *Inventory) publicationPlan(ctx context.Context, tx *sql.Tx, lease jobs.
 		{`INSERT INTO gg_publish_people(path,name) SELECT person_path,person_name FROM gg_publish_albums WHERE person_path!='' GROUP BY person_path`, nil},
 		{`UPDATE gg_publish_people AS p SET person_id=(SELECT id FROM people WHERE source_id=? AND relative_path=p.path)`, []any{source.ID}},
 		{`INSERT INTO gg_publish_person_candidates(path,id)
-		 SELECT planned.person_path,old.id FROM gg_publish_albums planned JOIN albums a ON a.id=planned.album_id JOIN people old ON old.id=a.person_id
+		 SELECT planned.person_path,old.id FROM gg_publish_albums planned JOIN albums a ON a.id=planned.album_id JOIN people old ON old.id=a.mapped_person_id
 		 JOIN gg_publish_people dest ON dest.path=planned.person_path AND dest.person_id IS NULL
 		 WHERE old.source_id=? AND NOT EXISTS(SELECT 1 FROM gg_publish_people claimed WHERE claimed.person_id=old.id)
 		 AND NOT EXISTS(SELECT 1 FROM inventory_files f WHERE f.generation_id=? AND (f.relative_path=old.relative_path OR substr(f.relative_path,1,length(old.relative_path)+1)=old.relative_path||'/'))
-		 AND NOT EXISTS(SELECT 1 FROM gg_publish_albums mixed JOIN albums other ON other.id=mixed.album_id WHERE mixed.person_path=planned.person_path AND other.person_id IS NOT NULL AND other.person_id!=old.id)
-		 GROUP BY planned.person_path,old.id HAVING COUNT(DISTINCT a.id)=(SELECT COUNT(*) FROM albums owned WHERE owned.person_id=old.id)`, []any{source.ID, generation.ID}},
+		 AND NOT EXISTS(SELECT 1 FROM gg_publish_albums mixed JOIN albums other ON other.id=mixed.album_id WHERE mixed.person_path=planned.person_path AND other.mapped_person_id IS NOT NULL AND other.mapped_person_id!=old.id)
+		 GROUP BY planned.person_path,old.id HAVING COUNT(DISTINCT a.id)=(SELECT COUNT(*) FROM albums owned WHERE owned.mapped_person_id=old.id)`, []any{source.ID, generation.ID}},
 		{`UPDATE gg_publish_people AS p SET person_id=(SELECT MIN(id) FROM gg_publish_person_candidates c WHERE c.path=p.path HAVING COUNT(*)=1) WHERE person_id IS NULL`, nil},
 	} {
 		if _, err := tx.ExecContext(ctx, step.query, step.args...); err != nil {

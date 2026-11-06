@@ -203,6 +203,10 @@ Only implemented endpoints are advertised:
   `GET /api/v2/albums/{album_id}/tags`: versioned explicit association replacement
   and shared-policy authorized label pages. Empty clears only links; complete album
   events retain tag IDs across scans and metadata edits. No source or permission changes.
+- `GET/PUT /api/v2/admin/albums/{album_id}/creator`: explicit mapped/person/none
+  classification with retained source provenance, same-source choices and versioned
+  receipts. Graph changes revoke old scopes without widening grants or writing
+  sources. See [docs/album-creators.md](docs/album-creators.md).
 - `GET/PATCH /api/v2/admin/albums/{album_id}`: versioned display/cover overrides
   with actor-bound command receipts, same-album cover ownership and retained source
   labels/preferences across scans. No source writes. See [docs/album-metadata.md](docs/album-metadata.md).
@@ -307,7 +311,10 @@ label conflict, historical receipts versus current GET, anonymous denial and unc
 account scope through the same compiled HTTPS entrypoints. Album-tag replacement
 then verifies native no-op/move retention, stable album/media IDs, tag-name versus
 association-version boundaries, historical receipts, explicit link-only clear and
-unchanged read-only source SHA/modes.
+unchanged read-only source SHA/modes. Creator classification then adds one owned
+read-only PNG and runs 63-unit/21-file scans through mapped/person/none modes, two
+folder moves, current fallback restoration and historical receipts without confusing
+a selected creator with indexed rename provenance.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

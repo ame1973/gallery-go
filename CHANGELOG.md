@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Versioned album creator classification with explicit mapped/person/none modes,
+  retained indexed provenance and same-source manual selection. Source scans preserve
+  deliberate classification while frozen folder-rename plans use mapped identity,
+  never the selected override. Real graph changes revoke affected old scopes and
+  atomically publish album/version/change/outbox/audit/receipt without widening grants
+  or writing source files. Migration0016 backfills provenance and enforces mode/FK
+  invariants; native mapping/move/no-op/rollback and actual TLS/CLI/browser cases
+  accompany the API. Management UI/batch/search/offline remain separate work.
+
 - Versioned album-tag association replacement with bounded explicit ID sets,
   same-transaction administrator/album visibility and canonical historical receipts.
   Authorized public tag pages share library/source/album policy and never enumerate

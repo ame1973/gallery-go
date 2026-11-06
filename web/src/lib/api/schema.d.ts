@@ -159,6 +159,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/albums/{album_id}/creator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read an album's current, mapped and explicit creator preferences
+         * @description Current administrator and shared album/library/source visibility required. Returns only opaque creator IDs, mode and shared album version, never source paths or labels. Mapped provenance is distinct from a manual choice. These IDs do not grant content or creator visibility; public Person aggregates still require current same-source visible albums. Mount loss alone does not prevent indexed metadata access.
+         */
+        get: operations["getAlbumCreator"];
+        /**
+         * Select mapped, explicit person or no-creator classification
+         * @description Online administrator-only command with strong album If-Match, explicit Idempotency-Key and same-origin CSRF. Mapped mode restores the latest indexed fallback; person mode requires one concrete same-source creator; none explicitly unclassifies without deleting provenance. Missing/null/ambiguous fields are rejected. Scans preserve modes/preferences and whole-folder identity planning uses mapped provenance, never the manual override. Real changes co-commit preference/current projection/shared album version/complete album event/outbox/audit/receipt. A visible creator-graph change rotates affected library and administrator scopes with old-scope revokes, without changing grants or revoking valid sessions; preference-only/no-op changes do not rotate unchanged scopes. Matching canonical actor/key/target/body/original precondition returns historical IDs/version/ETag after later changes and still reauthorizes the admin. No source/library rehome, source writes, label merge, normalization or content grant.
+         */
+        put: operations["setAlbumCreator"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/albums/{album_id}/tags": {
         parameters: {
             query?: never;
@@ -1494,6 +1520,31 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
+        AlbumCreator: {
+            album_id: string;
+            /** @enum {string} */
+            mode: "mapped" | "person" | "none";
+            /** @description Current projected creator ID; not a label, path, permission or content grant. */
+            person_id: string | null;
+            /** @description Latest committed source-mapping fallback. Scans update provenance even while an override or explicit none mode remains active. */
+            mapped_person_id: string | null;
+            /** @description Persisted explicit preference for person mode; null in mapped/none modes. It grants no content authority. */
+            override_person_id: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        AlbumCreatorRequest: {
+            /** @constant */
+            mode: "mapped";
+        } | {
+            /** @constant */
+            mode: "none";
+        } | {
+            /** @constant */
+            mode: "person";
+            /** @description Existing concrete same-source creator ID, at most 64 UTF-8 bytes. Foreign/unbound/unknown selections fail without disclosing paths. */
+            person_id: string;
+        };
         AlbumTagSet: {
             album_id: string;
             /** @description Canonical stable-ID-order association set. Empty array means no links, never an implicit catalog deletion. */
@@ -1714,6 +1765,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted creator IDs/mode and shared album version. GET refreshes current state. */
+        AlbumCreator: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumCreator"];
+            };
+        };
         /** @description Current or historical actor-receipted album tag IDs and shared album version. GET refreshes current state; tag labels are not part of this body. */
         AlbumTagSet: {
             headers: {
@@ -2184,6 +2245,52 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAlbumCreator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumCreator"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAlbumCreator: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumCreatorRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AlbumCreator"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

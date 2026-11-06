@@ -94,7 +94,7 @@ func (s *Inventory) publishVerified(ctx context.Context, lease jobs.Lease, gener
 	if err := s.publishPeople(ctx, tx, lease, source); err != nil {
 		return Generation{}, err
 	}
-	if err := s.publishAlbums(ctx, tx, lease, source); err != nil {
+	if err := s.publishAlbums(ctx, tx, lease, source, ownershipChanged); err != nil {
 		return Generation{}, err
 	}
 	if err := s.rehomeRetainedAlbums(ctx, tx, lease, current, source); err != nil {
@@ -236,7 +236,7 @@ func (s *Inventory) publishPeople(ctx context.Context, tx *sql.Tx, lease jobs.Le
 	return nil
 }
 
-func (s *Inventory) publishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Lease, source library.Source) error {
+func (s *Inventory) publishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Lease, source library.Source, scopesRevoked bool) error {
 	after := ""
 	for {
 		type album struct {
@@ -266,28 +266,38 @@ func (s *Inventory) publishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Le
 		}
 		for _, a := range batch {
 			now := s.clock()
-			var person sql.NullString
+			var mapped sql.NullString
 			if a.personPath != "" {
-				if err := tx.QueryRowContext(ctx, `SELECT person_id FROM gg_publish_people WHERE path=?`, a.personPath).Scan(&person); err != nil {
+				if err := tx.QueryRowContext(ctx, `SELECT person_id FROM gg_publish_people WHERE path=?`, a.personPath).Scan(&mapped); err != nil {
 					return err
 				}
 			}
 			if !a.id.Valid {
 				a.id = sql.NullString{String: store.NewID(), Valid: true}
-				if _, err := tx.ExecContext(ctx, `INSERT INTO albums(id,library_id,source_id,person_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, a.id, source.LibraryID, source.ID, person, a.name, a.path, now.UnixMilli(), now.UnixMilli()); err != nil {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO albums(id,library_id,source_id,person_id,mapped_person_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, a.id, source.LibraryID, source.ID, mapped, mapped, a.name, a.path, now.UnixMilli(), now.UnixMilli()); err != nil {
 					return err
 				}
 				if err := dirtyAlbum(ctx, tx, a.id.String, true); err != nil {
 					return err
 				}
 			} else {
-				var previousLibrary, previousPath, previousName string
-				var previousPerson sql.NullString
-				if err := tx.QueryRowContext(ctx, `SELECT library_id,relative_path,source_name,person_id FROM albums WHERE id=? AND source_id=?`, a.id, source.ID).Scan(&previousLibrary, &previousPath, &previousName, &previousPerson); err != nil {
+				var previousLibrary, previousPath, previousName, mode string
+				var previousPerson, previousMapped, override sql.NullString
+				if err := tx.QueryRowContext(ctx, `SELECT library_id,relative_path,source_name,person_id,mapped_person_id,person_mode,person_override_id FROM albums WHERE id=? AND source_id=?`, a.id, source.ID).Scan(&previousLibrary, &previousPath, &previousName, &previousPerson, &previousMapped, &mode, &override); err != nil {
 					return err
 				}
-				if previousLibrary != source.LibraryID || previousPath != a.path || previousName != a.name || previousPerson != person {
-					if _, err := tx.ExecContext(ctx, `UPDATE albums SET library_id=?,relative_path=?,source_name=?,person_id=? WHERE id=?`, source.LibraryID, a.path, a.name, person, a.id); err != nil {
+				projected, err := access.ProjectAlbumCreatorTx(ctx, tx, sql.NullString{String: source.ID, Valid: true}, mode, mapped, override)
+				if err != nil {
+					return err
+				}
+				if previousPerson != projected && !scopesRevoked {
+					if err := access.RevokeInventoryScopesTx(ctx, tx, source.ID, now); err != nil {
+						return err
+					}
+					scopesRevoked = true
+				}
+				if previousLibrary != source.LibraryID || previousPath != a.path || previousName != a.name || previousPerson != projected || previousMapped != mapped {
+					if _, err := tx.ExecContext(ctx, `UPDATE albums SET library_id=?,relative_path=?,source_name=?,person_id=?,mapped_person_id=? WHERE id=?`, source.LibraryID, a.path, a.name, projected, mapped, a.id); err != nil {
 						return err
 					}
 					if err := dirtyAlbum(ctx, tx, a.id.String, false); err != nil {
@@ -295,7 +305,9 @@ func (s *Inventory) publishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Le
 					}
 				}
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE gg_publish_albums SET album_id=?,person_id=? WHERE path=?`, a.id, person, a.path); err != nil {
+			// Planning provenance remains indexed, never a manual association. A
+			// future whole-folder move must not rename the selected override person.
+			if _, err := tx.ExecContext(ctx, `UPDATE gg_publish_albums SET album_id=?,person_id=? WHERE path=?`, a.id, mapped, a.path); err != nil {
 				return err
 			}
 		}

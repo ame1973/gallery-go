@@ -8,9 +8,102 @@ import (
 	"testing"
 	"time"
 
+	"gallerygo/internal/access"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
+	"gallerygo/internal/store"
 )
+
+func TestPublicationCreatorOverridesKeepIndexedIdentityAcrossFolderMoves(t *testing.T) {
+	f := inventorySetup(t)
+	mapping := library.Mapping{AlbumDepth: 2, PersonDepth: 1}
+	var err error
+	f.source, err = f.sources.Update(t.Context(), f.owner, f.source.ID, f.source.Version, library.SourcePatch{Mapping: &mapping})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := media.SourceRoot{Path: f.rootPath, Marker: ".mounted"}
+	writeInput(t, root, "Mapped/Album/one.png", publicationPNG(t, 21))
+	writeInput(t, root, "Manual/Other/two.png", publicationPNG(t, 22))
+	f.publish(t, "full", ".")
+	var album, mapped, selected string
+	var version int64
+	if err := f.db.QueryRow(`SELECT id,mapped_person_id,version FROM albums WHERE source_id=? AND relative_path='Mapped/Album'`, f.source.ID).Scan(&album, &mapped, &version); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.db.QueryRow(`SELECT id FROM people WHERE source_id=? AND relative_path='Manual'`, f.source.ID).Scan(&selected); err != nil {
+		t.Fatal(err)
+	}
+	service := access.New(f.db, f.auth)
+	changed, err := service.SetAlbumCreator(t.Context(), f.owner, album, version, access.AlbumCreatorRequest{Mode: "person", PersonID: &selected}, store.NewID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.publish(t, "full", ".")
+	stable, err := service.AdminAlbumCreator(t.Context(), f.owner, album)
+	if err != nil || stable.Version != changed.Version || stable.Mode != "person" || stable.PersonID == nil || *stable.PersonID != selected {
+		t.Fatal("no-op scan overwrote a manual creator", stable, changed, err)
+	}
+	if err := os.Rename(filepath.Join(root.Path, "Mapped"), filepath.Join(root.Path, "Renamed")); err != nil {
+		t.Fatal(err)
+	}
+	f.publish(t, "full", ".")
+	current, err := service.AdminAlbumCreator(t.Context(), f.owner, album)
+	if err != nil || current.AlbumID != album || current.PersonID == nil || *current.PersonID != selected || current.MappedPersonID == nil || *current.MappedPersonID != mapped || current.OverridePersonID == nil || *current.OverridePersonID != selected || current.Version <= changed.Version {
+		t.Fatal("folder move confused manual creator with indexed provenance", current, changed, err)
+	}
+	var mappedName, mappedPath, selectedName, selectedPath string
+	if err := f.db.QueryRow(`SELECT source_name,relative_path FROM people WHERE id=?`, mapped).Scan(&mappedName, &mappedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.db.QueryRow(`SELECT source_name,relative_path FROM people WHERE id=?`, selected).Scan(&selectedName, &selectedPath); err != nil {
+		t.Fatal(err)
+	}
+	if mappedName != "Renamed" || mappedPath != "Renamed" || selectedName != "Manual" || selectedPath != "Manual" {
+		t.Fatal("rename stole or merged a manually selected creator identity", mappedName, mappedPath, selectedName, selectedPath)
+	}
+	none, err := service.SetAlbumCreator(t.Context(), f.owner, album, current.Version, access.AlbumCreatorRequest{Mode: "none"}, store.NewID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root.Path, "Renamed"), filepath.Join(root.Path, "Final")); err != nil {
+		t.Fatal(err)
+	}
+	f.publish(t, "full", ".")
+	current, err = service.AdminAlbumCreator(t.Context(), f.owner, album)
+	if err != nil || current.Mode != "none" || current.PersonID != nil || current.MappedPersonID == nil || *current.MappedPersonID != mapped || current.Version <= none.Version {
+		t.Fatal("scan restored an explicitly unclassified creator", current, none, err)
+	}
+	restored, err := service.SetAlbumCreator(t.Context(), f.owner, album, current.Version, access.AlbumCreatorRequest{Mode: "mapped"}, store.NewID())
+	if err != nil || restored.PersonID == nil || *restored.PersonID != mapped {
+		t.Fatal("restore mapped mode lost the latest indexed identity", restored, err)
+	}
+	person, err := service.Person(t.Context(), f.owner, mapped)
+	if err != nil || person.Name != "Final" {
+		t.Fatal("mapped fallback restored an old folder label", person, err)
+	}
+	mapping.PersonDepth = 0
+	if err := f.db.QueryRow(`SELECT version FROM sources WHERE id=?`, f.source.ID).Scan(&f.source.Version); err != nil {
+		t.Fatal(err)
+	}
+	f.source, err = f.sources.Update(t.Context(), f.owner, f.source.ID, f.source.Version, library.SourcePatch{Mapping: &mapping})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scope string
+	if err := f.db.QueryRow(`SELECT scope_id FROM users WHERE id=?`, f.owner.User.ID).Scan(&scope); err != nil {
+		t.Fatal(err)
+	}
+	f.publish(t, "full", ".")
+	current, err = service.AdminAlbumCreator(t.Context(), f.owner, album)
+	if err != nil || current.Mode != "mapped" || current.PersonID != nil || current.MappedPersonID != nil {
+		t.Fatal("new source mapping did not replace only the indexed fallback", current, err)
+	}
+	var after string
+	if err := f.db.QueryRow(`SELECT scope_id FROM users WHERE id=?`, f.owner.User.ID).Scan(&after); err != nil || after == scope {
+		t.Fatal("scan classification loss did not revoke old creator scope", scope, after, err)
+	}
+}
 
 func TestPublicationWholeFolderRenamePreservesAlbumsPeopleAndInteractions(t *testing.T) {
 	f := inventorySetup(t)

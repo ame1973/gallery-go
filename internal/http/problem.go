@@ -54,6 +54,8 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "LAST_ACTIVE_ADMIN", "Keep at least one active administrator before making this change.")
 	case errors.Is(err, auth.ErrUsernameTaken):
 		problem(w, 409, "USERNAME_TAKEN", "Choose a different username.")
+	case errors.Is(err, access.ErrCreatorMode), errors.Is(err, access.ErrCreatorSelection):
+		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, access.ErrTagSet), errors.Is(err, access.ErrUnknownTag):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, access.ErrTagNameTaken):
