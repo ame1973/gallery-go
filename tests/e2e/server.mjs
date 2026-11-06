@@ -23,6 +23,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'duplicates',
     'people',
     'album-metadata',
+    'ratings',
     'person-metadata',
     'album-tags',
     'tag-batches',

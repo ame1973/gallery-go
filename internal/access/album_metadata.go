@@ -144,7 +144,7 @@ func applyAlbumMetadataTx(ctx context.Context, tx *sql.Tx, actor string, state a
 	}
 	result := updated.value
 	if changed {
-		if err := JournalAlbumTx(ctx, tx, id, now); err != nil {
+		if err := store.JournalAlbumTx(ctx, tx, id, now); err != nil {
 			return AlbumMetadata{}, err
 		}
 		if err := store.Audit(ctx, tx, actor, "album_metadata_updated", "album", id, map[string]any{"display_name": result.DisplayName, "cover_override_id": result.CoverOverrideID, "cover_media_id": result.CoverMediaID, "version": result.Version}, now); err != nil {

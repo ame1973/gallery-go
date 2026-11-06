@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrTagSet     = errors.New("provide an explicit array of at most 100 unique tag IDs")
+	ErrTagSet     = store.ErrAlbumTagSet
 	ErrUnknownTag = errors.New("one or more selected tags do not exist")
 )
 
@@ -26,26 +26,13 @@ type AlbumTagSet struct {
 	Version int64    `json:"version"`
 }
 
-func albumTagIDsInTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT tag_id FROM album_tags WHERE album_id=? ORDER BY tag_id LIMIT 101`, id)
-	if err != nil {
-		return nil, err
-	}
-	// Tags share the existing bounded opaque-ID set grammar, not group authority.
-	ids, err := scanGroupIDs(rows)
-	if errors.Is(err, ErrGroupSet) {
-		return nil, ErrTagSet
-	}
-	return ids, err
-}
-
 func albumTagSetInTx(ctx context.Context, tx *sql.Tx, viewer, id string) (AlbumTagSet, error) {
 	var value AlbumTagSet
 	if err := tx.QueryRowContext(ctx, `SELECT a.id,a.version FROM albums a JOIN libraries l ON l.id=a.library_id WHERE `+AlbumVisible+` AND a.id=?`, viewer, id).Scan(&value.AlbumID, &value.Version); err != nil {
 		return AlbumTagSet{}, err
 	}
 	var err error
-	value.TagIDs, err = albumTagIDsInTx(ctx, tx, id)
+	value.TagIDs, err = store.AlbumTagIDsTx(ctx, tx, id)
 	return value, err
 }
 
@@ -152,7 +139,7 @@ func replaceAlbumTagsTx(ctx context.Context, tx *sql.Tx, actor string, result Al
 			return AlbumTagSet{}, err
 		}
 		result.TagIDs, result.Version = ids, result.Version+1
-		if err := JournalAlbumTx(ctx, tx, result.AlbumID, now); err != nil {
+		if err := store.JournalAlbumTx(ctx, tx, result.AlbumID, now); err != nil {
 			return AlbumTagSet{}, err
 		}
 		if err := store.Audit(ctx, tx, actor, "album_tags_changed", "album", result.AlbumID, map[string]any{"previous_tag_ids": previous, "tag_ids": ids, "version": result.Version}, now); err != nil {

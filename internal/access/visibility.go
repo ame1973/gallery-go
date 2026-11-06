@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"gallerygo/internal/auth"
+	"gallerygo/internal/store"
 )
 
 // Predicates accept one viewer ID placeholder, read the role/active state from
@@ -31,10 +32,7 @@ const AlbumVisible = `l.is_active=1
 // A source reassignment must not expose old albums or media through the previous
 // library's grants. Availability is separate: ready cached variants can remain
 // readable during a source outage, but inconsistent source relationships deny all.
-const mediaSourceConsistent = `m.availability!='archived' AND (m.source_entry_id IS NULL OR EXISTS (
- SELECT 1 FROM source_entries entry WHERE entry.id=m.source_entry_id AND entry.source_id=a.source_id))`
-
-const MediaVisible = AlbumVisible + ` AND ` + mediaSourceConsistent
+const MediaVisible = AlbumVisible + ` AND ` + store.MediaSourceConsistent
 
 func (s *Service) Libraries(ctx context.Context, current auth.Session, after string, limit int) ([]Library, error) {
 	if !pageLimit(limit) {

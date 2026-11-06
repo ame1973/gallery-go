@@ -808,6 +808,10 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(err)
 			}
 			defer db.Close()
+			var ratings, clearedRatings int
+			if err := db.QueryRow(`SELECT COUNT(*),COUNT(CASE WHEN rating IS NULL AND version=3 THEN 1 END) FROM ratings`).Scan(&ratings, &clearedRatings); err != nil || ratings != 1 || clearedRatings != 1 {
+				t.Fatal("closed-process/reopened database lost the native rating clear revision", ratings, clearedRatings, err)
+			}
 			var batchIntents, batchTargets, succeededBatches, batchResults int
 			if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM album_tag_batches),
  (SELECT COUNT(*) FROM album_tag_batch_targets WHERE album_version>0 AND source_id IS NOT NULL AND source_config_version>0),

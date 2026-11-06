@@ -81,7 +81,10 @@ DELETE, and group/policy PUT:
 - Groups use `"group:<id>:<version>"`.
 - Memberships share the account's `"user:<id>:<version>"` tag.
 - Library settings and grants share `"library:<id>:<version>"`.
-- Album metadata and restrictions share `"album:<id>:<version>"`.
+- Album metadata and restrictions share `"album:<id>:<version>"`. Real personal
+  rating changes and removal of an account's live votes also advance this shared
+  version and journal the current average. Personal rating writes use a separate
+  account-and-album-bound ETag; see [rating rules](ratings.md).
 
 Missing preconditions return 428; malformed/foreign/weak/list/wildcard tags return
 400; stale versions return `409 VERSION_CONFLICT`. A lost PUT response should be

@@ -104,7 +104,7 @@ key. The replay window is **24 hours**, scoped to the calling administrator.
   current account state before deciding to repeat a request.
 
 Receipts are stored atomically with the mutation and are pruned on the next
-successful administrative POST after expiry. Password equality on retries uses
+successful receipted mutation after expiry. Password equality on retries uses
 bcrypt hashes at the production cost, never plaintext or a fast password digest.
 No passwords, cookie capabilities, or CSRF tokens enter audit or change payloads.
 
@@ -116,8 +116,13 @@ collections, ratings, playlists, playback progress, and its sync-operation
 receipts. Deleting your own account expires your cookie.
 
 Security audit history remains. Shared libraries, albums, media metadata, and
-source files are **not** deleted. Use account deactivation instead if the person's
-private application metadata must remain recoverable. An API client should obtain
+source files are **not** deleted. Each removed live rating refreshes the album's
+SQL average and advances its shared version with the same complete album journal
+as ordinary rating writes, even if the account can no longer see that album.
+Cleared vote tombstones do not invent aggregate changes. Deactivation preserves
+votes and their averages; it does not silently remove them. Use account deactivation
+instead if the person's private application metadata must remain recoverable.
+An API client should obtain
 explicit confirmation before submitting a deletion; the API does not silently
 turn a stale version into a successful delete.
 

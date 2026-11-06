@@ -42,10 +42,10 @@ func assertAlbumEventTags(t *testing.T, s *Service, id string, ids []string) {
 		t.Fatal(err)
 	}
 	var payload map[string]json.RawMessage
-	if json.Unmarshal([]byte(data), &payload) != nil || len(payload) != 12 {
+	if json.Unmarshal([]byte(data), &payload) != nil || len(payload) != 13 {
 		t.Fatal("album event is not the complete canonical projection", data)
 	}
-	for _, field := range []string{"id", "library_id", "source_id", "person_id", "source_name", "display_name", "cover_media_id", "restricted", "quarantined_at", "tag_ids", "indexed_at", "version"} {
+	for _, field := range []string{"id", "library_id", "source_id", "person_id", "source_name", "display_name", "cover_media_id", "restricted", "quarantined_at", "tag_ids", "rating_avg", "indexed_at", "version"} {
 		if _, ok := payload[field]; !ok {
 			t.Fatal("album event lost an existing canonical field", field, data)
 		}
@@ -57,6 +57,13 @@ func assertAlbumEventTags(t *testing.T, s *Service, id string, ids []string) {
 	}
 	if err := json.Unmarshal(payload["indexed_at"], &indexed); err != nil || !indexed.Equal(time.UnixMilli(millis).UTC()) {
 		t.Fatal("album event changed its first-indexed public ordering key", indexed, millis, err)
+	}
+	var average, expected *float64
+	if err := s.db.QueryRow(`SELECT AVG(rating) FROM ratings WHERE album_id=?`, id).Scan(&expected); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(payload["rating_avg"], &average); err != nil || !reflect.DeepEqual(average, expected) {
+		t.Fatal("album event lost its current shared rating aggregate", average, expected, err)
 	}
 	var actual []string
 	if err := json.Unmarshal(payload["tag_ids"], &actual); err != nil || actual == nil || !slices.Equal(actual, ids) {

@@ -226,6 +226,10 @@ Only implemented endpoints are advertised:
   `name_desc`). Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
+- `GET/PUT/DELETE /api/v2/albums/{album_id}/rating`: the current account's one
+  integer vote, independent strong preconditions and replay receipts. Clear keeps
+  its revision; real changes and account deletion atomically refresh the shared
+  average/version and events. No source I/O or content grant. See [rating API](docs/ratings.md).
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
   probed by enqueue; a compatible embedded or standalone worker executes the job.

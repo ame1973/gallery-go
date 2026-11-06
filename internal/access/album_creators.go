@@ -151,7 +151,7 @@ func (s *Service) SetAlbumCreator(ctx context.Context, current auth.Session, id 
 		if _, err := tx.ExecContext(ctx, `UPDATE albums SET person_mode=?,person_override_id=?,person_id=?,version=version+1,updated_at=max(updated_at,?) WHERE id=?`, input.Mode, override, projected, now.UnixMilli(), id); err != nil {
 			return AlbumCreator{}, err
 		}
-		if err := JournalAlbumTx(ctx, tx, id, now); err != nil {
+		if err := store.JournalAlbumTx(ctx, tx, id, now); err != nil {
 			return AlbumCreator{}, err
 		}
 		if err := store.Audit(ctx, tx, actor.ID, "album_creator_changed", "album", id, map[string]any{"mode": input.Mode, "previous_person_id": nullableMetadataString(state.current), "person_id": nullableMetadataString(projected), "override_person_id": nullableMetadataString(override), "affected_users": affected, "version": version + 1}, now); err != nil {

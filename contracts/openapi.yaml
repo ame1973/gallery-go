@@ -514,7 +514,7 @@ paths:
     delete:
       operationId: deleteUser
       summary: Delete an account and its private application metadata
-      description: The last active administrator cannot be deleted. Sessions, memberships, favorites, ratings, playlists, progress, and sync-operation receipts are removed; audit history, shared gallery metadata, and source media are preserved.
+      description: The last active administrator cannot be deleted. Sessions, memberships, favorites, ratings, playlists, progress, and sync-operation receipts are removed; audit history, shared gallery identities/preferences, and source media are preserved. Removed live votes refresh and version every affected album with the canonical shared change/outbox projection in the same transaction, including currently hidden albums; empty rating tombstones do not invent shared changes.
       tags: [Administration]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1380,6 +1380,51 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Album' }
         default: { $ref: '#/components/responses/Problem' }
+  /albums/{album_id}/rating:
+    parameters:
+      - { $ref: '#/components/parameters/AlbumID' }
+    get:
+      operationId: getAlbumRating
+      summary: Read only the current account's versioned album rating
+      description: Fresh session and shared album visibility are required, including for administrators. No query parameters or target account selectors are accepted. A never-rated album returns null rating, version 1 and null updated_at. Cleared votes retain a monotonic personal version and server update time. The strong ETag binds both account and album, independently of other voters or the shared album version. Hidden, inactive, inconsistent and unknown albums return 404. This metadata read never probes source files or grants content access.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AlbumRating' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: setAlbumRating
+      summary: Replace the current account's one integer vote from 1 to 5
+      description: Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; future offline sync and ranking are not enabled here.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumRatingRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumRating' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteAlbumRating
+      summary: Clear only the current account's vote while preserving its revision
+      description: Empty body, personal rating If-Match, actor-bound Idempotency-Key and same-origin CSRF required. Uses the same fresh visibility, atomic journal and replay boundaries as PUT. A real clear stores a nullable vote tombstone, advances personal/shared versions and removes that vote from the SQL average. A repeated clear is a no-op with a receipt. Historical versions are never reused after clear/re-rate, and historical retries never reinstate a removed vote. Other accounts, shared preferences and source files are untouched.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumRating' }
+        default: { $ref: '#/components/responses/Problem' }
   /albums/{album_id}/media:
     get:
       operationId: listAlbumMedia
@@ -1621,7 +1666,7 @@ components:
       name: If-Match
       in: header
       required: true
-      description: Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source.
+      description: Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag.
       schema: { type: string }
     UserID:
       name: user_id
@@ -1638,7 +1683,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys.
+      description: A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys.
       schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9_-]{16,128}$' }
     Limit:
       name: limit
@@ -1666,6 +1711,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    AlbumRating:
+      description: Current or historical actor-receipted personal vote, retained revision and server update instant. GET refreshes current state. The validator binds both account and album, not the shared album version.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AlbumRating' }
     AlbumCreator:
       description: Current or historical actor-receipted creator IDs/mode and shared album version. GET refreshes current state.
       headers:
@@ -2797,6 +2849,32 @@ components:
           uniqueItems: true
           items: { type: string, minLength: 1, maxLength: 64 }
           description: Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant.
+    AlbumRating:
+      type: object
+      additionalProperties: false
+      required: [album_id, rating, updated_at, version]
+      properties:
+        album_id: { type: string }
+        rating:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 5
+          description: Only the calling account's vote; null means never-rated or cleared, distinguished by the retained version/time.
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+          description: Monotonic server UTC-millisecond update instant, or null for an unmaterialized initial state.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Personal account/album revision, retained after clear and independent of other voters/shared album edits.
+    AlbumRatingRequest:
+      type: object
+      additionalProperties: false
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
     Album:
       type: object
       additionalProperties: false

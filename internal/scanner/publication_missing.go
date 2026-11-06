@@ -6,9 +6,9 @@ import (
 	"math"
 	"time"
 
-	"gallerygo/internal/access"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
+	"gallerygo/internal/store"
 )
 
 func (s *Inventory) publishMissing(ctx context.Context, tx *sql.Tx, lease jobs.Lease, generation Generation, source library.Source) error {
@@ -167,7 +167,7 @@ func (s *Inventory) finishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Lea
 			if _, err := tx.ExecContext(ctx, `UPDATE albums SET cover_media_id=?,quarantined_at=?,version=?,updated_at=max(updated_at,?) WHERE id=?`, cover, quarantined, a.version, now.UnixMilli(), a.id); err != nil {
 				return err
 			}
-			if err := access.JournalAlbumTx(ctx, tx, a.id, now); err != nil {
+			if err := store.JournalAlbumTx(ctx, tx, a.id, now); err != nil {
 				return err
 			}
 		}

@@ -45,6 +45,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	if selected == "" {
 		t.Fatal("compiled album cover fixture is missing")
 	}
+	rating, ratingHeaders := beginCompiledAlbumRating(t, api, albumID)
 	path := "/admin/albums/" + albumID
 	var before access.AlbumMetadata
 	initial := api.request("GET", path, nil, 200, &before)
@@ -99,6 +100,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 		t.Fatal("current public album projection diverged from cleared preferences", public)
 	}
 	assertCompiledAlbumOrder(t, api, source.ID, 1)
+	finishCompiledAlbumRating(t, api, rating, ratingHeaders)
 	anonymous := *api.client
 	anonymous.Jar = nil
 	(&scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}).request("GET", path, nil, 401, nil)

@@ -342,8 +342,13 @@ func (s *Service) DeleteUser(ctx context.Context, current Session, id string, ve
 			return err
 		}
 	}
-	// These baseline foreign keys deliberately do not cascade. Delete only the
-	// account's application metadata; no source, album, or filesystem row is touched.
+	now := s.now().UTC().Truncate(time.Millisecond)
+	if err := deleteUserRatingsTx(ctx, tx, id, now); err != nil {
+		return err
+	}
+	// These baseline foreign keys deliberately do not cascade. Remove only account
+	// metadata; changed rating aggregates were versioned and journaled above. Source
+	// media and all shared gallery identities/preferences remain untouched.
 	for _, query := range []struct {
 		sql  string
 		args []any
@@ -357,7 +362,6 @@ func (s *Service) DeleteUser(ctx context.Context, current Session, id string, ve
 			return err
 		}
 	}
-	now := s.now().UTC().Truncate(time.Millisecond)
 	if err := store.Change(ctx, tx, user.ScopeID, "scope", id, "revoke", user.Version+1, map[string]string{"reason": "account_deleted"}, now); err != nil {
 		return err
 	}

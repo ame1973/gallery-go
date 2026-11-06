@@ -446,7 +446,7 @@ export interface paths {
         post?: never;
         /**
          * Delete an account and its private application metadata
-         * @description The last active administrator cannot be deleted. Sessions, memberships, favorites, ratings, playlists, progress, and sync-operation receipts are removed; audit history, shared gallery metadata, and source media are preserved.
+         * @description The last active administrator cannot be deleted. Sessions, memberships, favorites, ratings, playlists, progress, and sync-operation receipts are removed; audit history, shared gallery identities/preferences, and source media are preserved. Removed live votes refresh and version every affected album with the canonical shared change/outbox projection in the same transaction, including currently hidden albums; empty rating tombstones do not invent shared changes.
          */
         delete: operations["deleteUser"];
         options?: never;
@@ -1144,6 +1144,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/albums/{album_id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read only the current account's versioned album rating
+         * @description Fresh session and shared album visibility are required, including for administrators. No query parameters or target account selectors are accepted. A never-rated album returns null rating, version 1 and null updated_at. Cleared votes retain a monotonic personal version and server update time. The strong ETag binds both account and album, independently of other voters or the shared album version. Hidden, inactive, inconsistent and unknown albums return 404. This metadata read never probes source files or grants content access.
+         */
+        get: operations["getAlbumRating"];
+        /**
+         * Replace the current account's one integer vote from 1 to 5
+         * @description Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; future offline sync and ranking are not enabled here.
+         */
+        put: operations["setAlbumRating"];
+        post?: never;
+        /**
+         * Clear only the current account's vote while preserving its revision
+         * @description Empty body, personal rating If-Match, actor-bound Idempotency-Key and same-origin CSRF required. Uses the same fresh visibility, atomic journal and replay boundaries as PUT. A real clear stores a nullable vote tombstone, advances personal/shared versions and removes that vote from the SQL average. A repeated clear is a no-op with a receipt. Historical versions are never reused after clear/re-rate, and historical retries never reinstate a removed vote. Other accounts, shared preferences and source files are untouched.
+         */
+        delete: operations["deleteAlbumRating"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/albums/{album_id}/media": {
         parameters: {
             query?: never;
@@ -1825,6 +1855,24 @@ export interface components {
             /** @description Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant. */
             group_ids: string[];
         };
+        AlbumRating: {
+            album_id: string;
+            /** @description Only the calling account's vote; null means never-rated or cleared, distinguished by the retained version/time. */
+            rating: number | null;
+            /**
+             * Format: date-time
+             * @description Monotonic server UTC-millisecond update instant, or null for an unmaterialized initial state.
+             */
+            updated_at: string | null;
+            /**
+             * Format: int64
+             * @description Personal account/album revision, retained after clear and independent of other voters/shared album edits.
+             */
+            version: number;
+        };
+        AlbumRatingRequest: {
+            rating: number;
+        };
         Album: {
             id: string;
             /** @description Literal effective display override or indexed source name, at most 4096 UTF-8 bytes. No read-side trimming, normalization or case folding. */
@@ -1962,6 +2010,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted personal vote, retained revision and server update instant. GET refreshes current state. The validator binds both account and album, not the shared album version. */
+        AlbumRating: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumRating"];
+            };
+        };
         /** @description Current or historical actor-receipted creator IDs/mode and shared album version. GET refreshes current state. */
         AlbumCreator: {
             headers: {
@@ -2193,12 +2251,12 @@ export interface components {
         ContentIfMatch: string;
         LibraryID: string;
         AlbumID: string;
-        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+        /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
         ResourceIfMatch: string;
         UserID: string;
         /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
         UserIfMatch: string;
-        /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+        /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
         IdempotencyKey: string;
         Limit: number;
         /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
@@ -2393,9 +2451,9 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
@@ -2470,9 +2528,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -2516,9 +2574,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -2559,9 +2617,9 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
@@ -2859,7 +2917,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -2967,7 +3025,7 @@ export interface operations {
                 "X-CSRF-Token": components["parameters"]["Csrf"];
                 /** @description The exact strong ETag from the account response. Wildcards, weak tags, and lists are rejected. A stale version returns 409 VERSION_CONFLICT. */
                 "If-Match": components["parameters"]["UserIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3122,7 +3180,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3170,7 +3228,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -3197,7 +3255,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -3222,9 +3280,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3245,7 +3303,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3279,7 +3337,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3313,7 +3371,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3524,9 +3582,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3547,9 +3605,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3595,7 +3653,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3645,9 +3703,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3676,9 +3734,9 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3730,7 +3788,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3778,7 +3836,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -3805,7 +3863,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -3895,7 +3953,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3943,7 +4001,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -3970,7 +4028,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -4010,7 +4068,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -4050,7 +4108,7 @@ export interface operations {
                 /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
                 Origin: components["parameters"]["Origin"];
                 "X-CSRF-Token": components["parameters"]["Csrf"];
-                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -4155,6 +4213,71 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Album"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAlbumRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumRating"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAlbumRating: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumRatingRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AlbumRating"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteAlbumRating: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumRating"];
             default: components["responses"]["Problem"];
         };
     };

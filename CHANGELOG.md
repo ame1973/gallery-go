@@ -22,6 +22,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Personal album rating GET/PUT/DELETE APIs with one integer vote per account,
+  independent identity-bound preconditions, actor receipts and retained clear
+  revisions. Real changes refresh the live average and shared album version with
+  complete shared/private journals, outboxes and audit in the same transaction.
+  Account deletion uses that same canonical projector for all removed live votes,
+  including currently hidden albums, without changing source files or preferences.
+  Migration0024 preserves valid votes/times, enforces integer values, retains null
+  tombstones and recreates the existing album-rating index. Source outages do not
+  block metadata votes. Rating UI, interaction ranks and offline sync remain pending.
+
 - Literal album name keysets (`name_asc`/`name_desc`) using the exact public
   effective title and BINARY/ID tuples in both directions. Case/composition/numeric
   distinctions remain explicit, never masquerading as normalized or locale search.
