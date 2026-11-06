@@ -25,6 +25,7 @@ func verifyCompiledCreatorOverrides(t *testing.T, api *scanHTTPSClient, source l
 		t.Fatal("creator fixture lost its original album", albums)
 	}
 	albumID := albums.Items[0].ID
+	indexedAt := albums.Items[0].IndexedAt
 	var items struct {
 		Items []media.Metadata `json:"items"`
 	}
@@ -60,6 +61,7 @@ func verifyCompiledCreatorOverrides(t *testing.T, api *scanHTTPSClient, source l
 		}
 	}
 	scan()
+	assertCompiledAlbumOrder(t, api, source.ID, 2)
 	var people struct {
 		Items []access.Person `json:"items"`
 	}
@@ -154,6 +156,12 @@ func verifyCompiledCreatorOverrides(t *testing.T, api *scanHTTPSClient, source l
 	if err != nil || readErr != nil || info.Mode().Perm() != 0o400 || sha256.Sum256(data) != sha256.Sum256(copyBytes) {
 		t.Fatal("creator classification changed the additional read-only source", err, readErr)
 	}
+	var orderedAlbum access.Album
+	api.request("GET", "/albums/"+albumID, nil, 200, &orderedAlbum)
+	if !orderedAlbum.IndexedAt.Equal(indexedAt) {
+		t.Fatal("native creator choices/no-op/folder moves changed first-index time", orderedAlbum, indexedAt)
+	}
+	assertCompiledAlbumOrder(t, api, source.ID, 2)
 	anonymous := *api.client
 	anonymous.Jar = nil
 	(&scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}).request("GET", path, nil, 401, nil)

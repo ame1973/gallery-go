@@ -130,7 +130,8 @@ CSRF tokens, session capabilities, or source filesystem paths.
 
 - `GET /libraries`, `GET /libraries/{library_id}` return active, visible libraries.
 - `GET /albums`, `GET /albums/{album_id}` return visible albums with display titles,
-  library IDs, authorized media counts/covers, rating averages, and resource versions.
+  library IDs, authorized media counts/covers, rating averages, first-indexed times,
+  and resource versions.
 - Missing or unauthorized single-resource IDs return the same 404. Anonymous,
   disabled, expired, and revoked sessions receive 401. Administration requires the
   administrator role.
@@ -171,12 +172,42 @@ source filesystem probes or metadata/permission writes. Source reachability alon
 does not hide otherwise authorized indexed metadata; inactive or inconsistent
 sources still fail closed.
 
+### Album chronological ordering
+
+The common album DTO includes `indexed_at`: the immutable first-indexed **server**
+instant in RFC3339 UTC, with millisecond precision (years 0001..9999). This is when
+healthy inventory first published that logical album, not a camera capture time,
+NAS folder/file mtime, or a recent display/tag/creator/cover edit. Proven folder
+moves and no-op scans preserve it; list/detail/PersonAlbums use the same value.
+The complete canonical album journal also retains it. Existing history is not
+rewritten by the index-only migration.
+
+`GET /albums` accepts optional `sort=latest` or `sort=oldest` together with any
+of the resource selectors:
+
+| Sort     | Primary order           | Tie-break order     |
+| -------- | ----------------------- | ------------------- |
+| omitted  | Album ID ascending      | ID is unique        |
+| `latest` | `indexed_at` descending | Album ID descending |
+| `oldest` | `indexed_at` ascending  | Album ID ascending  |
+
+Chronological cursors freeze the last returned public UTC-millisecond key and
+album ID. A continuation does not look up that anchor again, even if it was
+removed or changed; both tuple components reverse together. First-index time is
+always known for valid stored albums, so there is no synthetic unknown-time key
+or capture/mtime fallback. ID-only cursors reject an unrelated time position, and
+chronological cursors reject missing, noncanonical or out-of-range keys with
+`400 INVALID_CURSOR`. Treat cursors as opaque rather than constructing their JSON.
+Name, popular and top-rated album ordering and full text search are still required
+but not implemented; unsupported values fail explicitly, never become fake ranks.
+
 Lists use the standard `{items,next_cursor,has_more}` envelope, default limit 30,
-maximum 100, and stable ID keyset order. Visibility and selection run in SQL before
-LIMIT, using indexed library/source/person/tag keys rather than loading/sorting the
-whole catalog in memory. Cursors bind the current account, scope, collection and
-literal selectors; query key order/URL encoding is canonicalized, but changing a
-selector requires a new first page. Every continuation rechecks current grants.
+maximum 100, and stable indexed keyset order. Visibility and selection run in SQL
+before LIMIT, using finite library/source/person/time indexes and indexed tag edges
+rather than loading/sorting the whole catalog in memory. Cursors bind the current
+account, scope, collection and literal selectors/sort; query key order/URL encoding
+is canonicalized, but changing a selector or sort requires a new first page. Every
+continuation rechecks current grants.
 Counts/covers use the same media predicate. Invalid cross-source relationships or
 a cover pointing to another album cannot leak an otherwise hidden media ID or count.
 No absolute source or cache path is included.

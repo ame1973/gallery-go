@@ -1116,7 +1116,7 @@ export interface paths {
         };
         /**
          * List visible albums with authorized media counts and covers
-         * @description Stable album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search and alternative album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
+         * @description Default album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. Optional latest/oldest order uses public indexed_at, the immutable server first-indexed UTC-millisecond instant, with album IDs as same-direction ties; it never means capture time, NAS mtime or a recent metadata edit. Chronological cursors freeze the public time key and ID without rereading a mutable/deleted anchor. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search, name and interaction-based album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter/sort values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
          */
         get: operations["listAlbums"];
         put?: never;
@@ -1832,6 +1832,11 @@ export interface components {
             cover_media_id: string | null;
             media_count: number;
             rating_avg: number | null;
+            /**
+             * Format: date-time
+             * @description Immutable server first-indexed instant, UTC with millisecond precision and years 0001..9999. Not capture time, NAS mtime or a metadata-edit timestamp.
+             */
+            indexed_at: string;
             version: number;
         };
         AlbumPage: {
@@ -4114,6 +4119,8 @@ export interface operations {
                 person_id?: string;
                 /** @description One exact assigned tag ID; unused or hidden global labels are never returned. */
                 tag_id?: string;
+                /** @description First-indexed server time with same-direction stable album-ID ties. Omit sort for album-ID ascending order. */
+                sort?: "latest" | "oldest";
             };
             header?: never;
             path?: never;

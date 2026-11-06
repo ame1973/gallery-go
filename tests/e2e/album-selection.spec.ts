@@ -106,6 +106,29 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
       expect(detail.status()).toBe(200);
       expect(await detail.json()).toEqual(album);
     }
+    for (const sort of ['oldest', 'latest'] as const) {
+      const expected = sort === 'oldest' ? albums.slice(0, 2) : albums.slice(0, 2).reverse();
+      const ordered = await selected({ ...filter, sort, limit: 1 });
+      expect(ordered.items.map((album) => album.id)).toEqual(expected.slice(0, 1));
+      expect(ordered.items[0]!.indexed_at).toBe('2026-11-07T00:00:00.123Z');
+      expect(ordered.next_cursor).not.toBeNull();
+      const final = await selected({ ...filter, sort, cursor: ordered.next_cursor!, limit: 100 });
+      expect(final.items.map((album) => album.id)).toEqual(expected.slice(1));
+      expect(final).toMatchObject({ has_more: false, next_cursor: null });
+      expect(final.items[0]!.indexed_at).toBe(ordered.items[0]!.indexed_at);
+      const position = JSON.parse(
+        Buffer.from(ordered.next_cursor!, 'base64url').toString('utf8'),
+      ) as { after: string; position: string };
+      expect(position).toMatchObject({
+        after: ordered.items[0]!.id,
+        position: String(Date.parse(ordered.items[0]!.indexed_at)),
+      });
+      const changedOrder = await context.request.get(
+        `/api/v2/albums?${queryString({ ...filter, sort: sort === 'oldest' ? 'latest' : 'oldest', cursor: ordered.next_cursor! })}`,
+      );
+      expect(changedOrder.status()).toBe(400);
+      expect(await changedOrder.json()).toMatchObject({ code: 'INVALID_CURSOR' });
+    }
     const admin = await api.get(`/api/v2/albums?${queryString(filter)}`);
     expect(admin.status()).toBe(200);
     expect(
@@ -124,7 +147,12 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
     );
     expect(wrongAccount.status()).toBe(400);
     expect(await wrongAccount.json()).toMatchObject({ code: 'INVALID_CURSOR' });
-    for (const query of ['sort=latest', 'q=not-search', 'tag_id=', 'source_id=one&source_id=two']) {
+    for (const query of [
+      'sort=popular',
+      'q=not-search',
+      'tag_id=',
+      'source_id=one&source_id=two',
+    ]) {
       const invalid = await context.request.get(`/api/v2/albums?${query}`);
       expect(invalid.status()).toBe(400);
       expect(await invalid.json()).toMatchObject({ code: 'INVALID_FILTER' });

@@ -2,6 +2,8 @@ package access
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"gallerygo/internal/auth"
 )
@@ -68,26 +70,35 @@ func (s *Service) Library(ctx context.Context, current auth.Session, id string) 
 }
 
 type Album struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	LibraryID    string   `json:"library_id"`
-	CoverMediaID *string  `json:"cover_media_id"`
-	MediaCount   int64    `json:"media_count"`
-	RatingAvg    *float64 `json:"rating_avg"`
-	Version      int64    `json:"version"`
+	ID           string    `json:"id"`
+	Title        string    `json:"title"`
+	LibraryID    string    `json:"library_id"`
+	CoverMediaID *string   `json:"cover_media_id"`
+	MediaCount   int64     `json:"media_count"`
+	RatingAvg    *float64  `json:"rating_avg"`
+	IndexedAt    time.Time `json:"indexed_at"`
+	Version      int64     `json:"version"`
 }
 
 const albumColumns = `SELECT a.id,COALESCE(NULLIF(a.display_name,''),a.source_name),a.library_id,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaVisible + `),
  (SELECT COUNT(*) FROM media m WHERE m.album_id=a.id AND ` + MediaVisible + `),
- (SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.version`
+ (SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.created_at,a.version`
 const albumRelations = ` JOIN libraries l ON l.id=a.library_id`
 const albumSelect = albumColumns + ` FROM albums a` + albumRelations
 
 func scanAlbum(row interface{ Scan(...any) error }) (Album, error) {
 	var album Album
-	err := row.Scan(&album.ID, &album.Title, &album.LibraryID, &album.CoverMediaID, &album.MediaCount, &album.RatingAvg, &album.Version)
-	return album, err
+	var indexed int64
+	err := row.Scan(&album.ID, &album.Title, &album.LibraryID, &album.CoverMediaID, &album.MediaCount, &album.RatingAvg, &indexed, &album.Version)
+	if err != nil {
+		return album, err
+	}
+	album.IndexedAt = time.UnixMilli(indexed).UTC()
+	if album.IndexedAt.Year() < 1 || album.IndexedAt.Year() > 9999 {
+		return Album{}, errors.New("stored album indexed time is outside the public UTC range")
+	}
+	return album, nil
 }
 
 func (s *Service) Album(ctx context.Context, current auth.Session, id string) (Album, error) {

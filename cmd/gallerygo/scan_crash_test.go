@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -26,6 +27,7 @@ import (
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/store"
+	"gallerygo/migrations"
 )
 
 // startAbruptWorker can kill only the child it creates. No production checkpoint,
@@ -133,6 +135,77 @@ func freezeCrashCheckpoint(t *testing.T, db *sql.DB, job, lastSource string, par
 	}
 }
 
+const scanCrashWorkerLease = 30 * time.Second
+
+// A lease used by the native crash fixture must survive legitimate SQLite writer
+// contention without inventing another crash. This is a real queue/DB budget check,
+// not simulated ingestion or a relaxation of production lease/owner fences.
+func TestScanCrashLeaseSurvivesAValidSQLiteWriterWait(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "lease-budget.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, migrations.Files); err != nil {
+		t.Fatal(err)
+	}
+	policy := jobs.DefaultPolicy()
+	if scanCrashWorkerLease != policy.Lease {
+		t.Fatal("native crash fixture must exercise the production default lease")
+	}
+	policy.Lease, policy.Heartbeat = scanCrashWorkerLease, 500*time.Millisecond
+	queue, err := jobs.New(db, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := queue.EnqueueTx(ctx, tx, jobs.Input{Kind: "scan", ResourceKey: "source:lease-budget", Dedupe: "scan:lease-budget", Payload: json.RawMessage(`{}`)}); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := queue.Claim(ctx, "lease-budget-worker", []string{"scan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Rollback()
+	heartbeat := make(chan error, 1)
+	go func() { heartbeat <- queue.Heartbeat(ctx, lease) }()
+	// Four seconds is below the unchanged production five-second busy timeout.
+	// The old three-second fixture lease expires while a valid write still holds.
+	hold := time.NewTimer(4 * time.Second)
+	defer hold.Stop()
+	select {
+	case err := <-heartbeat:
+		t.Fatal("heartbeat bypassed the active writer or did not wait its valid budget", err)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-hold.C:
+	}
+	if err := writer.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-heartbeat:
+		if err != nil {
+			t.Fatal("crash fixture lease expired during a valid SQLite writer wait", scanCrashWorkerLease, err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+}
+
 func TestCompiledScanSIGKILLReopensAndRecoversStagingAndPartialPublication(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "gallerygo")
 	if output, err := exec.CommandContext(t.Context(), "go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
@@ -210,7 +283,7 @@ func TestCompiledScanSIGKILLReopensAndRecoversStagingAndPartialPublication(t *te
 			if err != nil {
 				t.Fatal(err)
 			}
-			settings := map[string]any{"listen": address, "base_url": proxy.URL, "database": dbPath, "cache_root": filepath.Join(directory, "cache"), "web_root": assets, "sources": roots, "scheduler": map[string]bool{"enabled": false}, "scanner": map[string]int{"batch_size": 1}, "worker": map[string]any{"embedded": false, "concurrency": 1, "lease": "3s", "heartbeat": "500ms", "poll": "100ms", "retry_base": "100ms", "retry_max": "200ms"}}
+			settings := map[string]any{"listen": address, "base_url": proxy.URL, "database": dbPath, "cache_root": filepath.Join(directory, "cache"), "web_root": assets, "sources": roots, "scheduler": map[string]bool{"enabled": false}, "scanner": map[string]int{"batch_size": 1}, "worker": map[string]any{"embedded": false, "concurrency": 1, "lease": scanCrashWorkerLease.String(), "heartbeat": "500ms", "poll": "100ms", "retry_base": "100ms", "retry_max": "200ms"}}
 			data, err := json.Marshal(settings)
 			if err != nil {
 				t.Fatal(err)
@@ -303,7 +376,7 @@ func TestCompiledScanSIGKILLReopensAndRecoversStagingAndPartialPublication(t *te
 			if err != nil {
 				t.Fatal(err)
 			}
-			reclaimedDeadline := time.NewTimer(15 * time.Second)
+			reclaimedDeadline := time.NewTimer(scanCrashWorkerLease + 15*time.Second)
 			defer reclaimedDeadline.Stop()
 			reclaimTick := time.NewTicker(10 * time.Millisecond)
 			defer reclaimTick.Stop()
@@ -342,7 +415,13 @@ func TestCompiledScanSIGKILLReopensAndRecoversStagingAndPartialPublication(t *te
 			}
 			result := api.waitJob(accepted.ID)
 			if result.Status != "succeeded" || result.Attempts != 2 || !result.TotalKnown || result.Done != result.Total || result.Done <= before.Done || result.Succeeded < before.Succeeded || result.Failed != 0 {
-				t.Fatal("recovery erased or invented attempt outcomes", result, result.Counts, before.Counts)
+				var diagnostic struct {
+					Items []jobs.Attempt `json:"items"`
+				}
+				api.request("GET", "/admin/jobs/"+accepted.ID+"/attempts", nil, 200, &diagnostic)
+				jobJSON, _ := json.Marshal(result)
+				attemptJSON, _ := json.Marshal(diagnostic.Items)
+				t.Fatalf("recovery erased or invented attempt outcomes: job=%s attempts=%s checkpoint=%+v", jobJSON, attemptJSON, before.Counts)
 			}
 			var history struct {
 				Items []jobs.Attempt `json:"items"`

@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Chronological album collection keysets (`sort=latest|oldest`) using public
+  `indexed_at`, the immutable first-indexed server instant, with same-direction ID
+  ties and frozen public time positions. No capture/NAS mtime/edit-time fallback or
+  mutable-anchor lookup. Shared list/detail/PersonAlbums and canonical album events
+  retain that key across all native/manual producers; historical rows/events are
+  not rewritten. Migration0022 adds only four ordered indexes, with real100k query
+  plans and atomic upgrade/rollback coverage. Name/interaction ranks, full search
+  and browsing UI remain separate required work, not zero-value placeholders.
+
 - Indexed album collection selection by exact library/source/effective-person/tag
   IDs, intersected in SQL with fresh shared visibility before bounded ID keysets.
   Unknown/hidden/inactive selectors return empty authorized pages; unsupported or

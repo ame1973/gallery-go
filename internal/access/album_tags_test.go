@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gallerygo/internal/auth"
 	"gallerygo/internal/store"
@@ -41,13 +42,21 @@ func assertAlbumEventTags(t *testing.T, s *Service, id string, ids []string) {
 		t.Fatal(err)
 	}
 	var payload map[string]json.RawMessage
-	if json.Unmarshal([]byte(data), &payload) != nil || len(payload) != 11 {
+	if json.Unmarshal([]byte(data), &payload) != nil || len(payload) != 12 {
 		t.Fatal("album event is not the complete canonical projection", data)
 	}
-	for _, field := range []string{"id", "library_id", "source_id", "person_id", "source_name", "display_name", "cover_media_id", "restricted", "quarantined_at", "tag_ids", "version"} {
+	for _, field := range []string{"id", "library_id", "source_id", "person_id", "source_name", "display_name", "cover_media_id", "restricted", "quarantined_at", "tag_ids", "indexed_at", "version"} {
 		if _, ok := payload[field]; !ok {
 			t.Fatal("album event lost an existing canonical field", field, data)
 		}
+	}
+	var indexed time.Time
+	var millis int64
+	if err := s.db.QueryRow(`SELECT created_at FROM albums WHERE id=?`, id).Scan(&millis); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(payload["indexed_at"], &indexed); err != nil || !indexed.Equal(time.UnixMilli(millis).UTC()) {
+		t.Fatal("album event changed its first-indexed public ordering key", indexed, millis, err)
 	}
 	var actual []string
 	if err := json.Unmarshal(payload["tag_ids"], &actual); err != nil || actual == nil || !slices.Equal(actual, ids) {

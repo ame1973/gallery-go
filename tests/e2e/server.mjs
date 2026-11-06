@@ -264,11 +264,12 @@ try {
       }
     }
     if (prefix.startsWith('album-selection-')) {
-      // Selection-only empty/restricted cards, not native mapping or renderer proof.
-      // The primary card still owns the distinct real read-only PNG entries above.
+      // Selection-only empty/restricted cards and deterministic time ties, not
+      // native mapping/index-time or renderer proof. The primary card owns real PNGs.
+      const indexed = Date.parse('2026-11-07T00:00:00.123Z');
       fixtureDB
-        .prepare('UPDATE albums SET mapped_person_id=?,cover_media_id=? WHERE id=?')
-        .run(`${prefix}-person`, `${prefix}-media`, album);
+        .prepare('UPDATE albums SET mapped_person_id=?,cover_media_id=?,created_at=? WHERE id=?')
+        .run(`${prefix}-person`, `${prefix}-media`, indexed, album);
       for (const [suffix, restricted] of [
         ['other-album', 0],
         ['private-album', 1],
@@ -285,7 +286,7 @@ try {
             `${prefix}-person`,
             'Empty selection card',
             restricted,
-            Date.now(),
+            indexed + restricted,
             Date.now(),
           );
       }

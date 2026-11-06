@@ -81,6 +81,7 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 		t.Fatal("album-tag fixture lost its single logical album", albums)
 	}
 	albumID := albums.Items[0].ID
+	indexedAt := albums.Items[0].IndexedAt
 	var items struct {
 		Items []media.Metadata `json:"items"`
 	}
@@ -122,6 +123,11 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 		{PersonID: selection.PersonID}, {TagID: selection.TagID}, selection,
 	} {
 		assertCompiledAlbumSelection(t, api, filter, albumID)
+	}
+	for _, order := range []string{"latest", "oldest"} {
+		chronological := selection
+		chronological.Sort = order
+		assertCompiledAlbumSelection(t, api, chronological, albumID)
 	}
 	assertCompiledAlbumSelection(t, api, access.AlbumFilter{SourceID: source.ID, PersonID: "unknown-creator"})
 	scan := func() {
@@ -177,6 +183,7 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 		t.Fatal(err)
 	}
 	assertCompiledAlbumSelection(t, api, selection, albumID)
+	assertCompiledAlbumOrder(t, api, source.ID, 1)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("album selection probed/recreated its missing source marker", err)
 	}
@@ -213,6 +220,11 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 		if err != nil || readErr != nil || info.Mode().Perm() != 0o400 || sha256.Sum256(data) != expected[item.FileName] || current.Items[index].ID != item.ID {
 			t.Fatal("tag association/scan/move changed source bytes/modes or media identity", item.ID, err, readErr)
 		}
+	}
+	var orderedAlbum access.Album
+	api.request("GET", "/albums/"+albumID, nil, 200, &orderedAlbum)
+	if !orderedAlbum.IndexedAt.Equal(indexedAt) {
+		t.Fatal("native tag/no-op/folder move changed the first-indexed ordering key", orderedAlbum, indexedAt)
 	}
 	anonymous := *api.client
 	anonymous.Jar = nil

@@ -23,16 +23,19 @@ func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) e
 		Restricted    bool       `json:"restricted"`
 		QuarantinedAt *time.Time `json:"quarantined_at"`
 		TagIDs        []string   `json:"tag_ids"`
+		IndexedAt     time.Time  `json:"indexed_at"`
 		Version       int64      `json:"version"`
 	}
 	var source, person, display, cover sql.NullString
 	var quarantine sql.NullInt64
+	var indexed int64
 	if err := tx.QueryRowContext(ctx, `SELECT a.id,a.library_id,a.source_id,a.person_id,a.source_name,a.display_name,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND `+mediaSourceConsistent+`),
- a.access_restricted,a.quarantined_at,a.version FROM albums a WHERE a.id=?`, id).Scan(&value.ID, &value.LibraryID, &source, &person,
-		&value.SourceName, &display, &cover, &value.Restricted, &quarantine, &value.Version); err != nil {
+ a.access_restricted,a.quarantined_at,a.created_at,a.version FROM albums a WHERE a.id=?`, id).Scan(&value.ID, &value.LibraryID, &source, &person,
+		&value.SourceName, &display, &cover, &value.Restricted, &quarantine, &indexed, &value.Version); err != nil {
 		return err
 	}
+	value.IndexedAt = time.UnixMilli(indexed).UTC()
 	value.SourceID, value.PersonID = nullableMetadataString(source), nullableMetadataString(person)
 	value.DisplayName, value.CoverMediaID = nullableMetadataString(display), nullableMetadataString(cover)
 	if quarantine.Valid {
