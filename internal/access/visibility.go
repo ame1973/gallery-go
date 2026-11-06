@@ -77,41 +77,17 @@ type Album struct {
 	Version      int64    `json:"version"`
 }
 
-const albumSelect = `SELECT a.id,COALESCE(NULLIF(a.display_name,''),a.source_name),a.library_id,
+const albumColumns = `SELECT a.id,COALESCE(NULLIF(a.display_name,''),a.source_name),a.library_id,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaVisible + `),
  (SELECT COUNT(*) FROM media m WHERE m.album_id=a.id AND ` + MediaVisible + `),
- (SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.version
- FROM albums a JOIN libraries l ON l.id=a.library_id`
+ (SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.version`
+const albumRelations = ` JOIN libraries l ON l.id=a.library_id`
+const albumSelect = albumColumns + ` FROM albums a` + albumRelations
 
 func scanAlbum(row interface{ Scan(...any) error }) (Album, error) {
 	var album Album
 	err := row.Scan(&album.ID, &album.Title, &album.LibraryID, &album.CoverMediaID, &album.MediaCount, &album.RatingAvg, &album.Version)
 	return album, err
-}
-
-func (s *Service) Albums(ctx context.Context, current auth.Session, after string, limit int) ([]Album, error) {
-	if !pageLimit(limit) {
-		return nil, ErrGroupSet
-	}
-	tx, viewer, err := s.readTx(ctx, current)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, albumSelect+` WHERE `+AlbumVisible+` AND a.id>? ORDER BY a.id LIMIT ?`, viewer.ID, viewer.ID, viewer.ID, after, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]Album, 0)
-	for rows.Next() {
-		album, err := scanAlbum(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, album)
-	}
-	return items, rows.Err()
 }
 
 func (s *Service) Album(ctx context.Context, current auth.Session, id string) (Album, error) {

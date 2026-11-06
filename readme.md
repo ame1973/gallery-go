@@ -220,7 +220,10 @@ Only implemented endpoints are advertised:
 - `GET/PUT /api/v2/admin/libraries/{library_id}/access` and
   `/admin/albums/{album_id}/access`: fail-closed grants and additive restrictions.
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
-  SQL-authorized metadata, counts, and covers. See [docs/access.md](docs/access.md).
+  SQL-authorized metadata, counts, and covers. Album collections intersect exact
+  `library_id`, `source_id`, `person_id` and `tag_id` selectors before indexed ID
+  keyset pagination; hidden/unknown selectors return empty authorized pages, not
+  private global labels. See [selection rules](docs/access.md#album-collection-selection).
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
   probed by enqueue; a compatible embedded or standalone worker executes the job.
@@ -329,7 +332,10 @@ label conflict, historical receipts versus current GET, anonymous denial and unc
 account scope through the same compiled HTTPS entrypoints. Album-tag replacement
 then verifies native no-op/move retention, stable album/media IDs, tag-name versus
 association-version boundaries, historical receipts, explicit link-only clear and
-unchanged read-only source SHA/modes. Creator classification then adds one owned
+unchanged read-only source SHA/modes. Exact library/source/person/tag album selection
+is checked against those real mapped IDs before/after no-op scans, the folder move,
+a tag rename and marker loss, including detail-equivalent counts/covers and empty
+results after link removal. Creator classification then adds one owned
 read-only PNG and runs 63-unit/21-file scans through mapped/person/none modes, two
 folder moves, current fallback restoration and historical receipts without confusing
 a selected creator with indexed rename provenance. Tag-batch processing then freezes

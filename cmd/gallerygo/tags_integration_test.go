@@ -109,6 +109,21 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 	if changed.Version != before.Version+1 || !slices.Equal(changed.TagIDs, ids) {
 		t.Fatal("compiled tag association did not publish its exact album version", changed, before)
 	}
+	var people struct {
+		Items []access.Person `json:"items"`
+	}
+	api.request("GET", "/people", nil, 200, &people)
+	if len(people.Items) != 1 || people.Items[0].SourceID != source.ID {
+		t.Fatal("native album selection lost its source-bound mapped creator", people)
+	}
+	selection := access.AlbumFilter{LibraryID: source.LibraryID, SourceID: source.ID, PersonID: people.Items[0].ID, TagID: one.ID}
+	for _, filter := range []access.AlbumFilter{
+		{LibraryID: selection.LibraryID}, {SourceID: selection.SourceID},
+		{PersonID: selection.PersonID}, {TagID: selection.TagID}, selection,
+	} {
+		assertCompiledAlbumSelection(t, api, filter, albumID)
+	}
+	assertCompiledAlbumSelection(t, api, access.AlbumFilter{SourceID: source.ID, PersonID: "unknown-creator"})
 	scan := func() {
 		t.Helper()
 		var job jobs.Job
@@ -123,6 +138,7 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 	if !reflect.DeepEqual(stable, changed) {
 		t.Fatal("no-op scan changed tag associations or album version", stable, changed)
 	}
+	assertCompiledAlbumSelection(t, api, selection, albumID)
 	// Only this test's temporary source folder moves externally. The application
 	// must retain logical IDs and tag links without changing any 0400 file bytes.
 	if err := os.Rename(filepath.Join(root, "RenamedCreator"), filepath.Join(root, "TaggedAlbum")); err != nil {
@@ -133,6 +149,7 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 	if stable.AlbumID != albumID || stable.Version <= changed.Version || !slices.Equal(stable.TagIDs, ids) {
 		t.Fatal("native folder move lost tag links or logical album identity", stable, changed)
 	}
+	assertCompiledAlbumSelection(t, api, selection, albumID)
 	var page struct {
 		Items      []access.Tag `json:"items"`
 		NextCursor *string      `json:"next_cursor"`
@@ -156,6 +173,16 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 	if !reflect.DeepEqual(unchanged, stable) || still.Get("ETag") != latest.Get("ETag") {
 		t.Fatal("tag label rename invalidated IDs-only association metadata", unchanged, stable)
 	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	assertCompiledAlbumSelection(t, api, selection, albumID)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("album selection probed/recreated its missing source marker", err)
+	}
+	if err := os.WriteFile(marker, []byte("isolated scan marker"), 0o400); err != nil {
+		t.Fatal(err)
+	}
 	var replay access.AlbumTagSet
 	replayed := api.request("PUT", path, body, 200, &replay, headers)
 	if !reflect.DeepEqual(replay, changed) || replayed.Get("ETag") != changedHeaders.Get("ETag") {
@@ -166,6 +193,7 @@ func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, sour
 	if cleared.TagIDs == nil || len(cleared.TagIDs) != 0 || cleared.Version != stable.Version+1 {
 		t.Fatal("explicit clear did not remove only the album links", cleared)
 	}
+	assertCompiledAlbumSelection(t, api, selection)
 	for _, id := range ids {
 		var value access.Tag
 		current := api.request("GET", "/admin/tags/"+id, nil, 200, &value)

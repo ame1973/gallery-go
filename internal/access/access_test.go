@@ -109,7 +109,7 @@ func requireError(t *testing.T, err, want error) {
 
 func requireAlbums(t *testing.T, s *Service, viewer auth.Session, expected ...string) {
 	t.Helper()
-	items, err := s.Albums(t.Context(), viewer, "", 100)
+	items, err := s.Albums(t.Context(), viewer, AlbumFilter{}, "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,12 +562,12 @@ func TestNamesPaginationAndAnonymousReadsAreBounded(t *testing.T) {
 		requireError(t, err, ErrGroupSet)
 		_, err = s.Libraries(t.Context(), owner, "", limit)
 		requireError(t, err, ErrGroupSet)
-		_, err = s.Albums(t.Context(), owner, "", limit)
+		_, err = s.Albums(t.Context(), owner, AlbumFilter{}, "", limit)
 		requireError(t, err, ErrGroupSet)
 	}
 	_, err := s.Libraries(t.Context(), auth.Session{}, "", 30)
 	requireError(t, err, auth.ErrUnauthenticated)
-	_, err = s.Albums(t.Context(), auth.Session{}, "", 30)
+	_, err = s.Albums(t.Context(), auth.Session{}, AlbumFilter{}, "", 30)
 	requireError(t, err, auth.ErrUnauthenticated)
 	_, err = s.CreateGroup(t.Context(), owner, "Invalid receipt", "short")
 	requireError(t, err, store.ErrIdempotencyKey)
@@ -581,6 +581,6 @@ func TestNamesPaginationAndAnonymousReadsAreBounded(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE sessions SET expires_at=0`); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.Albums(t.Context(), owner, "", 30)
+	_, err = s.Albums(t.Context(), owner, AlbumFilter{}, "", 30)
 	requireError(t, err, auth.ErrUnauthenticated)
 }

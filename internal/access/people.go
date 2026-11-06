@@ -15,8 +15,9 @@ import (
 // every other resource read. Indexed people bind to a source/path identity, not a
 // display label. A cross-source album link must not reveal another person's name.
 const personAlbumRelation = `a.person_id=p.id AND a.source_id=p.source_id`
-const PersonVisible = `p.source_id IS NOT NULL AND p.relative_path IS NOT NULL
- AND length(p.relative_path)>0 AND p.relative_path!='.' AND EXISTS (
+const personIdentity = `p.source_id IS NOT NULL AND p.relative_path IS NOT NULL
+ AND length(p.relative_path)>0 AND p.relative_path!='.'`
+const PersonVisible = personIdentity + ` AND EXISTS (
  SELECT 1 FROM albums a JOIN libraries l ON l.id=a.library_id
  WHERE ` + personAlbumRelation + ` AND ` + AlbumVisible + `)`
 

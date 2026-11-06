@@ -2,8 +2,9 @@
 
 Library and album access are deny-by-default and enforced in SQL, not by hiding
 links in the frontend. The backend APIs described here are implemented; dedicated
-library-browsing and permission-management screens and inventory scanning are not
-yet available. Existing indexed metadata can be queried through the API.
+library-browsing and permission-management screens are not yet available. Existing
+indexed metadata can be queried through the API; inventory scanning is documented
+in [sources.md](sources.md).
 
 ## Authorization rules
 
@@ -130,15 +131,57 @@ CSRF tokens, session capabilities, or source filesystem paths.
 - `GET /libraries`, `GET /libraries/{library_id}` return active, visible libraries.
 - `GET /albums`, `GET /albums/{album_id}` return visible albums with display titles,
   library IDs, authorized media counts/covers, rating averages, and resource versions.
-- Missing or unauthorized IDs return the same 404. Anonymous, disabled, expired,
-  and revoked sessions receive 401. Administration requires the administrator role.
+- Missing or unauthorized single-resource IDs return the same 404. Anonymous,
+  disabled, expired, and revoked sessions receive 401. Administration requires the
+  administrator role.
+
+### Album collection selection
+
+`GET /albums` accepts these optional **single exact IDs**, combined by AND:
+
+| Parameter    | Selection                                                               |
+| ------------ | ----------------------------------------------------------------------- |
+| `library_id` | The album's current active, visible library.                            |
+| `source_id`  | Its current consistent active indexed source, not a root name/path.     |
+| `person_id`  | Its effective creator, with a concrete indexed path in the same source. |
+| `tag_id`     | An existing album-tag edge, not a label search or global catalog read.  |
+
+For example, `GET /api/v2/albums?source_id=<id>&person_id=<id>&tag_id=<id>&limit=30`
+returns the intersection in ascending album-ID order. Omitted selectors leave the
+visible corpus unchanged. Each supplied value must be nonempty, at most 64 UTF-8
+bytes, without leading/trailing whitespace, path separators, control or format
+characters. IDs are literal: no trimming, case folding, label resolution or Unicode
+normalization. Repeated, empty and unknown parameters return `400 INVALID_FILTER`;
+unsupported `q` and `sort` values are not silently ignored. Use the documented
+`limit` and `cursor` pagination parameters.
+
+Unknown, unauthorized, inactive and contradictory selectors return `200` with
+`{"items":[],"next_cursor":null,"has_more":false}`. This does not disclose whether
+any global private resource exists. In contrast, single-resource routes and
+`GET /people/{person_id}/albums` retain their missing/hidden-parent 404 behavior.
+Person selection uses the effective creator ID, not the mapped fallback or display
+label, and excludes cross-source or unclassified/root-path associations. Equal
+creator labels do not merge identities. A tag selector never exposes unused/private
+tag names or makes the administrative tag catalog available to ordinary users.
+
+Every card retains the same title, version, authorized media count, cover and rating
+average as album detail. Filters select albums, not a different media-count subset;
+empty albums are retained and an invalid cover is null. Selection performs no
+source filesystem probes or metadata/permission writes. Source reachability alone
+does not hide otherwise authorized indexed metadata; inactive or inconsistent
+sources still fail closed.
 
 Lists use the standard `{items,next_cursor,has_more}` envelope, default limit 30,
-maximum 100, and stable ID keyset order. Visibility is applied before LIMIT, and
-counts/covers use the same media predicate. Invalid cross-source relationships or
+maximum 100, and stable ID keyset order. Visibility and selection run in SQL before
+LIMIT, using indexed library/source/person/tag keys rather than loading/sorting the
+whole catalog in memory. Cursors bind the current account, scope, collection and
+literal selectors; query key order/URL encoding is canonicalized, but changing a
+selector requires a new first page. Every continuation rechecks current grants.
+Counts/covers use the same media predicate. Invalid cross-source relationships or
 a cover pointing to another album cannot leak an otherwise hidden media ID or count.
 No absolute source or cache path is included.
 
-These are live metadata pages, not immutable offline snapshots. Search, inventory,
+These are live metadata pages, not immutable offline snapshots; concurrent edits
+can move records between pages. Full text search, alternative album orderings,
 media processing, the browsing UI, and offline synchronization are still being built.
 All responses are private and `no-store`; no service worker globally caches the API.

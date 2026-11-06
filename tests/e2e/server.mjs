@@ -18,6 +18,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
   [
     'media',
     'media-selection',
+    'album-selection',
     'outage',
     'duplicates',
     'people',
@@ -202,7 +203,11 @@ try {
         .prepare('UPDATE albums SET person_id=?,mapped_person_id=? WHERE id=?')
         .run(`${prefix}-mapped`, `${prefix}-mapped`, album);
     }
-    if (prefix.startsWith('people-') || prefix.startsWith('person-metadata-')) {
+    if (
+      prefix.startsWith('people-') ||
+      prefix.startsWith('person-metadata-') ||
+      prefix.startsWith('album-selection-')
+    ) {
       fixtureDB
         .prepare(
           'INSERT INTO people(id,source_id,relative_path,source_name,display_name,created_at) VALUES(?,?,?,?,?,?)',
@@ -256,6 +261,33 @@ try {
             "INSERT INTO media_variants(id,revision_id,preset_key,preset_version,storage_path,mime,size_bytes,sha256,width,height,status,created_at) VALUES(?,?,'fixture_png',1,?,'image/png',?,?,1,1,'ready',?)",
           )
           .run(variantID, revisionID, storage, stat.size, hash, Date.now());
+      }
+    }
+    if (prefix.startsWith('album-selection-')) {
+      // Selection-only empty/restricted cards, not native mapping or renderer proof.
+      // The primary card still owns the distinct real read-only PNG entries above.
+      fixtureDB
+        .prepare('UPDATE albums SET mapped_person_id=?,cover_media_id=? WHERE id=?')
+        .run(`${prefix}-person`, `${prefix}-media`, album);
+      for (const [suffix, restricted] of [
+        ['other-album', 0],
+        ['private-album', 1],
+      ]) {
+        fixtureDB
+          .prepare(
+            'INSERT INTO albums(id,library_id,source_id,person_id,mapped_person_id,source_name,access_restricted,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-${suffix}`,
+            library,
+            `${prefix}-source`,
+            `${prefix}-person`,
+            `${prefix}-person`,
+            'Empty selection card',
+            restricted,
+            Date.now(),
+            Date.now(),
+          );
       }
     }
     if (prefix.startsWith('media-selection-')) {

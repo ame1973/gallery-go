@@ -66,6 +66,10 @@ func startCLIProcess(t *testing.T, binary, config, command string) func() {
 				t.Errorf("%s process did not stop gracefully", command)
 			}
 			log.Close()
+			if t.Failed() {
+				data, readErr := os.ReadFile(logPath)
+				t.Logf("%s process log after failed test (read error: %v):\n%s", command, readErr, data)
+			}
 		})
 	}
 	t.Cleanup(stop)
@@ -140,9 +144,10 @@ func (c *scanHTTPSClient) request(method, path string, body any, want int, resul
 			req.Header[name] = append([]string(nil), values...)
 		}
 	}
+	started := time.Now()
 	response, err := c.client.Do(req)
 	if err != nil {
-		c.t.Fatal(method, path, err)
+		c.t.Fatal(method, path, "after", time.Since(started), err)
 	}
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))

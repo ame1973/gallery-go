@@ -286,19 +286,6 @@ func (a authorization) library(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, library)
 }
 
-func (a authorization) albums(w http.ResponseWriter, r *http.Request) {
-	page, ok := readPage(w, r)
-	if !ok {
-		return
-	}
-	items, err := a.service.Albums(r.Context(), currentSession(r), page.cursor.After, page.limit+1)
-	if err != nil {
-		requestError(w, err)
-		return
-	}
-	writePage(w, page, items, func(album access.Album) string { return album.ID })
-}
-
 func (a authorization) album(w http.ResponseWriter, r *http.Request) {
 	album, err := a.service.Album(r.Context(), currentSession(r), r.PathValue("album_id"))
 	if err != nil {

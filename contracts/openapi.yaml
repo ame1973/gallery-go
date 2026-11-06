@@ -1336,12 +1336,28 @@ paths:
     get:
       operationId: listAlbums
       summary: List visible albums with authorized media counts and covers
-      description: Stable ID keyset pages. A library grant is mandatory and album restrictions only narrow it. Cross-library source relationships fail closed; these live pages are not offline snapshots.
+      description: Stable album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search and alternative album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: '#/components/parameters/Limit' }
         - { $ref: '#/components/parameters/Cursor' }
+        - name: library_id
+          in: query
+          description: One exact library ID; omitted means no additional library restriction.
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: source_id
+          in: query
+          description: One exact indexed source ID, not a configured root name or filesystem path.
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: person_id
+          in: query
+          description: One exact effective creator ID with a concrete same-source indexed path, not a label or mapped fallback preference.
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: tag_id
+          in: query
+          description: One exact assigned tag ID; unused or hidden global labels are never returned.
+          schema: { type: string, minLength: 1, maxLength: 64 }
       responses:
         '200':
           description: SQL-authorized album metadata without private filesystem paths.

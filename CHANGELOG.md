@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Indexed album collection selection by exact library/source/effective-person/tag
+  IDs, intersected in SQL with fresh shared visibility before bounded ID keysets.
+  Unknown/hidden/inactive selectors return empty authorized pages; unsupported or
+  ambiguous inputs fail explicitly. Counts/covers stay identical to album detail,
+  without source I/O, global-label disclosure or new permissions. Migration0021 adds
+  only the missing source+ID index; existing library/person/reverse-tag indexes,
+  typed parameters and real SQLite/HTTPS cases cover the selection contract. Full
+  text search, other album sorts and the browsing UI remain separate work.
+
 - Indexed album-media kind/capture selection and ID/capture ordering in both
   directions, with explicit missing-time/tie rules, inclusive/exclusive proven-time
   bounds and bounded account/scope/album/filter-bound keysets. SQL predicates use

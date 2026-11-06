@@ -98,6 +98,8 @@ func requestError(w http.ResponseWriter, err error) {
 		problem(w, 409, "VERSION_CONFLICT", "The resource changed while the request was being processed.")
 	case errors.Is(err, access.ErrAlbumMetadata), errors.Is(err, access.ErrAlbumCover), errors.Is(err, access.ErrPersonMetadata):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
+	case errors.Is(err, access.ErrAlbumSelection):
+		problem(w, 400, "INVALID_FILTER", "Use bounded literal library, source, person or tag IDs without paths or control characters.")
 	case errors.Is(err, media.ErrMediaSelection):
 		problem(w, 400, "INVALID_FILTER", "Use image/video, a millisecond capture interval and a supported media sort.")
 	case errors.Is(err, media.ErrMediaPosition):
