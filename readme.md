@@ -199,6 +199,10 @@ Only implemented endpoints are advertised:
   bounded administrator-only exact-label catalog, versioned command receipts and
   no implicit deletion of assigned tags. No association/content grant or source I/O.
   See [docs/tags.md](docs/tags.md).
+- `GET/PUT /api/v2/admin/albums/{album_id}/tags` and
+  `GET /api/v2/albums/{album_id}/tags`: versioned explicit association replacement
+  and shared-policy authorized label pages. Empty clears only links; complete album
+  events retain tag IDs across scans and metadata edits. No source or permission changes.
 - `GET/PATCH /api/v2/admin/albums/{album_id}`: versioned display/cover overrides
   with actor-bound command receipts, same-album cover ownership and retained source
   labels/preferences across scans. No source writes. See [docs/album-metadata.md](docs/album-metadata.md).
@@ -300,7 +304,10 @@ label commands then verify the same invariants through another real folder move,
 including retained album/media IDs and clearing to the new indexed creator label.
 Tag catalog commands then verify versioned create/rename/no-op/delete, duplicate
 label conflict, historical receipts versus current GET, anonymous denial and unchanged
-account scope through the same compiled HTTPS entrypoints.
+account scope through the same compiled HTTPS entrypoints. Album-tag replacement
+then verifies native no-op/move retention, stable album/media IDs, tag-name versus
+association-version boundaries, historical receipts, explicit link-only clear and
+unchanged read-only source SHA/modes.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

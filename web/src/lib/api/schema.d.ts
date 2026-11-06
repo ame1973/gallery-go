@@ -137,6 +137,54 @@ export interface paths {
         patch: operations["updatePersonMetadata"];
         trace?: never;
     };
+    "/albums/{album_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List authorized current tags of one visible album
+         * @description Fresh same-transaction session and shared Album visibility required. Hidden, inactive, inconsistent or unknown albums return 404, not an empty global catalog. Only associated tags are returned in bounded stable tag-ID order with default 30/max 100 account/scope/album-bound cursors. Only limit and cursor are supported. Tag labels have independent versions and can change without an album-version update, so this private no-store page intentionally has no album-only ETag. No unused/private global labels, source reads or content grant.
+         */
+        get: operations["listAlbumTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/albums/{album_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a versioned IDs-only album tag association set
+         * @description Current administrator and shared active library/source visibility required. Returns only album_id/tag_ids/shared album version, never derived tag names, source paths or policy. Its strong album ETag remains valid across separate tag-label changes, but other album metadata/policy/scan changes can invalidate it. Mount outage alone does not hide indexed metadata.
+         */
+        get: operations["getAdminAlbumTags"];
+        /**
+         * Replace an album's explicit bounded set of tag associations
+         * @description Online current-admin-only mutation with shared album visibility, exact album If-Match and actor-bound Idempotency-Key. Explicit unique known tag IDs only, maximum 100, canonicalized in stable ID order. Empty array clears only links; missing or null is not a clear. Unknown/duplicate/invalid IDs fail atomically. Real changes co-commit links/shared album version/complete album upsert including tag_ids/outbox/audit/receipt; no-op saves only its receipt. Matching canonical actor/key/target/body/original precondition retries return historical IDs/version/ETag after later edits/scans; GET refreshes current state. Existing album metadata, restrictions, sources, catalog tags and original files remain unchanged. No account-scope rotation, search normalization, batch/UI or content grant is implied.
+         */
+        put: operations["setAlbumTags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/albums/{album_id}": {
         parameters: {
             query?: never;
@@ -1446,6 +1494,17 @@ export interface components {
             next_cursor: string | null;
             has_more: boolean;
         };
+        AlbumTagSet: {
+            album_id: string;
+            /** @description Canonical stable-ID-order association set. Empty array means no links, never an implicit catalog deletion. */
+            tag_ids: string[];
+            /** Format: int64 */
+            version: number;
+        };
+        AlbumTagSetRequest: {
+            /** @description Explicit replacement set of existing opaque tag IDs, each at most 64 UTF-8 bytes. Empty clears links only; missing/null/duplicates/unknown IDs are rejected, not partially applied. */
+            tag_ids: string[];
+        };
         Tag: {
             id: string;
             /** @description Bounded trimmed exact binary label; case/Unicode variants can be different tags. Not a search-normalization or content capability. */
@@ -1655,6 +1714,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted album tag IDs and shared album version. GET refreshes current state; tag labels are not part of this body. */
+        AlbumTagSet: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumTagSet"];
+            };
+        };
         /** @description Current or historical actor-receipted catalog tag metadata. GET refreshes current state. */
         Tag: {
             headers: {
@@ -2084,6 +2153,80 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["PersonMetadata"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAlbumTags: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current authorized album-associated labels, not an immutable offline snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdminAlbumTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumTagSet"];
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAlbumTags: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Tags use the resource kind group, library, album, job, or source. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumTagSetRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AlbumTagSet"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];

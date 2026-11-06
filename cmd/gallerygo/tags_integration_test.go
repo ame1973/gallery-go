@@ -1,11 +1,19 @@
 package main
 
 import (
+	"crypto/sha256"
 	"net/http"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 
 	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
+	"gallerygo/internal/jobs"
+	"gallerygo/internal/library"
+	"gallerygo/internal/media"
 	"gallerygo/internal/store"
 )
 
@@ -60,5 +68,127 @@ func verifyCompiledTagCatalog(t *testing.T, api *scanHTTPSClient) {
 	anonymous.Jar = nil
 	guest := &scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}
 	guest.request("GET", "/admin/tags", nil, 401, nil)
+	guest.request("GET", path, nil, 401, nil)
+}
+
+func verifyCompiledAlbumTagAssociations(t *testing.T, api *scanHTTPSClient, source library.Source, marker string, workUnits int64) {
+	t.Helper()
+	var albums struct {
+		Items []access.Album `json:"items"`
+	}
+	api.request("GET", "/albums", nil, 200, &albums)
+	if len(albums.Items) != 1 {
+		t.Fatal("album-tag fixture lost its single logical album", albums)
+	}
+	albumID := albums.Items[0].ID
+	var items struct {
+		Items []media.Metadata `json:"items"`
+	}
+	api.request("GET", "/albums/"+albumID+"/media", nil, 200, &items)
+	root := filepath.Dir(marker)
+	expected := make(map[string][32]byte)
+	for _, item := range items.Items {
+		data, err := os.ReadFile(filepath.Join(root, "RenamedCreator", item.FileName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected[item.FileName] = sha256.Sum256(data)
+	}
+	var one, two access.Tag
+	api.request("POST", "/admin/tags", map[string]string{"name": "CLI assigned one"}, 201, &one)
+	api.request("POST", "/admin/tags", map[string]string{"name": "CLI assigned two"}, 201, &two)
+	ids := []string{one.ID, two.ID}
+	slices.Sort(ids)
+	path := "/admin/albums/" + albumID + "/tags"
+	var before access.AlbumTagSet
+	initial := api.request("GET", path, nil, 200, &before)
+	body := map[string]any{"tag_ids": []string{two.ID, one.ID}}
+	headers := http.Header{"If-Match": {initial.Get("ETag")}, "Idempotency-Key": {store.NewID()}}
+	var changed access.AlbumTagSet
+	changedHeaders := api.request("PUT", path, body, 200, &changed, headers)
+	if changed.Version != before.Version+1 || !slices.Equal(changed.TagIDs, ids) {
+		t.Fatal("compiled tag association did not publish its exact album version", changed, before)
+	}
+	scan := func() {
+		t.Helper()
+		var job jobs.Job
+		api.request("POST", "/admin/scans", map[string]string{"mode": "full", "source_id": source.ID}, 202, &job)
+		if result := api.waitJob(job.ID); result.Status != "succeeded" || result.Done != workUnits+3 || result.Failed != 0 {
+			t.Fatal("native scan after association change failed", result, result.Counts)
+		}
+	}
+	scan()
+	var stable access.AlbumTagSet
+	api.request("GET", path, nil, 200, &stable)
+	if !reflect.DeepEqual(stable, changed) {
+		t.Fatal("no-op scan changed tag associations or album version", stable, changed)
+	}
+	// Only this test's temporary source folder moves externally. The application
+	// must retain logical IDs and tag links without changing any 0400 file bytes.
+	if err := os.Rename(filepath.Join(root, "RenamedCreator"), filepath.Join(root, "TaggedAlbum")); err != nil {
+		t.Fatal(err)
+	}
+	scan()
+	latest := api.request("GET", path, nil, 200, &stable)
+	if stable.AlbumID != albumID || stable.Version <= changed.Version || !slices.Equal(stable.TagIDs, ids) {
+		t.Fatal("native folder move lost tag links or logical album identity", stable, changed)
+	}
+	var page struct {
+		Items      []access.Tag `json:"items"`
+		NextCursor *string      `json:"next_cursor"`
+		HasMore    bool         `json:"has_more"`
+	}
+	publicPath := "/albums/" + albumID + "/tags"
+	publicHeaders := api.request("GET", publicPath+"?limit=1", nil, 200, &page)
+	if len(page.Items) != 1 || page.Items[0].ID != ids[0] || !page.HasMore || page.NextCursor == nil || publicHeaders.Get("ETag") != "" {
+		t.Fatal("compiled public tags were not bounded or used an album-only label ETag", page, publicHeaders)
+	}
+	api.request("GET", publicPath+"?limit=1&cursor="+*page.NextCursor, nil, 200, &page)
+	if len(page.Items) != 1 || page.Items[0].ID != ids[1] || page.HasMore || page.NextCursor != nil {
+		t.Fatal("compiled album tag cursor lost a stable association", page)
+	}
+	var tag access.Tag
+	tagHeaders := api.request("GET", "/admin/tags/"+one.ID, nil, 200, &tag)
+	api.request("DELETE", "/admin/tags/"+one.ID, nil, 409, nil, http.Header{"If-Match": {tagHeaders.Get("ETag")}})
+	api.request("PATCH", "/admin/tags/"+one.ID, map[string]string{"name": "Renamed assigned label"}, 200, &tag, http.Header{"If-Match": {tagHeaders.Get("ETag")}})
+	var unchanged access.AlbumTagSet
+	still := api.request("GET", path, nil, 200, &unchanged)
+	if !reflect.DeepEqual(unchanged, stable) || still.Get("ETag") != latest.Get("ETag") {
+		t.Fatal("tag label rename invalidated IDs-only association metadata", unchanged, stable)
+	}
+	var replay access.AlbumTagSet
+	replayed := api.request("PUT", path, body, 200, &replay, headers)
+	if !reflect.DeepEqual(replay, changed) || replayed.Get("ETag") != changedHeaders.Get("ETag") {
+		t.Fatal("scan/move retargeted historical association receipts", replay, changed)
+	}
+	var cleared access.AlbumTagSet
+	api.request("PUT", path, map[string]any{"tag_ids": []string{}}, 200, &cleared, http.Header{"If-Match": {latest.Get("ETag")}})
+	if cleared.TagIDs == nil || len(cleared.TagIDs) != 0 || cleared.Version != stable.Version+1 {
+		t.Fatal("explicit clear did not remove only the album links", cleared)
+	}
+	for _, id := range ids {
+		var value access.Tag
+		current := api.request("GET", "/admin/tags/"+id, nil, 200, &value)
+		api.request("DELETE", "/admin/tags/"+id, nil, 204, nil, http.Header{"If-Match": {current.Get("ETag")}})
+	}
+	var current struct {
+		Items []media.Metadata `json:"items"`
+	}
+	api.request("GET", "/albums/"+albumID+"/media", nil, 200, &current)
+	if len(current.Items) != len(items.Items) {
+		t.Fatal("tag operations changed indexed media count", current)
+	}
+	for index, item := range items.Items {
+		path := filepath.Join(root, "TaggedAlbum", item.FileName)
+		info, err := os.Stat(path)
+		data, readErr := os.ReadFile(path)
+		if err != nil || readErr != nil || info.Mode().Perm() != 0o400 || sha256.Sum256(data) != expected[item.FileName] || current.Items[index].ID != item.ID {
+			t.Fatal("tag association/scan/move changed source bytes/modes or media identity", item.ID, err, readErr)
+		}
+	}
+	anonymous := *api.client
+	anonymous.Jar = nil
+	guest := &scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}
+	guest.request("GET", publicPath, nil, 401, nil)
 	guest.request("GET", path, nil, 401, nil)
 }

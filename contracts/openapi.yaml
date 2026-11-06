@@ -158,6 +158,59 @@ paths:
         '409': { $ref: '#/components/responses/Problem' }
         '422': { $ref: '#/components/responses/Problem' }
         default: { $ref: '#/components/responses/Problem' }
+  /albums/{album_id}/tags:
+    parameters: [{ $ref: '#/components/parameters/AlbumID' }]
+    get:
+      operationId: listAlbumTags
+      summary: List authorized current tags of one visible album
+      description: Fresh same-transaction session and shared Album visibility required. Hidden, inactive, inconsistent or unknown albums return 404, not an empty global catalog. Only associated tags are returned in bounded stable tag-ID order with default 30/max 100 account/scope/album-bound cursors. Only limit and cursor are supported. Tag labels have independent versions and can change without an album-version update, so this private no-store page intentionally has no album-only ETag. No unused/private global labels, source reads or content grant.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Current authorized album-associated labels, not an immutable offline snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagPage' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/albums/{album_id}/tags:
+    parameters: [{ $ref: '#/components/parameters/AlbumID' }]
+    get:
+      operationId: getAdminAlbumTags
+      summary: Read a versioned IDs-only album tag association set
+      description: Current administrator and shared active library/source visibility required. Returns only album_id/tag_ids/shared album version, never derived tag names, source paths or policy. Its strong album ETag remains valid across separate tag-label changes, but other album metadata/policy/scan changes can invalidate it. Mount outage alone does not hide indexed metadata.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AlbumTagSet' }
+        '404': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: setAlbumTags
+      summary: Replace an album's explicit bounded set of tag associations
+      description: Online current-admin-only mutation with shared album visibility, exact album If-Match and actor-bound Idempotency-Key. Explicit unique known tag IDs only, maximum 100, canonicalized in stable ID order. Empty array clears only links; missing or null is not a clear. Unknown/duplicate/invalid IDs fail atomically. Real changes co-commit links/shared album version/complete album upsert including tag_ids/outbox/audit/receipt; no-op saves only its receipt. Matching canonical actor/key/target/body/original precondition retries return historical IDs/version/ETag after later edits/scans; GET refreshes current state. Existing album metadata, restrictions, sources, catalog tags and original files remain unchanged. No account-scope rotation, search normalization, batch/UI or content grant is implied.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumTagSetRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumTagSet' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/albums/{album_id}:
     parameters: [{ $ref: '#/components/parameters/AlbumID' }]
     get:
@@ -1422,6 +1475,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    AlbumTagSet:
+      description: Current or historical actor-receipted album tag IDs and shared album version. GET refreshes current state; tag labels are not part of this body.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AlbumTagSet' }
     Tag:
       description: Current or historical actor-receipted catalog tag metadata. GET refreshes current state.
       headers:
@@ -2191,6 +2251,30 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/Variant' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
+    AlbumTagSet:
+      type: object
+      additionalProperties: false
+      required: [album_id, tag_ids, version]
+      properties:
+        album_id: { type: string }
+        tag_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string }
+          description: Canonical stable-ID-order association set. Empty array means no links, never an implicit catalog deletion.
+        version: { type: integer, format: int64, minimum: 1 }
+    AlbumTagSetRequest:
+      type: object
+      additionalProperties: false
+      required: [tag_ids]
+      properties:
+        tag_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Explicit replacement set of existing opaque tag IDs, each at most 64 UTF-8 bytes. Empty clears links only; missing/null/duplicates/unknown IDs are rejected, not partially applied.
     Tag:
       type: object
       additionalProperties: false

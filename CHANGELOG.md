@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Versioned album-tag association replacement with bounded explicit ID sets,
+  same-transaction administrator/album visibility and canonical historical receipts.
+  Authorized public tag pages share library/source/album policy and never enumerate
+  unrelated catalog names or claim an album-only ETag for independently renamed
+  labels. Shared complete album upserts retain tag IDs across metadata edits and
+  native scans/moves; policy events remain separate and preserve links. Clear removes
+  only associations, never tags/files or restrictions. Atomic rollback, real TLS/CLI
+  scan retention and typed browser flows accompany the API; batch/UI/search remain.
+
 - Versioned administrative tag catalog with bounded scope-bound keysets, exact
   trimmed binary-label uniqueness, current-admin checks and actor-bound historical
   create/rename/delete receipts. Tag version/tombstone/change/outbox/audit/receipt

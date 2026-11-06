@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,6 +77,16 @@ func TestPublicationWholeFolderRenamePreservesAlbumsPeopleAndInteractions(t *tes
 	var retained int
 	if err := f.db.QueryRow(`SELECT (SELECT COUNT(*) FROM favorites WHERE album_id=?)+(SELECT COUNT(*) FROM ratings WHERE album_id=?)+(SELECT COUNT(*) FROM album_tags WHERE album_id=?)`, album, album, album).Scan(&retained); err != nil || retained != 3 {
 		t.Fatal("interactions lost", retained, err)
+	}
+	var data string
+	if err := f.db.QueryRow(`SELECT payload_json FROM change_log WHERE kind='album' AND resource_id=? ORDER BY seq DESC LIMIT 1`, album).Scan(&data); err != nil {
+		t.Fatal(err)
+	}
+	var event struct {
+		TagIDs []string `json:"tag_ids"`
+	}
+	if err := json.Unmarshal([]byte(data), &event); err != nil || len(event.TagIDs) != 1 || event.TagIDs[0] != "tag" {
+		t.Fatal("scan/move album upsert lost the retained canonical tag set", data, err)
 	}
 }
 

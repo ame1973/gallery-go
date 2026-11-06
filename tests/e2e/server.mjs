@@ -15,7 +15,15 @@ const key = join(directory, 'tls.key');
 const certificate = join(directory, 'tls.pem');
 const password = process.env.GALLERYGO_TEST_PASSWORD;
 const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
-  ['media', 'outage', 'duplicates', 'people', 'album-metadata', 'person-metadata'].map((kind) => ({
+  [
+    'media',
+    'outage',
+    'duplicates',
+    'people',
+    'album-metadata',
+    'person-metadata',
+    'album-tags',
+  ].map((kind) => ({
     name: `${kind}-${project}`,
     root: join(directory, 'sources', `${kind}-${project}`),
     marker: '.marker',

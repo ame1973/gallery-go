@@ -6,9 +6,9 @@ import (
 	"math"
 	"time"
 
+	"gallerygo/internal/access"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
-	"gallerygo/internal/store"
 )
 
 func (s *Inventory) publishMissing(ctx context.Context, tx *sql.Tx, lease jobs.Lease, generation Generation, source library.Source) error {
@@ -121,20 +121,19 @@ func (s *Inventory) finishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Lea
 	after := ""
 	for {
 		type album struct {
-			id, library, source, name string
-			person, display, cover    sql.NullString
-			quarantined               sql.NullInt64
-			restricted, isNew         bool
-			version                   int64
+			id          string
+			quarantined sql.NullInt64
+			version     int64
+			isNew       bool
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT a.id,a.library_id,a.source_id,a.person_id,a.source_name,a.display_name,a.cover_media_id,a.quarantined_at,a.access_restricted,a.version,d.is_new FROM gg_publish_dirty_albums d JOIN albums a ON a.id=d.id WHERE a.id>? ORDER BY a.id LIMIT ?`, after, s.policy.BatchSize)
+		rows, err := tx.QueryContext(ctx, `SELECT a.id,a.quarantined_at,a.version,d.is_new FROM gg_publish_dirty_albums d JOIN albums a ON a.id=d.id WHERE a.id>? ORDER BY a.id LIMIT ?`, after, s.policy.BatchSize)
 		if err != nil {
 			return err
 		}
 		batch := make([]album, 0, s.policy.BatchSize)
 		for rows.Next() {
 			var a album
-			if err := rows.Scan(&a.id, &a.library, &a.source, &a.person, &a.name, &a.display, &a.cover, &a.quarantined, &a.restricted, &a.version, &a.isNew); err != nil {
+			if err := rows.Scan(&a.id, &a.quarantined, &a.version, &a.isNew); err != nil {
 				rows.Close()
 				return err
 			}
@@ -168,11 +167,7 @@ func (s *Inventory) finishAlbums(ctx context.Context, tx *sql.Tx, lease jobs.Lea
 			if _, err := tx.ExecContext(ctx, `UPDATE albums SET cover_media_id=?,quarantined_at=?,version=?,updated_at=max(updated_at,?) WHERE id=?`, cover, quarantined, a.version, now.UnixMilli(), a.id); err != nil {
 				return err
 			}
-			var quarantineAt any
-			if quarantined.Valid {
-				quarantineAt = time.UnixMilli(quarantined.Int64).UTC()
-			}
-			if err := store.Change(ctx, tx, "system", "album", a.id, "upsert", a.version, map[string]any{"id": a.id, "library_id": a.library, "source_id": a.source, "person_id": nullableString(a.person), "source_name": a.name, "display_name": nullableString(a.display), "cover_media_id": nullableString(cover), "restricted": a.restricted, "quarantined_at": quarantineAt, "version": a.version}, now); err != nil {
+			if err := access.JournalAlbumTx(ctx, tx, a.id, now); err != nil {
 				return err
 			}
 		}

@@ -34,23 +34,19 @@ type AlbumMetadata struct {
 }
 
 type albumMetadataState struct {
-	value                    AlbumMetadata
-	library                  string
-	source, person, rawCover sql.NullString
-	restricted               bool
-	quarantined              sql.NullInt64
+	value    AlbumMetadata
+	rawCover sql.NullString
 }
 
 const albumMetadataSelect = `SELECT a.id,a.source_name,a.display_name,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaVisible + `),
- a.cover_override_id,a.version,a.library_id,a.source_id,a.person_id,a.cover_media_id,a.access_restricted,a.quarantined_at
+ a.cover_override_id,a.version,a.cover_media_id
  FROM albums a JOIN libraries l ON l.id=a.library_id`
 
 func scanAlbumMetadata(row interface{ Scan(...any) error }) (albumMetadataState, error) {
 	var state albumMetadataState
 	err := row.Scan(&state.value.ID, &state.value.SourceName, &state.value.DisplayName, &state.value.CoverMediaID,
-		&state.value.CoverOverrideID, &state.value.Version, &state.library, &state.source, &state.person,
-		&state.rawCover, &state.restricted, &state.quarantined)
+		&state.value.CoverOverrideID, &state.value.Version, &state.rawCover)
 	return state, err
 }
 
@@ -152,14 +148,7 @@ func (s *Service) UpdateAlbumMetadata(ctx context.Context, current auth.Session,
 	}
 	result = updated.value
 	if changed {
-		var quarantine any
-		if updated.quarantined.Valid {
-			quarantine = time.UnixMilli(updated.quarantined.Int64).UTC()
-		}
-		payload := map[string]any{"id": id, "library_id": updated.library, "source_id": nullableMetadataString(updated.source), "person_id": nullableMetadataString(updated.person),
-			"source_name": result.SourceName, "display_name": result.DisplayName, "cover_media_id": result.CoverMediaID,
-			"restricted": updated.restricted, "quarantined_at": quarantine, "version": result.Version}
-		if err := store.Change(ctx, tx, "system", "album", id, "upsert", result.Version, payload, now); err != nil {
+		if err := JournalAlbumTx(ctx, tx, id, now); err != nil {
 			return AlbumMetadata{}, err
 		}
 		if err := store.Audit(ctx, tx, actor.ID, "album_metadata_updated", "album", id, map[string]any{"display_name": result.DisplayName, "cover_override_id": result.CoverOverrideID, "cover_media_id": result.CoverMediaID, "version": result.Version}, now); err != nil {

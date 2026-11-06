@@ -102,7 +102,7 @@ func TestAlbumMetadataOverridesAreVersionedReplayableAndPreserveSourceAndPolicy(
 	if json.Unmarshal([]byte(payload), &event) != nil {
 		t.Fatal("invalid album event", payload)
 	}
-	for _, field := range []string{"id", "library_id", "source_id", "person_id", "source_name", "display_name", "cover_media_id", "restricted", "quarantined_at", "version"} {
+	for _, field := range []string{"id", "library_id", "source_id", "person_id", "source_name", "display_name", "cover_media_id", "restricted", "quarantined_at", "tag_ids", "version"} {
 		if _, ok := event[field]; !ok {
 			t.Fatal("metadata mutation omitted part of the canonical album event", field, payload)
 		}
