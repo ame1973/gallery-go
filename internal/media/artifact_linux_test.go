@@ -37,6 +37,19 @@ func privateArtifactFixture(t *testing.T) (*Service, stillArtifact, []byte, stri
 	return New(nil, nil, cache, map[string]SourceRoot{"owned": {Path: source, Marker: ".marker"}}), artifact, data, original
 }
 
+// Storage-only regressions close the actual returned capsule; publication tests
+// must instead keep it open through their final DB transaction.
+func (s *Service) storeAndCloseArtifactForTest(ctx context.Context, jobID string, artifact stillArtifact, data []byte) error {
+	stored, err := s.storeStillArtifact(ctx, jobID, artifact, data)
+	if stored != nil {
+		return errors.Join(err, stored.Close())
+	}
+	if err == nil {
+		return errors.New("storage returned no private artifact capsule")
+	}
+	return err
+}
+
 func requireNoArtifactTemps(t *testing.T, root string) {
 	t.Helper()
 	if err := filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
@@ -54,7 +67,7 @@ func requireNoArtifactTemps(t *testing.T, root string) {
 
 func TestPrivateArtifactStorageIsImmutableAtomicAndReplaySafe(t *testing.T) {
 	svc, artifact, data, original := privateArtifactFixture(t)
-	if err := svc.storeStillArtifact(t.Context(), "job-one", artifact, data); err != nil {
+	if err := svc.storeAndCloseArtifactForTest(t.Context(), "job-one", artifact, data); err != nil {
 		t.Fatal(err)
 	}
 	name := filepath.Join(svc.cacheRoot, filepath.FromSlash(artifact.storage))
@@ -63,7 +76,7 @@ func TestPrivateArtifactStorageIsImmutableAtomicAndReplaySafe(t *testing.T) {
 		t.Fatal("artifact permissions/type are not private", before, err)
 	}
 	for _, job := range []string{"job-one", "job-two"} {
-		if err := svc.storeStillArtifact(t.Context(), job, artifact, data); err != nil {
+		if err := svc.storeAndCloseArtifactForTest(t.Context(), job, artifact, data); err != nil {
 			t.Fatal("same bytes/key must reuse without overwrite", job, err)
 		}
 	}
@@ -95,7 +108,7 @@ func TestConcurrentPrivateArtifactWritersNeverReplaceOrExposePartialFiles(t *tes
 	var group sync.WaitGroup
 	failures := make(chan error, 12)
 	for range 12 {
-		group.Go(func() { failures <- svc.storeStillArtifact(t.Context(), "same-live-job", artifact, data) })
+		group.Go(func() { failures <- svc.storeAndCloseArtifactForTest(t.Context(), "same-live-job", artifact, data) })
 	}
 	finished := make(chan struct{})
 	go func() {
@@ -150,7 +163,7 @@ func TestPrivateArtifactStorageRefusesCorruptExistingFilesAndMutableClaims(t *te
 		t.Fatal(err)
 	}
 	before, _ := os.Stat(name)
-	if err := svc.storeStillArtifact(t.Context(), "job-corrupt", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
+	if err := svc.storeAndCloseArtifactForTest(t.Context(), "job-corrupt", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
 		t.Fatal("corrupt immutable target was overwritten or blessed", err)
 	}
 	after, _ := os.Stat(name)
@@ -167,11 +180,11 @@ func TestPrivateArtifactStorageRefusesCorruptExistingFilesAndMutableClaims(t *te
 	} {
 		forged := artifact
 		change(&forged)
-		if err := svc.storeStillArtifact(t.Context(), "job-forged", forged, data); !errors.Is(err, errStillArtifact) {
+		if err := svc.storeAndCloseArtifactForTest(t.Context(), "job-forged", forged, data); !errors.Is(err, errStillArtifact) {
 			t.Fatal("mutable artifact claim bypassed byte/key validation", forged, err)
 		}
 	}
-	if err := svc.storeStillArtifact(t.Context(), "job-new-bytes", artifact, webpFixture(t, "lossy")); !errors.Is(err, errStillArtifact) {
+	if err := svc.storeAndCloseArtifactForTest(t.Context(), "job-new-bytes", artifact, webpFixture(t, "lossy")); !errors.Is(err, errStillArtifact) {
 		t.Fatal("data changed after validation was accepted", err)
 	}
 	requireNoArtifactTemps(t, svc.cacheRoot)
@@ -180,13 +193,13 @@ func TestPrivateArtifactStorageRefusesCorruptExistingFilesAndMutableClaims(t *te
 func TestPrivateArtifactStorageRejectsSourceOverlapAliasesAndUnsafeJobs(t *testing.T) {
 	svc, artifact, data, original := privateArtifactFixture(t)
 	for _, job := range []string{"", ".", "../escape", "/absolute", "one/two", `one\two`, "job\x00", "job\n", strings.Repeat("j", 129)} {
-		if err := svc.storeStillArtifact(t.Context(), job, artifact, data); !errors.Is(err, errStillArtifact) {
+		if err := svc.storeAndCloseArtifactForTest(t.Context(), job, artifact, data); !errors.Is(err, errStillArtifact) {
 			t.Fatal("unsafe job folder accepted", job, err)
 		}
 	}
 	for _, cache := range []string{"relative", "", filepath.Join(svc.cacheRoot, "missing"), filepath.Dir(original), filepath.Dir(filepath.Dir(original))} {
 		bad := New(nil, nil, cache, svc.sources)
-		if err := bad.storeStillArtifact(t.Context(), "job", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
+		if err := bad.storeAndCloseArtifactForTest(t.Context(), "job", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
 			t.Fatal("unconfigured/missing/overlapping private root accepted", cache, err)
 		}
 	}
@@ -194,12 +207,12 @@ func TestPrivateArtifactStorageRejectsSourceOverlapAliasesAndUnsafeJobs(t *testi
 	if err := os.Symlink(svc.cacheRoot, alias); err != nil {
 		t.Fatal(err)
 	}
-	if err := New(nil, nil, alias, svc.sources).storeStillArtifact(t.Context(), "job", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
+	if err := New(nil, nil, alias, svc.sources).storeAndCloseArtifactForTest(t.Context(), "job", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
 		t.Fatal("cache-root alias introduced after config validation accepted", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := svc.storeStillArtifact(ctx, "job", artifact, data); !errors.Is(err, context.Canceled) {
+	if err := svc.storeAndCloseArtifactForTest(ctx, "job", artifact, data); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled storage created output", err)
 	}
 	if entries, err := os.ReadDir(svc.cacheRoot); err != nil || len(entries) != 0 {
@@ -230,7 +243,7 @@ func TestPrivateArtifactDirectoriesAndTargetsNeverFollowSourceSymlinks(t *testin
 			if err := os.Symlink(target, link); err != nil {
 				t.Fatal(err)
 			}
-			if err := svc.storeStillArtifact(t.Context(), "job-symlink", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
+			if err := svc.storeAndCloseArtifactForTest(t.Context(), "job-symlink", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
 				t.Fatal("artifact storage followed an unowned link", err)
 			}
 			if actual, err := os.ReadFile(original); err != nil || !bytes.Equal(actual, data) {
@@ -257,7 +270,7 @@ func TestPrivateArtifactStorageRejectsUntrustedWritableDirectories(t *testing.T)
 			if err := os.Chmod(directory, 0o777); err != nil {
 				t.Fatal(err)
 			}
-			if err := svc.storeStillArtifact(t.Context(), "job-writable", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
+			if err := svc.storeAndCloseArtifactForTest(t.Context(), "job-writable", artifact, data); !errors.Is(err, ErrVariantUnavailable) {
 				t.Fatal("group/world-writable storage directory accepted", location, err)
 			}
 			if actual, err := os.ReadFile(original); err != nil || !bytes.Equal(actual, data) {
@@ -286,7 +299,7 @@ func TestPrivateArtifactBytesNeverCreateReadyRowsOrDownloadAuthority(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.svc.storeStillArtifact(t.Context(), "unpublished-job", artifact, data); err != nil {
+	if err := f.svc.storeAndCloseArtifactForTest(t.Context(), "unpublished-job", artifact, data); err != nil {
 		t.Fatal(err)
 	}
 	if counts() != before {

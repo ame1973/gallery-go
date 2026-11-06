@@ -22,6 +22,17 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Private Linux cache-wide staging/reconciliation exclusion using shared/exclusive
+  advisory locks, not another queue or DB reservation. A closeable nonserialized
+  stored-artifact capsule keeps shared exclusion through a future fenced publication;
+  exclusive reconciliation must observe references/liveness while holding its gate.
+  Canonical private cache, pinned regular single-link zero-byte gate inode, local
+  filesystem allowlist, close-on-exec descriptors and cancellable acquisition fail
+  closed on unsupported hosts/filesystems or unsafe identities. Actual independent-
+  process contention/SIGKILL release, concurrent SQLite writer and immutable storage
+  regressions accompany the protocol. No renderer, READY, deletion or reconciler is
+  enabled; encoded storage evidence remains distinct from pixels and job leases.
+
 - Private Linux read-only static input capsules bound to the exact leased media/
   current-owned revision/finite preset and creation-bound source dependencies.
   Full source SHA streaming and root/marker/named inode/stat/ctime/mode checks run

@@ -35,7 +35,7 @@ The repository pins and tests these toolchains:
 - Go **1.26.2** (`.go-version`)
 - Node.js **24.14.1** (`.nvmrc`)
 - pnpm **11.25.0** (`package.json`)
-- A local filesystem for SQLite WAL, not an SMB/NFS database mount
+- A local filesystem for SQLite WAL and the private generated-media cache, not SMB/NFS mounts
 - Docker Engine and Compose v2 for the container deployment
 
 SQLite and FTS5 are included through a CGo-free Go driver. No external database,
@@ -136,7 +136,13 @@ the configuration file's directory.
 maximum, and must be at least the idle timeout. Sessions never outlive either limit.
 
 Database storage, cache, web assets, and source roots must not overlap, including
-through symlinks. Source names are unique labels of 1..64 UTF-8 bytes without
+through symlinks. Private artifact staging currently requires Linux ext-family,
+Btrfs, XFS, tmpfs or OverlayFS cache storage; unknown/network cache filesystems fail
+closed rather than assuming equivalent locks. Never remove the private cache's
+`.gallerygo-artifacts.lock` while any process is running. This staging exclusion
+is not an enabled renderer, READY publisher or orphan collector; see
+[private media storage](docs/media.md#static-image-preset-contract).
+Source names are unique labels of 1..64 UTF-8 bytes without
 control characters; mount markers are normalized root-relative paths. GalleryGo
 does not create source roots or mount markers.
 Declare roots in YAML, then use the [source API](docs/sources.md) to register a

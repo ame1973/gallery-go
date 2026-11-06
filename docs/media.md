@@ -81,11 +81,32 @@ a corrupt, mismatched, non-private or symbolic-link target fails rather than bei
 overwritten. Group/world-writable directories, source/cache overlap and cache-root
 aliases are refused. Missing cache roots are not created by this primitive.
 
+Private staging also acquires a shared Linux `flock` on the persistent zero-byte
+`cache_root/.gallerygo-artifacts.lock` before writing. The returned private
+stored-artifact capsule retains that lock until it is closed; a future publisher
+must keep it through its final source/revision/live-lease-fenced DB transaction.
+Concurrent shared writers may coexist. A future reconciler must obtain an
+exclusive gate **before** checking references/job liveness and retain it through
+filesystem actions, rather than deleting from a stale DB absence observation.
+Lock opening/waiting and filesystem checks never belong inside a SQLite writer.
+
+The gate requires a private regular, mode-0600, single-link file with the same
+pinned named inode, close-on-exec descriptors and a local Linux ext-family, Btrfs,
+XFS, tmpfs or OverlayFS cache filesystem. Unknown/network filesystems fail closed;
+NFS/SMB locking is not assumed equivalent. Never unlink/replace the gate file or
+pass its descriptor to a codec child. Acquisition is nonblocking/context-bounded;
+closing the final open description releases the lock, including after process
+exit, without deleting the persistent file. A lock is not a job lease or a grace
+period, and advisory exclusion protects only cooperating application processes,
+not an unrelated same-UID program that ignores the protocol.
+
 This filesystem boundary is not yet connected to a production renderer or DB
 publisher. Unreferenced bytes are not listed or downloadable, even when a complete
 file exists at an immutable key. Failure after a rename can leave a private orphan;
 job directories remain for later lease-aware reconciliation, never recursive or
-source cleanup. Unsupported platforms fail before writing instead of substituting
+source cleanup. No orphan deletion or background reconciler is enabled by the
+shared/exclusive gate; reference/liveness policy and truthful lease-aware cleanup
+still require implementation. Unsupported platforms fail before writing instead of substituting
 an overwriting rename. Contexts stop work between I/O operations, but cannot promise
 to interrupt a kernel-stalled filesystem flush or rename.
 

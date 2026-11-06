@@ -28,7 +28,16 @@ before starting; do not run the application as root to hide a permission problem
 Only `/data` (SQLite), `/cache` (private variants), and bounded `/tmp` are writable.
 The root filesystem is read-only. Capabilities are dropped and privilege elevation
 is disabled. Process, CPU, and memory limits are explicit in `compose.yaml`.
-Do not put `/data` on an SMB/NFS mount. Do not share it between different hosts.
+Do not put `/data` or the private generated-media `/cache` on an SMB/NFS mount.
+Do not share them between different hosts. Private artifact staging accepts only
+Linux ext-family, Btrfs, XFS, tmpfs or OverlayFS cache storage; it fails closed on
+unknown/network filesystem locking semantics. Every cooperating future renderer/
+publisher must retain shared exclusion through DB publication, and a future
+reconciler needs exclusive exclusion before its reference/liveness decision and
+filesystem actions. Never delete or replace `/cache/.gallerygo-artifacts.lock`
+while any app/worker is running, and never pass that descriptor to a codec child.
+This private protocol does not enable rendering, READY publication or cleanup;
+see [private media storage](../docs/media.md#static-image-preset-contract).
 
 The command below creates a new throwaway container with tmpfs storage, validates
 migrations and HTTP/static assets, and removes that container. It does not touch

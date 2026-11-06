@@ -20,57 +20,46 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// storeStillArtifact is worker-only private filesystem staging, not DB publication.
-// The application supplies its canonical, non-overlapping cache/source configuration.
+// storeStillArtifact is private filesystem staging, not DB publication. The returned
+// capsule retains shared exclusion against future orphan reconciliation; keep it
+// open through the final fenced DB publication, then Close on every outcome.
 // Every write/flush/hash/rename must finish before opening a business writer.
-func (s *Service) storeStillArtifact(ctx context.Context, jobID string, artifact stillArtifact, data []byte) error {
+func (s *Service) storeStillArtifact(ctx context.Context, jobID string, artifact stillArtifact, data []byte) (*storedStillArtifact, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	if !localPath(jobID) || strings.ContainsAny(jobID, "/\x00\r\n") || len(jobID) > 128 {
-		return errStillArtifact
+		return nil, errStillArtifact
 	}
 	source := Inspection{Kind: "image", Status: "ok", Width: &artifact.width, Height: &artifact.height}
 	validated, err := validateStillArtifact(ctx, artifact.revision, artifact.preset, source, data)
 	if err != nil || validated != artifact {
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return errStillArtifact
+		return nil, errStillArtifact
 	}
-	if !filepath.IsAbs(s.cacheRoot) || filepath.Clean(s.cacheRoot) != s.cacheRoot {
-		return ErrVariantUnavailable
-	}
-	for _, source := range s.sources {
-		if !filepath.IsAbs(source.Path) || artifactPathsOverlap(s.cacheRoot, source.Path) {
-			return ErrVariantUnavailable
-		}
-	}
-	// Do not silently follow a cache-root alias introduced after config validation.
-	resolved, err := filepath.EvalSymlinks(s.cacheRoot)
-	if err != nil || resolved != s.cacheRoot {
-		return ErrVariantUnavailable
-	}
-	listed, err := os.Lstat(s.cacheRoot)
-	if err != nil || !listed.IsDir() || listed.Mode().Perm()&0o022 != 0 {
-		return ErrVariantUnavailable
-	}
-	root, err := os.OpenRoot(s.cacheRoot)
+	gate, err := s.lockArtifacts(ctx, false)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
+		return nil, err
 	}
-	defer root.Close()
-	opened, err := root.Stat(".")
-	if err != nil || !os.SameFile(listed, opened) {
-		return ErrVariantUnavailable
-	}
-	if err := writeStillArtifact(ctx, root, jobID, artifact, data); err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
+	keep := false
+	defer func() {
+		if !keep {
+			gate.Close()
 		}
-		return fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
+	}()
+	if err := writeStillArtifact(ctx, gate.root, jobID, artifact, data); err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
 	}
-	return ctx.Err()
+	if err := gate.check(ctx); err != nil {
+		return nil, err
+	}
+	keep = true
+	return &storedStillArtifact{artifact: artifact, jobID: jobID, gate: gate}, nil
 }
 
 func artifactPathsOverlap(a, b string) bool {
