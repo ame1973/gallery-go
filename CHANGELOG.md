@@ -22,6 +22,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Durable administrative album-tag batch acceptance and historical target pages.
+  Explicit bounded selections freeze album versions, source epochs and desired IDs;
+  canonical actor receipts and snapshot coalescing cannot expand existing targets.
+  New-job resource bindings, safe job events/outbox, audits and receipt are atomic.
+  Migration0017 retains opaque historical targets independently of live resources.
+  Source edits cancel bound jobs; queued cancellation never invents success. Real
+  SQLite migration/rollback, compiled TLS/CLI and typed browser checks accompany
+  the API. This is acceptance only: no `batch_tags` executor is registered and no
+  album tags are applied. Leased processing/results, cover/reprocess and UI remain.
+
 - Versioned album creator classification with explicit mapped/person/none modes,
   retained indexed provenance and same-source manual selection. Source scans preserve
   deliberate classification while frozen folder-rename plans use mapped identity,

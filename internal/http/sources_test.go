@@ -42,7 +42,7 @@ func sourceAPI(t *testing.T) sourceAPIFixture {
 		roots[name] = media.SourceRoot{Path: root, Marker: ".marker"}
 	}
 	roots["unmounted"] = media.SourceRoot{Path: filepath.Join(t.TempDir(), "missing"), Marker: ".marker"}
-	h := New(db, fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>GalleryGo</title>")}}, "source-api", a, testOrigin, media.New(db, a, "", roots), testJobAdmin(t, db, a), testSourceAdmin(t, db, a, roots), testScans(t, db, a), testReadiness(t, db, a, roots))
+	h := New(db, fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>GalleryGo</title>")}}, "source-api", a, testOrigin, media.New(db, a, "", roots), testJobAdmin(t, db, a), testSourceAdmin(t, db, a, roots), testScans(t, db, a), testReadiness(t, db, a, roots), testTagBatches(t, db, a))
 	admin.handler = h
 	first := decodeResponse[access.Library](t, admin.request("POST", "/api/v2/admin/libraries", map[string]any{"name": "First"}, "", store.NewID()), 201)
 	second := decodeResponse[access.Library](t, admin.request("POST", "/api/v2/admin/libraries", map[string]any{"name": "Second"}, "", store.NewID()), 201)

@@ -26,7 +26,7 @@ func TestRequiredWorkerReadinessFailsClosedAndMetadataOnlyIsExplicit(t *testing.
 	}
 	sources := library.NewSources(db, a, queue, nil)
 	build := func(probe *health.Service) func() *httptest.ResponseRecorder {
-		h := New(db, fstest.MapFS{"index.html": {Data: []byte("<title>health</title>")}}, "test", a, testOrigin, media.New(db, a, "", nil), jobs.NewAdmin(queue, a), sources, testScans(t, db, a), probe)
+		h := New(db, fstest.MapFS{"index.html": {Data: []byte("<title>health</title>")}}, "test", a, testOrigin, media.New(db, a, "", nil), jobs.NewAdmin(queue, a), sources, testScans(t, db, a), probe, testTagBatches(t, db, a))
 		return func() *httptest.ResponseRecorder {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, httptest.NewRequest("GET", "/api/v2/health/ready?worker=optional", nil))

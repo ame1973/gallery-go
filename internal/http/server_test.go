@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 
 	"gallerygo/contracts"
+	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
 	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
@@ -45,7 +46,7 @@ func newTestServer(t *testing.T) (*sql.DB, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service), testReadiness(t, db, service, nil))
+	return db, New(db, assets, "test-version", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service), testReadiness(t, db, service, nil), testTagBatches(t, db, service))
 }
 
 func testJobAdmin(t *testing.T, db *sql.DB, authentication *auth.Service) *jobs.Admin {
@@ -73,6 +74,15 @@ func testScans(t *testing.T, db *sql.DB, authentication *auth.Service) *scanner.
 		t.Fatal(err)
 	}
 	return scanner.NewScans(db, authentication, queue)
+}
+
+func testTagBatches(t *testing.T, db *sql.DB, authentication *auth.Service) *access.TagBatches {
+	t.Helper()
+	queue, err := jobs.New(db, jobs.DefaultPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return access.NewTagBatches(db, authentication, queue)
 }
 
 func testReadiness(t *testing.T, db *sql.DB, authentication *auth.Service, roots map[string]media.SourceRoot) *health.Service {
@@ -208,7 +218,7 @@ func TestAssetRootRejectsSymlinkEscape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service), testReadiness(t, db, service, nil)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
+	New(db, root.FS(), "test", service, "https://gallery.test", media.New(db, service, "", nil), testJobAdmin(t, db, service), testSourceAdmin(t, db, service, nil), testScans(t, db, service), testReadiness(t, db, service, nil), testTagBatches(t, db, service)).ServeHTTP(w, httptest.NewRequest("GET", "/assets/escape.js", nil))
 	if w.Code != 404 || strings.Contains(w.Body.String(), "PRIVATE") {
 		t.Fatalf("escape: %d %s", w.Code, w.Body.String())
 	}

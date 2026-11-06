@@ -217,6 +217,11 @@ Only implemented endpoints are advertised:
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
   probed by enqueue; a compatible embedded or standalone worker executes the job.
+- `POST /api/v2/admin/batches/tags` and `GET /admin/batches/{job_id}/targets`:
+  durable bounded album/tag intent with frozen versions/source epochs and historical
+  target keysets. Acceptance only: no `batch_tags` executor is registered yet and no
+  tags are applied. Existing job controls can cancel queued work; source edits cancel
+  bound jobs. See [docs/tag-batches.md](docs/tag-batches.md).
 - `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
   and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
 - `GET /api/v2/admin/duplicates/exact` and `/admin/duplicates/exact/{group_id}/media`:
@@ -314,7 +319,11 @@ association-version boundaries, historical receipts, explicit link-only clear an
 unchanged read-only source SHA/modes. Creator classification then adds one owned
 read-only PNG and runs 63-unit/21-file scans through mapped/person/none modes, two
 folder moves, current fallback restoration and historical receipts without confusing
-a selected creator with indexed rename provenance.
+a selected creator with indexed rename provenance. Tag-batch acceptance then freezes
+both native albums during a test-owned mount-marker outage, checks bounded target
+pages and active coalescing, verifies source-epoch cancellation and historical
+receipts, and confirms zero applied tag changes with all 21 media files unchanged.
+No batch consumer or per-target processing acceptance is implied.
 Video fixtures need no runtime encoder and do not establish
 complete decoding, player or container codec acceptance.
 A separate real SIGKILL regression interrupts native staging and partially published

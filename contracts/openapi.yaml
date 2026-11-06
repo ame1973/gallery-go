@@ -743,6 +743,53 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Job' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/batches/tags:
+    post:
+      operationId: enqueueTagBatch
+      summary: Accept an immutable album-tag batch intent
+      description: Administrator only. Freeze 1 to 100 unique visible album IDs, their current album versions, library/source IDs and source configuration epochs, plus an explicit set of at most 100 existing tag IDs. Empty tag_ids requests a future association clear, never catalog deletion. No filesystem I/O or album mutation occurs here. Identical active snapshots coalesce only for the same actor; changed selection, versions or epochs create distinct jobs. A 202 response is durable acceptance only. This release does not yet register a batch_tags consumer, so these jobs remain queued until explicitly cancelled or a compatible future consumer processes them. Historical actor/key/body retries return the original accepted job, not its current state. Use GET on Location to refresh.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagBatchRequest' }
+      responses:
+        '202':
+          description: Immutable intent accepted or identical active snapshot coalesced; no metadata changes or completed work are implied.
+          headers:
+            ETag: { $ref: '#/components/headers/ResourceETag' }
+            Location:
+              description: Session-protected current job metadata URL.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        default: { $ref: '#/components/responses/Problem' }
+  /admin/batches/{job_id}/targets:
+    parameters:
+      - { $ref: '#/components/parameters/JobID' }
+    get:
+      operationId: listTagBatchTargets
+      summary: Read the frozen targets of an accepted tag batch
+      description: Current administrator only. Stable album-ID keysets with default 30 and maximum 100 items; only limit and cursor are supported. Cursor binds account, scope and job collection. Historical IDs, versions, configuration epochs and desired tag IDs survive source/resource removal and are not proof of current visibility or applied metadata. No filesystem I/O, labels, paths, worker credentials or lease authority. Unknown jobs and jobs without tag-batch intent return 404.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: Bounded immutable target metadata, not per-target processing results.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagBatchTargetPage' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/jobs:
     get:
       operationId: listJobs
@@ -1861,6 +1908,51 @@ components:
           minLength: 1
           maxLength: 64
           description: Source-backed album ID defining a canonical target scope; never an arbitrary path. Omit/null for source/all-source selection.
+    TagBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [album_ids, tag_ids]
+      properties:
+        album_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Explicit visible album IDs, each at most 64 UTF-8 bytes. Canonical ID ordering does not change selection. Null, duplicates and all-library selectors are rejected.
+        tag_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Explicit existing tag IDs, each at most 64 UTF-8 bytes. This freezes replacement intent only. Empty array requests clearing associations; omitted or null is rejected.
+    TagBatchTarget:
+      type: object
+      additionalProperties: false
+      required: [album_id, album_version, library_id, source_id, source_config_version, tag_ids]
+      properties:
+        album_id: { type: string }
+        album_version: { type: integer, format: int64, minimum: 1 }
+        library_id: { type: string }
+        source_id: { type: [string, 'null'] }
+        source_config_version:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          description: Accepted source epoch, or null exactly when source_id is null. Never a worker or content capability.
+        tag_ids:
+          type: array
+          maxItems: 100
+          items: { type: string }
+          description: Frozen desired association IDs, not current/applied labels or links. Explicit clear remains an empty array.
+    TagBatchTargetPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/TagBatchTarget' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
     JobStatus:
       type: string
       enum: [queued, running, succeeded, failed, cancelled, dead]

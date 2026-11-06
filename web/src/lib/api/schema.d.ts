@@ -636,6 +636,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/batches/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an immutable album-tag batch intent
+         * @description Administrator only. Freeze 1 to 100 unique visible album IDs, their current album versions, library/source IDs and source configuration epochs, plus an explicit set of at most 100 existing tag IDs. Empty tag_ids requests a future association clear, never catalog deletion. No filesystem I/O or album mutation occurs here. Identical active snapshots coalesce only for the same actor; changed selection, versions or epochs create distinct jobs. A 202 response is durable acceptance only. This release does not yet register a batch_tags consumer, so these jobs remain queued until explicitly cancelled or a compatible future consumer processes them. Historical actor/key/body retries return the original accepted job, not its current state. Use GET on Location to refresh.
+         */
+        post: operations["enqueueTagBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/batches/{job_id}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the frozen targets of an accepted tag batch
+         * @description Current administrator only. Stable album-ID keysets with default 30 and maximum 100 items; only limit and cursor are supported. Cursor binds account, scope and job collection. Historical IDs, versions, configuration epochs and desired tag IDs survive source/resource removal and are not proof of current visibility or applied metadata. No filesystem I/O, labels, paths, worker credentials or lease authority. Unknown jobs and jobs without tag-batch intent return 404.
+         */
+        get: operations["listTagBatchTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/jobs": {
         parameters: {
             query?: never;
@@ -1274,6 +1316,31 @@ export interface components {
             source_id?: string | null;
             /** @description Source-backed album ID defining a canonical target scope; never an arbitrary path. Omit/null for source/all-source selection. */
             album_id?: string | null;
+        };
+        TagBatchRequest: {
+            /** @description Explicit visible album IDs, each at most 64 UTF-8 bytes. Canonical ID ordering does not change selection. Null, duplicates and all-library selectors are rejected. */
+            album_ids: string[];
+            /** @description Explicit existing tag IDs, each at most 64 UTF-8 bytes. This freezes replacement intent only. Empty array requests clearing associations; omitted or null is rejected. */
+            tag_ids: string[];
+        };
+        TagBatchTarget: {
+            album_id: string;
+            /** Format: int64 */
+            album_version: number;
+            library_id: string;
+            source_id: string | null;
+            /**
+             * Format: int64
+             * @description Accepted source epoch, or null exactly when source_id is null. Never a worker or content capability.
+             */
+            source_config_version: number | null;
+            /** @description Frozen desired association IDs, not current/applied labels or links. Explicit clear remains an empty array. */
+            tag_ids: string[];
+        };
+        TagBatchTargetPage: {
+            items: components["schemas"]["TagBatchTarget"][];
+            next_cursor: string | null;
+            has_more: boolean;
         };
         /** @enum {string} */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead";
@@ -3068,6 +3135,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    enqueueTagBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling administrator and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Immutable intent accepted or identical active snapshot coalesced; no metadata changes or completed work are implied. */
+            202: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    /** @description Session-protected current job metadata URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTagBatchTargets: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                job_id: components["parameters"]["JobID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded immutable target metadata, not per-target processing results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagBatchTargetPage"];
                 };
             };
             default: components["responses"]["Problem"];

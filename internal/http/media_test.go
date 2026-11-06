@@ -109,7 +109,7 @@ func protectedMedia(t *testing.T) protectedFixture {
 		t.Fatal(err)
 	}
 	service := media.New(db, a, cache, map[string]media.SourceRoot{"fixture": {Path: source, Marker: ".marker"}})
-	h := New(db, fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>GalleryGo</title>")}}, "media-test", a, testOrigin, service, testJobAdmin(t, db, a), testSourceAdmin(t, db, a, map[string]media.SourceRoot{"fixture": {Path: source, Marker: ".marker"}}), testScans(t, db, a), testReadiness(t, db, a, map[string]media.SourceRoot{"fixture": {Path: source, Marker: ".marker"}}))
+	h := New(db, fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>GalleryGo</title>")}}, "media-test", a, testOrigin, service, testJobAdmin(t, db, a), testSourceAdmin(t, db, a, map[string]media.SourceRoot{"fixture": {Path: source, Marker: ".marker"}}), testScans(t, db, a), testReadiness(t, db, a, map[string]media.SourceRoot{"fixture": {Path: source, Marker: ".marker"}}), testTagBatches(t, db, a))
 	admin.handler = h
 	reader := accountClient(t, h, user.Username, testPassword)
 	return protectedFixture{db, h, service, admin, reader, user, data, hash, source, original, cache, variant, "/api/v2/media/protected/variants/protected-variant/content", "/api/v2/media/protected/original"}
