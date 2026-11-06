@@ -22,6 +22,17 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Bounded private Linux immutable-artifact reconciliation for one explicitly owned
+  revision/finite-v1 static-preset cohort. Exact indexed pins, historical producer
+  media/source bindings, every DB reference and matching live work fence deletion
+  under exclusive cache exclusion. Entry/read-byte limits, full SHA/container/key
+  validation, private inode/ancestor checks and basename-only unlink/fsync retain
+  unknown/live/referenced/unsafe bytes and all shared directories. The two compiled
+  maintenance families reuse existing atomic queue progress/audit/outbox without a
+  new schema/ledger/consumer. Real owned SIGKILL/reopened recovery preserves cancelled
+  unconfirmed units and fresh retry budgets. No public cleanup, recursive discovery,
+  source writes, decoded-pixel/READY grant or renderer is enabled.
+
 - Bounded private Linux temporary-artifact reconciliation under exclusive cache
   exclusion, using the existing live queue/attempt budget and atomic progress/
   change/outbox/audit. Known terminal static jobs, exact media/source dependencies,

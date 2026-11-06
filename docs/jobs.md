@@ -172,22 +172,29 @@ under development; this API does not complete the operations UI.
   `PROCESSING_FAILED`, `JOB_TIMEOUT`, `LEASE_EXPIRED`, `WORKER_STOPPED`, and
   `INTERNAL_ERROR`. They are not authorization capabilities.
 
-## Private temporary-maintenance boundary
+## Private artifact-maintenance boundaries
 
-The internal `reconcile_temps` protocol is **not registered** as an application
-consumer and has no public enqueue API or CLI command. It reuses this queue rather
-than creating another scheduler, reservation ledger or progress model. See
-[private temporary-file reconciliation](media.md#bounded-private-temporary-file-reconciliation)
-for exact scope, retention, source-warning, lease and filesystem constraints.
+The internal `reconcile_temps` and `reconcile_artifact` protocols are **not
+registered** as application consumers and have no public enqueue API or CLI
+command. Exactly these two compiled families share DB-only queue/lease/budget/
+journal mechanics, not a second scheduler, reservation ledger or dynamic behavior
+selector. See [temporary-file reconciliation](media.md#bounded-private-temporary-file-reconciliation)
+and [known immutable cohorts](media.md#bounded-private-immutable-cohort-reconciliation)
+for their distinct ownership, retention, source-warning and filesystem constraints.
 
-Its units are bounded known job scopes, not deleted-file counts or a full cache
-sweep. Enumeration limits fail the affected scope instead of claiming all bytes
-were inspected. Per-attempt `total_known` reserves the budget once. Confirmed
-scope progress/event/outbox/audit commits atomically; physical unlinks cannot be
-rolled back if a later journal/cancellation/lease check fails. Unconfirmed work is
-cancelled on interruption and an absent file is not recounted as a successful
-removal on retry. No source/index purge, READY generation, full orphan collector
-or additional media/download authorization is implied.
+Temporary units are bounded known DB job scopes; an immutable unit is one explicit
+owned revision/finite-preset cohort, not a deleted-file count or a full cache sweep.
+Immutable identity additionally binds indexed source/revision pins, entry/read-byte
+limits and original media/revision dependencies. Every live-transaction fence
+retains those dependencies; a temporary job cannot authorize final-file deletion.
+
+Enumeration/read limits fail the affected scope instead of claiming all bytes were
+inspected. Per-attempt `total_known` reserves the budget once. Confirmed scope
+progress/event/outbox/audit commits atomically; physical unlinks cannot be rolled
+back if a later journal/cancellation/lease check fails. Unconfirmed work is cancelled
+on interruption and an absent file is not recounted as a successful removal on
+retry. No source/index purge, READY generation, full orphan collector, download-pin
+implementation or additional media/download authorization is implied.
 
 ## Cancel or retry
 

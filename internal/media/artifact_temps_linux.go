@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"math"
 	"os"
 	"path"
 	"strings"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"gallerygo/internal/jobs"
-	"gallerygo/internal/store"
 
 	"golang.org/x/sys/unix"
 )
@@ -49,28 +47,7 @@ func (s *Service) requireArtifactTempsTx(ctx context.Context, tx *sql.Tx, q *job
 	if err != nil {
 		return jobs.Job{}, err
 	}
-	job, err := q.RequireLeaseTx(ctx, tx, lease)
-	if err != nil {
-		return jobs.Job{}, err
-	}
-	if job.Kind != input.Kind || job.ResourceKey != input.ResourceKey || job.Dedupe != input.Dedupe || string(job.Payload) != string(input.Payload) {
-		return jobs.Job{}, errArtifactTemps
-	}
-	var bound bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM job_resources WHERE job_id=? AND resource_key=?)`, job.ID, input.ResourceKey).Scan(&bound); err != nil {
-		return jobs.Job{}, err
-	}
-	if !bound {
-		return jobs.Job{}, errArtifactTemps
-	}
-	var sourceWarning bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sources WHERE is_active=1 AND state!='healthy')`).Scan(&sourceWarning); err != nil {
-		return jobs.Job{}, err
-	}
-	if sourceWarning {
-		return jobs.Job{}, ErrSourceUnavailable
-	}
-	return job, nil
+	return s.requireArtifactMaintenanceTx(ctx, tx, q, lease, input)
 }
 
 // reconcileArtifactTemps is an unregistered private bounded batch. One selected DB
@@ -78,7 +55,8 @@ func (s *Service) requireArtifactTempsTx(ctx context.Context, tx *sql.Tx, q *job
 // exclusive gate spans decisions and IO; no SQLite writer spans filesystem work.
 func (s *Service) reconcileArtifactTemps(ctx context.Context, q *jobs.Queue, lease jobs.Lease, request artifactTempRequest) (artifactTempReport, error) {
 	report := artifactTempReport{nextJobID: request.AfterJobID}
-	if _, err := s.artifactTempInput(request); err != nil {
+	input, err := s.artifactTempInput(request)
+	if err != nil {
 		return report, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
@@ -128,36 +106,12 @@ func (s *Service) reconcileArtifactTemps(ctx context.Context, q *jobs.Queue, lea
 		return report, err
 	}
 	defer gate.Close()
-	tx, err = s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return report, err
-	}
-	job, err = s.requireArtifactTempsTx(ctx, tx, q, lease, request)
-	if err == nil && (job.TotalKnown || job.Done != job.Total || int64(len(owners)) > math.MaxInt64-job.Total) {
-		err = jobs.ErrState
-	}
-	if err == nil {
-		counts := job.Counts
-		counts.Total += int64(len(owners))
-		_, err = q.ProgressTx(ctx, tx, lease, counts, true)
-	}
-	if err == nil {
-		err = q.HeartbeatTx(ctx, tx, lease)
-	}
-	if err == nil {
-		_, err = s.requireArtifactTempsTx(ctx, tx, q, lease, request)
-	}
-	if err == nil {
-		err = tx.Commit()
-	} else {
-		tx.Rollback()
-	}
-	if err != nil {
+	if _, err := s.reserveArtifactMaintenance(ctx, q, lease, input, int64(len(owners))); err != nil {
 		return report, err
 	}
 	now := time.Now().UTC()
 	for _, owner := range owners {
-		var scope artifactTempScope
+		var scope artifactScopeResult
 		if report.limited {
 			scope.failed, scope.limited = true, true
 		} else if owner.eligible() {
@@ -175,7 +129,7 @@ func (s *Service) reconcileArtifactTemps(ctx context.Context, q *jobs.Queue, lea
 		if err := gate.check(ctx); err != nil {
 			return report, err
 		}
-		if err := s.recordArtifactTempScope(ctx, q, lease, request, scope); err != nil {
+		if err := s.recordArtifactMaintenanceScope(ctx, q, lease, input, scope); err != nil {
 			return report, err
 		}
 		report.scopes++
@@ -186,75 +140,11 @@ func (s *Service) reconcileArtifactTemps(ctx context.Context, q *jobs.Queue, lea
 	if err := gate.check(ctx); err != nil {
 		return report, err
 	}
-	tx, err = s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return report, err
-	}
-	defer tx.Rollback()
-	if _, err := s.requireArtifactTempsTx(ctx, tx, q, lease, request); err != nil {
-		return report, err
-	}
-	if err := store.Audit(ctx, tx, "", "artifact_temps_reconciled", "job", job.ID, map[string]any{
+	err = s.finishArtifactMaintenance(ctx, q, lease, input, map[string]any{
 		"job_scopes": report.scopes, "examined_entries": report.entries, "unlinked_files": report.unlinked,
 		"retained_entries": report.retained, "limited": report.limited, "has_more": report.hasMore, "next_job_id": report.nextJobID,
-	}, time.Now().UTC()); err != nil {
-		return report, err
-	}
-	if _, err := s.requireArtifactTempsTx(ctx, tx, q, lease, request); err != nil {
-		return report, err
-	}
-	if _, err := q.CompleteTx(ctx, tx, lease); err != nil {
-		return report, err
-	}
-	return report, tx.Commit()
-}
-
-type artifactTempScope struct {
-	entries, unlinked, retained int64
-	failed, limited             bool
-}
-
-func (s *Service) recordArtifactTempScope(ctx context.Context, q *jobs.Queue, lease jobs.Lease, request artifactTempRequest, scope artifactTempScope) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	job, err := s.requireArtifactTempsTx(ctx, tx, q, lease, request)
-	if err != nil {
-		return err
-	}
-	if !job.TotalKnown || job.Done >= job.Total {
-		return jobs.ErrProgress
-	}
-	counts := job.Counts
-	counts.Done++
-	outcome := "skipped"
-	switch {
-	case scope.failed:
-		counts.Failed++
-		outcome = "failed"
-	case scope.unlinked > 0:
-		counts.Succeeded++
-		outcome = "succeeded"
-	default:
-		counts.Skipped++
-	}
-	if _, err := q.ProgressTx(ctx, tx, lease, counts, true); err != nil {
-		return err
-	}
-	if err := q.HeartbeatTx(ctx, tx, lease); err != nil {
-		return err
-	}
-	if err := store.Audit(ctx, tx, "", "artifact_temp_scope_checked", "job", job.ID, map[string]any{
-		"outcome": outcome, "unlinked_files": scope.unlinked, "retained_entries": scope.retained, "limited": scope.limited,
-	}, time.Now().UTC()); err != nil {
-		return err
-	}
-	if _, err := s.requireArtifactTempsTx(ctx, tx, q, lease, request); err != nil {
-		return err
-	}
-	return tx.Commit()
+	})
+	return report, err
 }
 
 // A job retry may queue while the gate is held, but cannot reopen a temp inode:
@@ -325,8 +215,8 @@ func openArtifactTempDirectory(parent *os.Root, name string, cache fs.FileInfo) 
 	return opened, info, nil
 }
 
-func (s *Service) reconcileArtifactTempScope(ctx context.Context, q *jobs.Queue, lease jobs.Lease, request artifactTempRequest, gate *artifactGate, owner artifactTempOwner, remaining int, now time.Time) (artifactTempScope, error) {
-	var result artifactTempScope
+func (s *Service) reconcileArtifactTempScope(ctx context.Context, q *jobs.Queue, lease jobs.Lease, request artifactTempRequest, gate *artifactGate, owner artifactTempOwner, remaining int, now time.Time) (artifactScopeResult, error) {
+	var result artifactScopeResult
 	if gate == nil || !gate.exclusive {
 		return result, errArtifactTemps
 	}

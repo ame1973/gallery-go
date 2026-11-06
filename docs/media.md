@@ -85,7 +85,7 @@ Private staging also acquires a shared Linux `flock` on the persistent zero-byte
 `cache_root/.gallerygo-artifacts.lock` before writing. The returned private
 stored-artifact capsule retains that lock until it is closed; a future publisher
 must keep it through its final source/revision/live-lease-fenced DB transaction.
-Concurrent shared writers may coexist. A future reconciler must obtain an
+Concurrent shared writers may coexist. Reconciliation must obtain an
 exclusive gate **before** checking references/job liveness and retain it through
 filesystem actions, rather than deleting from a stale DB absence observation.
 Lock opening/waiting and filesystem checks never belong inside a SQLite writer.
@@ -103,12 +103,13 @@ not an unrelated same-UID program that ignores the protocol.
 This filesystem boundary is not yet connected to a production renderer or DB
 publisher. Unreferenced bytes are not listed or downloadable, even when a complete
 file exists at an immutable key. Failure after a rename can leave a private orphan;
-job directories remain for later lease-aware reconciliation, never recursive or
-source cleanup. No full orphan collector or background cleanup consumer is enabled;
-final immutable-orphan reconciliation remains required, separate from the bounded
-private temporary-file batch below. Unsupported platforms fail before writing
-instead of substituting an overwriting rename. Contexts stop work between I/O
-operations, but cannot promise to interrupt a kernel-stalled filesystem flush or rename.
+job directories remain for lease-aware reconciliation, never recursive or source
+cleanup. No full orphan collector or background cleanup consumer is enabled. The
+private temporary-file and known immutable-cohort protocols below have deliberately
+different ownership scopes; neither discovers unknown or deleted-revision trees.
+Unsupported platforms fail before writing instead of substituting an overwriting
+rename. Contexts stop work between I/O operations, but cannot promise to interrupt
+a kernel-stalled filesystem flush or rename.
 
 ### Bounded private temporary-file reconciliation
 
@@ -153,6 +154,50 @@ transaction. Interrupted unfinished units become cancelled; a retry receives a
 fresh budget and skips absent files rather than inventing successful removals.
 This is not an atomic filesystem/DB transaction or a promise to cancel an in-flight
 kernel call at the exact expiry instant.
+
+### Bounded private immutable-cohort reconciliation
+
+The separate internal Linux-only `reconcile_artifact` protocol examines **one known
+media-owned revision and finite static preset version 1**. It has no public enqueue,
+CLI, application consumer or schedule. It is not recursive cache discovery,
+deleted-revision garbage collection, source/index purge, rendering or publication.
+The temporary-file operation cannot select this family or expand into final files.
+
+Its canonical private identity binds the cache, media/source/revision IDs, immutable
+revision version/source SHA/size/mtime, preset and explicit entry/read-byte limits.
+The exact live job must retain its original cache, media and revision dependencies,
+including after heartbeat, progress and audit writes. Missing indexed ownership,
+changed pins or missing canonical terminal static-job evidence retain the whole
+cohort without traversing it. Historical producer evidence must bind that exact
+media and indexed source. Queued/running matching work, including expired or
+cancel-requested work and unknown kinds bound to the same key, prevents removal.
+Active source warnings also stop maintenance; no source filesystem is probed.
+
+Exclusive cache exclusion spans those fresh decisions and all filesystem actions.
+Only the explicit private same-device `variants/{revision}/{preset}/1` directory
+chain is opened. A candidate must be an old (at least 24 hours), regular mode-0600,
+single-link same-UID/device WebP with the canonical lowercase SHA basename, full
+matching content SHA and finite static-preset container/geometry/size constraints.
+These checks **do not decode pixels or prove source-output rendering provenance**
+and never grant READY. Unknown/malformed/metadata-bearing output, other cohorts,
+changed names/inodes, links, unsafe directories, newer/future/oversized entries and
+**every DB variant reference**, regardless of status/current revision, are retained.
+
+The request bounds enumeration to 1..1000 entries plus one lookahead and total file
+reads to 1 byte..64 MiB, still subject to each preset's smaller file cap. A limit
+fails the cohort scope rather than claiming a complete sweep. Basename-only
+`unlinkat` refuses directory removal; each unlink is followed by directory fsync.
+Shared directories and the permanent gate remain. No filesystem operation or lock
+wait occurs inside a SQLite writer; unsupported hosts have no fallback.
+
+One explicit cohort is one cumulative work unit, including a skipped empty or
+unproven cohort. Exactly the two compiled maintenance families share the existing
+queue/lease/budget/journal mechanics, without another queue, ledger or schema.
+Physical removals cannot roll back after a later SQL/cancel/lease failure. Only
+confirmed scope progress is counted; interruption cancels unfinished units, retries
+reserve a new budget and absent bytes never become invented successful removals.
+Full discovery, future download-pin integration and enabled administrative cleanup
+remain separate requirements; this private protocol does not finish those features.
 
 ### Private revision-bound source preparation
 

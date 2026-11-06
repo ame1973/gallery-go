@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -33,9 +34,13 @@ func TestArtifactTempsCrashProcessHelper(t *testing.T) {
 	if database == "" || cache == "" || nonce == "" {
 		t.Skip("requires parent-owned isolated crash-test storage")
 	}
+	kind := os.Getenv("GALLERYGO_ARTIFACT_TEST_KIND")
+	if kind != "reconcile_temps" && kind != "reconcile_artifact" {
+		t.Fatal("unknown private maintenance test family")
+	}
 	marker, err := os.ReadFile(filepath.Join(filepath.Dir(database), ".artifact-temps-test"))
-	if err != nil || string(marker) != nonce+"\n"+cache {
-		t.Fatal("missing parent-owned temporary-artifact test marker")
+	if err != nil || string(marker) != nonce+"\n"+cache+"\n"+kind {
+		t.Fatal("missing parent-owned artifact maintenance test marker")
 	}
 	db, err := store.Open(t.Context(), database)
 	if err != nil {
@@ -49,20 +54,31 @@ func TestArtifactTempsCrashProcessHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease, err := queue.Claim(t.Context(), "owned-artifact-temp-child", []string{"reconcile_temps"})
+	lease, err := queue.Claim(t.Context(), "owned-artifact-maintenance-child", []string{kind})
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Fprintln(os.Stdout, "ARTIFACT_TEMPS_CLAIMED:"+nonce)
+	fmt.Fprintln(os.Stdout, "ARTIFACT_MAINTENANCE_CLAIMED:"+nonce)
 	svc := New(db, nil, cache, nil)
-	if _, err := svc.reconcileArtifactTemps(t.Context(), queue, lease, artifactTempRequest{JobLimit: 100, EntryLimit: 1000}); err != nil {
+	if kind == "reconcile_artifact" {
+		var payload struct {
+			Request artifactOrphanRequest `json:"request"`
+		}
+		if err := json.Unmarshal(lease.Job.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		_, err = svc.reconcileArtifactOrphans(t.Context(), queue, lease, payload.Request)
+	} else {
+		_, err = svc.reconcileArtifactTemps(t.Context(), queue, lease, artifactTempRequest{JobLimit: 100, EntryLimit: 1000})
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func freezeArtifactTempsCheckpoint(t *testing.T, db *sql.DB, id, directory string) (func(), string, int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Second)
 	defer cancel()
 	connection, err := db.Conn(ctx)
 	if err != nil {
@@ -122,17 +138,44 @@ func freezeArtifactTempsCheckpoint(t *testing.T, db *sql.DB, id, directory strin
 }
 
 func TestArtifactTempsSIGKILLReopensWithCancelledUnconfirmedScopeAndFreshBudget(t *testing.T) {
+	testArtifactMaintenanceSIGKILL(t, false)
+}
+
+func TestArtifactOrphansSIGKILLReopensWithCancelledUnconfirmedScopeAndFreshBudget(t *testing.T) {
+	testArtifactMaintenanceSIGKILL(t, true)
+}
+
+func testArtifactMaintenanceSIGKILL(t *testing.T, immutable bool) {
+	t.Helper()
 	f := artifactTempsFixture(t, true)
-	for range 100 {
-		writeArtifactTemp(t, f, f.lease.Job.ID, "", 25*time.Hour)
-	}
 	queue, err := jobs.New(f.db, artifactTempsCrashPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.queue = queue
 	request := artifactTempRequest{JobLimit: 100, EntryLimit: 1000}
-	job := enqueueArtifactTemps(t, f, request)
+	orphanRequest := artifactOrphanRequestForTest(t, f)
+	kind := "reconcile_temps"
+	directory := filepath.Join(f.svc.cacheRoot, "tmp", f.lease.Job.ID)
+	var job jobs.Job
+	if immutable {
+		kind = "reconcile_artifact"
+		for i := range 100 {
+			// Distinct container-only entropy variations are owned cleanup fixtures,
+			// not assertions of successful pixel decoding or source rendering.
+			chunks := webpChunks(webpFixture(t, "lossless"))
+			last := len(chunks) - 1
+			chunks[last].data = append(chunks[last].data, byte(i), byte(i^0xa5))
+			_, file := writeArtifactOrphan(t, f, orphanRequest, encodeWebP(chunks))
+			directory = filepath.Dir(file)
+		}
+		job = enqueueArtifactOrphans(t, f, orphanRequest)
+	} else {
+		for range 100 {
+			writeArtifactTemp(t, f, f.lease.Job.ID, "", 25*time.Hour)
+		}
+		job = enqueueArtifactTemps(t, f, request)
+	}
 	// Bounded fixture-only SQL stretches real per-file decision transactions so
 	// the parent can observe a mid-scope checkpoint without production hooks.
 	if _, err := f.db.Exec(fmt.Sprintf(`CREATE TRIGGER temp_test_decision_work AFTER UPDATE OF heartbeat_at ON jobs WHEN NEW.id='%s' BEGIN SELECT (WITH RECURSIVE work(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM work WHERE n<5000) SELECT sum(n) FROM work); END`, job.ID)); err != nil {
@@ -143,13 +186,13 @@ func TestArtifactTempsSIGKILLReopensWithCancelledUnconfirmedScopeAndFreshBudget(
 		t.Fatal(err)
 	}
 	nonce := store.NewID()
-	if err := os.WriteFile(filepath.Join(filepath.Dir(database), ".artifact-temps-test"), []byte(nonce+"\n"+f.svc.cacheRoot), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(database), ".artifact-temps-test"), []byte(nonce+"\n"+f.svc.cacheRoot+"\n"+kind), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestArtifactTempsCrashProcessHelper$", "-test.timeout=18s")
-	command.Env = append(os.Environ(), "GALLERYGO_TEMP_TEST_DB="+database, "GALLERYGO_TEMP_TEST_CACHE="+f.svc.cacheRoot, "GALLERYGO_TEMP_TEST_NONCE="+nonce)
+	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestArtifactTempsCrashProcessHelper$", "-test.timeout=28s")
+	command.Env = append(os.Environ(), "GALLERYGO_TEMP_TEST_DB="+database, "GALLERYGO_TEMP_TEST_CACHE="+f.svc.cacheRoot, "GALLERYGO_TEMP_TEST_NONCE="+nonce, "GALLERYGO_ARTIFACT_TEST_KIND="+kind)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -170,13 +213,12 @@ func TestArtifactTempsSIGKILLReopensWithCancelledUnconfirmedScopeAndFreshBudget(
 		}
 	}()
 	line, err := bufio.NewReader(stdout).ReadString('\n')
-	if err != nil || line != "ARTIFACT_TEMPS_CLAIMED:"+nonce+"\n" {
+	if err != nil || line != "ARTIFACT_MAINTENANCE_CLAIMED:"+nonce+"\n" {
 		command.Process.Kill()
 		command.Wait()
 		waited = true
 		t.Fatal("owned cleanup child did not claim its private job", line, err, stderr.String())
 	}
-	directory := filepath.Join(f.svc.cacheRoot, "tmp", f.lease.Job.ID)
 	release, killedOwner, remaining := freezeArtifactTempsCheckpoint(t, f.db, job.ID, directory)
 	defer release()
 	if err := command.Process.Kill(); err != nil {
@@ -215,7 +257,7 @@ func TestArtifactTempsSIGKILLReopensWithCancelledUnconfirmedScopeAndFreshBudget(
 	defer tick.Stop()
 	var successor jobs.Lease
 	for {
-		successor, err = restarted.Claim(t.Context(), "private-temp-successor", []string{"reconcile_temps"})
+		successor, err = restarted.Claim(t.Context(), "private-maintenance-successor", []string{kind})
 		if err == nil {
 			break
 		}
@@ -233,12 +275,23 @@ func TestArtifactTempsSIGKILLReopensWithCancelledUnconfirmedScopeAndFreshBudget(
 	}
 	old := jobs.Lease{Job: jobs.Job{ID: job.ID, Attempts: 1}, Owner: killedOwner}
 	svc := New(reopened, nil, f.svc.cacheRoot, f.svc.sources)
-	if _, err := svc.reconcileArtifactTemps(t.Context(), restarted, old, request); !errors.Is(err, jobs.ErrLeaseLost) {
+	reconcile := func(lease jobs.Lease) (int64, error) {
+		if immutable {
+			report, err := svc.reconcileArtifactOrphans(t.Context(), restarted, lease, orphanRequest)
+			return report.unlinked, err
+		}
+		report, err := svc.reconcileArtifactTemps(t.Context(), restarted, lease, request)
+		if err == nil && report.scopes != 1 {
+			t.Fatal("successor expanded its frozen job scope", report)
+		}
+		return report.unlinked, err
+	}
+	if _, err := reconcile(old); !errors.Is(err, jobs.ErrLeaseLost) {
 		t.Fatal("killed owner could resume destructive work", err)
 	}
-	report, err := svc.reconcileArtifactTemps(t.Context(), restarted, successor, request)
-	if err != nil || report.unlinked < 1 || report.unlinked > 75 || report.scopes != 1 {
-		t.Fatal("successor did not reconcile the remaining private files", report, err)
+	unlinked, err := reconcile(successor)
+	if err != nil || unlinked < 1 || unlinked > 75 {
+		t.Fatal("successor did not reconcile the remaining private files", unlinked, err)
 	}
 	final, err := restarted.Get(t.Context(), job.ID)
 	if err != nil || final.Status != "succeeded" || final.Total != 2 || final.Done != 2 || final.Succeeded != 1 || final.Cancelled != 1 || final.Failed != 0 {
