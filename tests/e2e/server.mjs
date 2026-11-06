@@ -17,6 +17,7 @@ const password = process.env.GALLERYGO_TEST_PASSWORD;
 const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
   [
     'media',
+    'media-selection',
     'outage',
     'duplicates',
     'people',
@@ -255,6 +256,30 @@ try {
             "INSERT INTO media_variants(id,revision_id,preset_key,preset_version,storage_path,mime,size_bytes,sha256,width,height,status,created_at) VALUES(?,?,'fixture_png',1,?,'image/png',?,?,1,1,'ready',?)",
           )
           .run(variantID, revisionID, storage, stat.size, hash, Date.now());
+      }
+    }
+    if (prefix.startsWith('media-selection-')) {
+      // Indexed selection setup only: processing rows have no source-entry,
+      // revision, codec or READY bytes. This does not claim video/EXIF ingestion.
+      const captured = Date.parse('2026-11-06T01:02:03.123Z');
+      for (const [suffix, kind, offset] of [
+        ['a', 'image', 0],
+        ['b', 'video', 0],
+        ['c', 'image', 1],
+      ]) {
+        fixtureDB
+          .prepare(
+            'INSERT INTO media(id,album_id,kind,file_name,capture_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-${suffix}`,
+            album,
+            kind,
+            kind === 'video' ? 'Processing.mp4' : 'Processing.png',
+            captured + offset,
+            Date.now(),
+            Date.now(),
+          );
       }
     }
   }

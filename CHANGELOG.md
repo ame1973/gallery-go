@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Indexed album-media kind/capture selection and ID/capture ordering in both
+  directions, with explicit missing-time/tie rules, inclusive/exclusive proven-time
+  bounds and bounded account/scope/album/filter-bound keysets. SQL predicates use
+  fresh shared authorization before pagination; unknown/ambiguous queries fail
+  rather than silently becoming unfiltered lists. Migration0020 adds only ordered
+  indexes and preserves historical metadata; generated typed parameters and real
+  SQLite/HTTPS regression cases cover the contract. No source I/O, complete search,
+  offline snapshot, renderer/READY or download grant is implied.
+
 - Bounded private Linux immutable-artifact reconciliation for one explicitly owned
   revision/finite-v1 static-preset cohort. Exact indexed pins, historical producer
   media/source bindings, every DB reference and matching live work fence deletion

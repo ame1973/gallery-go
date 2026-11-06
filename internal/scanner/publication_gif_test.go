@@ -39,7 +39,7 @@ func TestPublicationPreservesGIFTimingAndClearsItOnFormatRewrite(t *testing.T) {
 	if err != nil || bytes.Contains(data, []byte(f.rootPath)) || !bytes.Contains(data, []byte(`"animated":true`)) || !bytes.Contains(data, []byte(`"loop_count":3`)) {
 		t.Fatal("unsafe or incorrect animation DTO", string(data), err)
 	}
-	items, err := service.AlbumMedia(t.Context(), f.owner, value.AlbumID, "", 30)
+	items, err := service.AlbumMedia(t.Context(), f.owner, value.AlbumID, media.AlbumMediaFilter{}, media.AlbumMediaPosition{}, 30)
 	if err != nil || len(items) != 1 || items[0].FrameCount == nil || *items[0].FrameCount != 2 || items[0].DurationMS == nil || *items[0].DurationMS != 300 {
 		t.Fatal("detail/list animation evidence diverged", items, err)
 	}

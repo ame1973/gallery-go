@@ -147,7 +147,7 @@ func runCompiledAlbumBatchCrash(t *testing.T, covers bool) {
 	proxy := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(upstream))
 	defer proxy.Close()
 	client := proxy.Client()
-	client.Timeout = 5 * time.Second
+	client.Timeout = scanHTTPSRequestTimeout
 	client.Jar, err = cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

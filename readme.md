@@ -23,8 +23,9 @@ HEIF/HEIC primary still/grid metadata and controlled classic TIFF first-page
 dimensions/EXIF. TIFF document pages do not fabricate image
 animation. GPS/raw tags
 are not exposed and unknown timing stays null. See
-[media metadata](docs/media.md). Management/browsing
-screens, complete media processing, playback, and
+[media metadata](docs/media.md). Album-media pages support SQL-indexed kind/capture
+selection and ID/capture keysets; see [selection rules](docs/media.md#album-media-selection).
+Management/browsing screens, complete media processing, playback, and
 offline downloads are still being built. Do not expose this build
 to the Internet or connect sensitive media yet.
 

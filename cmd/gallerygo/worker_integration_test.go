@@ -72,6 +72,39 @@ func startCLIProcess(t *testing.T, binary, config, command string) func() {
 	return stop
 }
 
+// Let the server's unchanged 10s metadata deadline report first, with bounded TLS
+// overhead. Health probes keep their independent 1s budgets; no retry hides errors.
+const scanHTTPSRequestTimeout = 12 * time.Second
+
+func TestScanHTTPSClientBudgetCoversMetadataDeadline(t *testing.T) {
+	if scanHTTPSRequestTimeout <= 10*time.Second || scanHTTPSRequestTimeout > 15*time.Second {
+		t.Fatal("fixture timeout must be bounded and let the server metadata deadline report first")
+	}
+	// A six-second response is within the unchanged ten-second metadata contract.
+	// This is a transport-budget unit, not mock ingestion or an API speed claim.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		timer := time.NewTimer(6 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-timer.C:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = scanHTTPSRequestTimeout
+	response, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal("fixture client cancelled a response within the metadata contract", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatal("unexpected transport-budget response", response.StatusCode)
+	}
+}
+
 type scanHTTPSClient struct {
 	t            *testing.T
 	client       *http.Client
@@ -356,7 +389,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			proxy := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(upstream))
 			defer proxy.Close()
 			client := proxy.Client()
-			client.Timeout = 5 * time.Second
+			client.Timeout = scanHTTPSRequestTimeout
 			client.Jar, err = cookiejar.New(nil)
 			if err != nil {
 				t.Fatal(err)
@@ -573,6 +606,7 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 					t.Fatal("unknown PNG metadata was invented", item)
 				}
 			}
+			assertCompiledMediaSelection(t, api, albums.Items[0].ID, medias.Items)
 			id, exifID, animationID, apngID, webpID := ids["photo.png"], ids["capture.jpg"], ids["animation.gif"], ids["animation.png"], ids["animation.webp"]
 			if id == "" || exifID == "" || animationID == "" || apngID == "" || webpID == "" {
 				t.Fatal("source basenames were not preserved", medias)

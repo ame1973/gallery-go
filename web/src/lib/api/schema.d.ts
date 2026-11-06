@@ -1152,8 +1152,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List authorized media in an album
-         * @description An unauthorized or missing album returns 404 even when it contains no media. Processing media may have a null current revision. No source path or GPS metadata is returned.
+         * List authorized media with indexed kind, capture and order selection
+         * @description An unauthorized or missing album returns 404 even when no media matches. Filters run in SQL before default 30/max 100 keyset pagination, using the same fresh session and shared visibility as content reads. ID order is the default; capture order freezes the last public UTC-millisecond/missing key plus media ID, with both tie-break components reversed together. Unknown capture comes first ascending and last descending; it never falls back to mtime or host timezone. Capture bounds are inclusive/exclusive explicit RFC3339 instants of exact millisecond precision, years 0001..9999 after UTC conversion; unknown offset -00:00 is rejected. Only the documented parameters are accepted, with one nonempty value each. Cursors bind literal filter/sort values after URL/key-order canonicalization; changing even an equivalent timestamp spelling requires a new first page. Live changes can move records between pages; this is not an immutable inventory or offline snapshot. Processing media may have a null current revision. No source path, GPS, decoded-pixel proof, READY or offline/download grant is returned.
          */
         get: operations["listAlbumMedia"];
         put?: never;
@@ -4146,6 +4146,14 @@ export interface operations {
                 limit?: components["parameters"]["Limit"];
                 /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
                 cursor?: components["parameters"]["Cursor"];
+                /** @description Indexed media kind, not a MIME, animation or decoder-capability claim. */
+                kind?: "image" | "video";
+                /** @description Inclusive proven capture instant; missing capture values do not match a date range. */
+                captured_from?: string;
+                /** @description Exclusive proven capture instant, strictly later than captured_from when both are present. */
+                captured_before?: string;
+                /** @description Stable ID tie-breaks in the same direction as the primary key. Unknown capture is first ascending and last descending. */
+                sort?: "id_asc" | "id_desc" | "captured_asc" | "captured_desc";
             };
             header?: never;
             path: {
@@ -4155,7 +4163,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Stable ID keyset page filtered by the same media predicate as content reads. */
+            /** @description Bounded SQL-authorized indexed media page, not a source availability or offline snapshot guarantee. */
             200: {
                 headers: {
                     [name: string]: unknown;

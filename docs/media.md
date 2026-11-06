@@ -24,8 +24,9 @@ The server rechecks these conditions before GET, HEAD, Range, or a conditional 3
 
 ## Metadata and variants
 
-- `GET /albums/{album_id}/media` lists visible media in stable ID order. An empty
-  authorized album returns an empty page; an unauthorized album returns 404.
+- `GET /albums/{album_id}/media` lists visible media with indexed kind/capture
+  filters and ID/capture sorting. An empty authorized selection returns an empty
+  page; an unauthorized or missing album returns 404, even when no filter matches.
 - `GET /media/{media_id}` returns ID, album ID, kind, display basename, nullable
   codec/dimensions/duration/animation/orientation/capture time/current revision, and offline
   capability. No absolute path, cache storage key, EXIF GPS field, password, or
@@ -43,6 +44,48 @@ Treat IDs, revisions, and account scopes as opaque.
 
 `offline_capable` remains false until explicit scoped offline manifests are
 implemented. A stable URL or a browser HTTP cache is not an offline grant.
+
+### Album-media selection
+
+`GET /albums/{album_id}/media` accepts only these optional parameters, each at most
+once and nonempty when supplied:
+
+| Parameter         | Meaning                                                                    |
+| ----------------- | -------------------------------------------------------------------------- |
+| `kind`            | `image` or `video`; image includes indexed animations                      |
+| `captured_from`   | Inclusive proven capture instant                                           |
+| `captured_before` | Exclusive proven capture instant, later than `captured_from` if both exist |
+| `sort`            | `id_asc` (default), `id_desc`, `captured_asc` or `captured_desc`           |
+| `limit`           | Default 30, maximum 100                                                    |
+| `cursor`          | Opaque continuation from the same selection/account/scope/album            |
+
+Capture bounds require RFC3339 with an explicit known UTC offset (`Z` is preferred),
+exact millisecond precision, and years 0001..9999 after UTC conversion. Unknown
+`-00:00`, timezone-free dates, sub-millisecond values and reversed/empty intervals
+are rejected. Unknown capture values never match a date interval; source mtime,
+index creation time and host timezone are not substitutes.
+
+Capture order compares the indexed capture instant and then media ID, both in the
+requested direction. Missing capture sorts first ascending and last descending;
+no epoch date is returned for it. Equal timestamps retain deterministic ID ties.
+Rows with a null current revision can still be listed as processing metadata;
+selection does not grant READY, codec support, offline access or original download.
+
+Filters and keysets run in SQL before the bounded `limit+1` page, under a fresh
+session and the shared album/media visibility predicates. Migration0020 adds the
+ordered kind/capture indexes without rewriting old metadata. There is no full-result
+Go sort/load or offset pagination, and metadata selection does not open source files.
+
+Continue with the same literal filter/sort values. Query-key order and URL encoding
+are canonicalized; changing even an equivalent timestamp spelling invalidates the
+cursor. Changing only page size is allowed. Capture cursors freeze the last public
+millisecond/missing key rather than resolving a mutable anchor row on the next
+request. These are **live keyset pages**, not an inventory/offline snapshot: concurrent
+changes can move records across a boundary. Unknown or repeated parameters fail
+with `400 INVALID_FILTER` (pagination syntax uses `INVALID_PAGINATION`); malformed,
+foreign-account/scope/album or differently filtered cursors use `INVALID_CURSOR`.
+Filename/text search, broader library/person/tag/favorite selection and full browsing
+UI remain separate required work; this endpoint does not claim complete search.
 
 ### Static image preset contract
 

@@ -26,19 +26,6 @@ func (h mediaHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, item)
 }
 
-func (h mediaHandler) albumMedia(w http.ResponseWriter, r *http.Request) {
-	page, ok := readPage(w, r)
-	if !ok {
-		return
-	}
-	items, err := h.service.AlbumMedia(r.Context(), currentSession(r), r.PathValue("album_id"), page.cursor.After, page.limit+1)
-	if err != nil {
-		requestError(w, err)
-		return
-	}
-	writePage(w, page, items, func(item media.Metadata) string { return item.ID })
-}
-
 func (h mediaHandler) variants(w http.ResponseWriter, r *http.Request) {
 	page, ok := readPage(w, r)
 	if !ok {

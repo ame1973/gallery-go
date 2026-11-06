@@ -154,7 +154,7 @@ func TestMetadataCodecOrientationAndCaptureUseTheSamePrivateVisibility(t *testin
 	if err != nil || value.Codec == nil || *value.Codec != "png" || value.Orientation == nil || *value.Orientation != 6 || value.CaptureAt == nil || !value.CaptureAt.Equal(capture) || value.CaptureAt.Location() != time.UTC {
 		t.Fatal(value, err)
 	}
-	items, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, "", 30)
+	items, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{}, 30)
 	if err != nil || len(items) != 1 || items[0].Codec == nil || *items[0].Codec != "png" || items[0].Orientation == nil || *items[0].Orientation != 6 || items[0].CaptureAt == nil || !items[0].CaptureAt.Equal(capture) {
 		t.Fatal(items, err)
 	}
@@ -190,11 +190,11 @@ func TestMetadataAndCurrentReadyContentAreRealAndReadOnly(t *testing.T) {
 	if err != nil || metadata.Revision == nil || *metadata.Revision != "revision" || metadata.Width == nil || *metadata.Width != 8 || metadata.OfflineCapable {
 		t.Fatalf("metadata: %+v %v", metadata, err)
 	}
-	items, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, "", 30)
+	items, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{}, 30)
 	if err != nil || len(items) != 1 || items[0].ID != f.mediaID {
 		t.Fatal("media list/detail disagree", items, err)
 	}
-	items, err = f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, f.mediaID, 30)
+	items, err = f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{ID: f.mediaID}, 30)
 	if err != nil || len(items) != 0 {
 		t.Fatal("media keyset repeated item", err)
 	}
@@ -275,7 +275,7 @@ func TestMediaAuthorizationIgnoresForgedDTOAndAppliesOriginalPolicyToAdmins(t *t
 	checks := []func(auth.Session) error{
 		func(viewer auth.Session) error { _, e := f.svc.Get(t.Context(), viewer, f.mediaID); return e },
 		func(viewer auth.Session) error {
-			_, e := f.svc.AlbumMedia(t.Context(), viewer, f.albumID, "", 30)
+			_, e := f.svc.AlbumMedia(t.Context(), viewer, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{}, 30)
 			return e
 		},
 		func(viewer auth.Session) error {
@@ -502,7 +502,7 @@ func TestGrantRevocationAndSourceReassignmentHideEveryMediaRead(t *testing.T) {
 		t.Helper()
 		_, err := f.svc.Get(t.Context(), viewer, f.mediaID)
 		requireError(t, err, sql.ErrNoRows)
-		_, err = f.svc.AlbumMedia(t.Context(), viewer, f.albumID, "", 30)
+		_, err = f.svc.AlbumMedia(t.Context(), viewer, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{}, 30)
 		requireError(t, err, sql.ErrNoRows)
 		_, err = f.svc.Variants(t.Context(), viewer, f.mediaID, "", 30)
 		requireError(t, err, sql.ErrNoRows)
@@ -545,7 +545,7 @@ func TestMediaCancellationAndConfigurationAreNotFallbackCapabilities(t *testing.
 	_, err = unconfigured.OpenOriginal(t.Context(), f.reader, f.mediaID)
 	requireError(t, err, ErrSourceUnavailable)
 	for _, limit := range []int{0, 102} {
-		_, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, "", limit)
+		_, err := f.svc.AlbumMedia(t.Context(), f.reader, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{}, limit)
 		requireError(t, err, access.ErrGroupSet)
 		_, err = f.svc.Variants(t.Context(), f.reader, f.mediaID, "", limit)
 		requireError(t, err, access.ErrGroupSet)

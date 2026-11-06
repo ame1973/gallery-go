@@ -81,10 +81,11 @@ type Metadata struct {
 	OfflineCapable bool       `json:"offline_capable"`
 }
 
-const mediaSelect = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id,m.orientation,m.capture_at,
- json_extract(m.metadata_json,'$.animated'),json_extract(m.metadata_json,'$.frame_count'),json_extract(m.metadata_json,'$.loop_count'),json_extract(m.metadata_json,'$.codec')
- FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
+const mediaColumns = `SELECT m.id,m.album_id,m.kind,m.file_name,m.width,m.height,m.duration_ms,r.id,m.orientation,m.capture_at,
+ json_extract(m.metadata_json,'$.animated'),json_extract(m.metadata_json,'$.frame_count'),json_extract(m.metadata_json,'$.loop_count'),json_extract(m.metadata_json,'$.codec')`
+const mediaRelations = ` JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
  LEFT JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id`
+const mediaSelect = mediaColumns + ` FROM media m` + mediaRelations
 
 func scanMedia(row interface{ Scan(...any) error }) (Metadata, error) {
 	var value Metadata
@@ -111,35 +112,6 @@ func (s *Service) Get(ctx context.Context, current auth.Session, id string) (Met
 	}
 	defer tx.Rollback()
 	return scanMedia(tx.QueryRowContext(ctx, mediaSelect+` WHERE `+access.MediaVisible+` AND m.id=?`, viewer.ID, id))
-}
-
-func (s *Service) AlbumMedia(ctx context.Context, current auth.Session, albumID, after string, limit int) ([]Metadata, error) {
-	if limit < 1 || limit > 101 {
-		return nil, access.ErrGroupSet
-	}
-	tx, viewer, err := s.readTx(ctx, current)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	var id string
-	if err := tx.QueryRowContext(ctx, `SELECT a.id FROM albums a JOIN libraries l ON l.id=a.library_id WHERE `+access.AlbumVisible+` AND a.id=?`, viewer.ID, albumID).Scan(&id); err != nil {
-		return nil, err
-	}
-	rows, err := tx.QueryContext(ctx, mediaSelect+` WHERE `+access.MediaVisible+` AND m.album_id=? AND m.id>? ORDER BY m.id LIMIT ?`, viewer.ID, albumID, after, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]Metadata, 0)
-	for rows.Next() {
-		item, err := scanMedia(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
 }
 
 type Variant struct {

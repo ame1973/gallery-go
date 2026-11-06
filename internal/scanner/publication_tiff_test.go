@@ -52,7 +52,7 @@ func TestTIFFPublicationPreservesIdentityAndClearsRewrittenEXIFOrAnimation(t *te
 	if err := f.db.QueryRow(`SELECT id FROM albums`).Scan(&album); err != nil {
 		t.Fatal(err)
 	}
-	items, err := service.AlbumMedia(t.Context(), f.owner, album, "", 30)
+	items, err := service.AlbumMedia(t.Context(), f.owner, album, media.AlbumMediaFilter{}, media.AlbumMediaPosition{}, 30)
 	if err != nil || len(items) != len(inputs) {
 		t.Fatal("TIFF list visibility diverged", items, err)
 	}

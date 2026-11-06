@@ -69,7 +69,7 @@ func TestAVIFPublicationRetainsIdentityAndClearsStaleContainerEvidence(t *testin
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	items, err := service.AlbumMedia(t.Context(), f.owner, album, "", 30)
+	items, err := service.AlbumMedia(t.Context(), f.owner, album, media.AlbumMediaFilter{}, media.AlbumMediaPosition{}, 30)
 	if err != nil || len(items) != 4 {
 		t.Fatal("AVIF list visibility diverged", items, err)
 	}

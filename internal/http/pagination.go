@@ -16,6 +16,7 @@ type pageCursor struct {
 	User       string `json:"user"`
 	Collection string `json:"collection"`
 	After      string `json:"after"`
+	Position   string `json:"position,omitempty"`
 }
 
 type pagination struct {
@@ -62,7 +63,7 @@ func readPage(w http.ResponseWriter, r *http.Request) (pagination, bool) {
 		}
 		var cursor pageCursor
 		data, err := base64.RawURLEncoding.DecodeString(encoded)
-		if err != nil || json.Unmarshal(data, &cursor) != nil || cursor.Scope != page.cursor.Scope || cursor.User != page.cursor.User || cursor.Collection != page.cursor.Collection || len(cursor.After) == 0 || len(cursor.After) > 64 {
+		if err != nil || json.Unmarshal(data, &cursor) != nil || cursor.Scope != page.cursor.Scope || cursor.User != page.cursor.User || cursor.Collection != page.cursor.Collection || len(cursor.After) == 0 || len(cursor.After) > 64 || len(cursor.Position) > 32 {
 			problem(w, 400, "INVALID_CURSOR", "The page cursor is invalid for this account or collection.")
 			return page, false
 		}

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, signIn, test } from './fixtures';
 import type { Account, Administrator } from './fixtures';
-import type { components } from '../../web/src/lib/api/schema';
+import type { components, operations } from '../../web/src/lib/api/schema';
 
 async function createGroup(admin: Administrator) {
   const response = await admin.api.post('/api/v2/admin/groups', {
@@ -231,6 +231,107 @@ test('an unavailable source preserves private ready previews and rejects old or 
       `/api/v2/media/${prefix}-other-media/variants/${prefix}-other-media-variant/content`,
     );
     expect(ownOther.status()).toBe(200);
+  } finally {
+    await removeGroup(administrator, groupID);
+  }
+});
+
+test('HTTPS album media filters and chronological keysets retain ties, missing capture and fresh grants', async ({
+  account,
+  administrator,
+  page,
+  context,
+  request,
+}, testInfo) => {
+  const prefix = `media-selection-${testInfo.project.name}`;
+  const path = `/api/v2/albums/${prefix}-album/media`;
+  type Selection = NonNullable<operations['listAlbumMedia']['parameters']['query']>;
+  const queryString = (selection: Selection) =>
+    new URLSearchParams(
+      Object.entries(selection).map(([key, value]) => [key, String(value)]),
+    ).toString();
+  const selected = async (selection: Selection = {}) => {
+    const response = await context.request.get(`${path}?${queryString(selection)}`);
+    expect(response.status()).toBe(200);
+    expect(response.headers()['cache-control']).toBe('private, no-store');
+    return (await response.json()) as components['schemas']['MediaPage'];
+  };
+  expect((await request.get(path)).status()).toBe(401);
+  await signIn(page, account);
+  expect((await context.request.get(path)).status()).toBe(404);
+  const groupID = await createGroup(administrator);
+  try {
+    await grant(administrator, account, `${prefix}-library`, groupID);
+    const first = await selected({ sort: 'captured_desc', limit: 1 });
+    expect(first.items[0]).toMatchObject({
+      id: `${prefix}-c`,
+      capture_at: '2026-11-06T01:02:03.124Z',
+      revision: null,
+      offline_capable: false,
+    });
+    expect(first.has_more).toBe(true);
+    expect(first.next_cursor).not.toBeNull();
+    const ids: string[] = [];
+    let current = first;
+    for (let index = 0; index < 6; index++) {
+      ids.push(...current.items.map((item) => item.id));
+      if (!current.next_cursor) break;
+      current = await selected({
+        sort: 'captured_desc',
+        cursor: current.next_cursor,
+        limit: 1,
+      });
+    }
+    expect(ids).toEqual(
+      ['c', 'b', 'a', 'other-media', 'media'].map((suffix) => `${prefix}-${suffix}`),
+    );
+    expect(current).toMatchObject({ has_more: false, next_cursor: null });
+    expect(current.items[0]!.capture_at).toBeNull();
+    const ascending = await selected({ sort: 'captured_asc', limit: 2 });
+    expect(ascending.items.map((item) => item.id)).toEqual([
+      `${prefix}-media`,
+      `${prefix}-other-media`,
+    ]);
+    expect(ascending.items.every((item) => item.capture_at === null)).toBe(true);
+    const interval = await selected({
+      kind: 'image',
+      captured_from: '2026-11-06T01:02:03.123Z',
+      captured_before: '2026-11-06T01:02:03.124Z',
+      sort: 'captured_desc',
+    });
+    expect(interval.items.map((item) => item.id)).toEqual([`${prefix}-a`]);
+    const video = await selected({ kind: 'video', sort: 'id_desc' });
+    expect(video.items.map((item) => item.id)).toEqual([`${prefix}-b`]);
+    for (const selection of [
+      { cursor: first.next_cursor! },
+      { sort: 'captured_asc', cursor: first.next_cursor! },
+      { sort: 'captured_desc', kind: 'image', cursor: first.next_cursor! },
+    ] satisfies Selection[]) {
+      const invalid = await context.request.get(`${path}?${queryString(selection)}`);
+      expect(invalid.status()).toBe(400);
+      expect(await invalid.json()).toMatchObject({ code: 'INVALID_CURSOR' });
+    }
+    const accountMismatch = await administrator.api.get(
+      `${path}?${queryString({ sort: 'captured_desc', cursor: first.next_cursor! })}`,
+    );
+    expect(accountMismatch.status()).toBe(400);
+    expect(await accountMismatch.json()).toMatchObject({ code: 'INVALID_CURSOR' });
+    const unsupported = await context.request.get(`${path}?q=not-a-search`);
+    expect(unsupported.status()).toBe(400);
+    expect(await unsupported.json()).toMatchObject({ code: 'INVALID_FILTER' });
+    expect((await context.request.get(`/api/v2/media/${prefix}-media/original`)).status()).toBe(
+      404,
+    );
+    expect(JSON.stringify({ first, ascending, interval, video })).not.toMatch(
+      /source_sha256|root_path|relative_path|storage_path|\/tmp\/|GPS/,
+    );
+    await removeGroup(administrator, groupID);
+    expect((await context.request.get(path)).status()).toBe(404);
+    const stale = await context.request.get(
+      `${path}?${queryString({ sort: 'captured_desc', cursor: first.next_cursor! })}`,
+    );
+    expect(stale.status()).toBe(400);
+    expect(await stale.json()).toMatchObject({ code: 'INVALID_CURSOR' });
   } finally {
     await removeGroup(administrator, groupID);
   }

@@ -48,7 +48,7 @@ func TestOriginalRequiresExactRootMarkerPinAndActiveSource(t *testing.T) {
 	for _, viewer := range []auth.Session{f.owner, f.reader} {
 		_, err := f.svc.Get(t.Context(), viewer, f.mediaID)
 		requireError(t, err, sql.ErrNoRows)
-		_, err = f.svc.AlbumMedia(t.Context(), viewer, f.albumID, "", 30)
+		_, err = f.svc.AlbumMedia(t.Context(), viewer, f.albumID, AlbumMediaFilter{}, AlbumMediaPosition{}, 30)
 		requireError(t, err, sql.ErrNoRows)
 		_, err = f.svc.Variants(t.Context(), viewer, f.mediaID, "", 30)
 		requireError(t, err, sql.ErrNoRows)

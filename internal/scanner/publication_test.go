@@ -140,7 +140,7 @@ func TestPublicationNonMediaReplacementAndArchiveFailClosedForContent(t *testing
 	walkError(t, err, sql.ErrNoRows)
 	_, err = service.OpenOriginal(t.Context(), f.owner, id)
 	walkError(t, err, sql.ErrNoRows)
-	items, err := service.AlbumMedia(t.Context(), f.owner, album, "", 30)
+	items, err := service.AlbumMedia(t.Context(), f.owner, album, media.AlbumMediaFilter{}, media.AlbumMediaPosition{}, 30)
 	if err != nil || len(items) != 0 {
 		t.Fatal("archived media escaped shared visibility", items, err)
 	}
