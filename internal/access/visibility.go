@@ -81,10 +81,13 @@ type Album struct {
 
 // Keep the effective public title identical to the expression in migration0023.
 const albumTitle = `COALESCE(NULLIF(a.display_name,''),a.source_name)`
+
+// Migration0025 indexes this exact native-AVG key; zero represents only no votes.
+const albumRatingScore = `COALESCE(a.rating_avg,0)`
 const albumColumns = `SELECT a.id,` + albumTitle + `,a.library_id,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaVisible + `),
  (SELECT COUNT(*) FROM media m WHERE m.album_id=a.id AND ` + MediaVisible + `),
- (SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.created_at,a.version`
+ a.rating_avg,a.created_at,a.version`
 const albumRelations = ` JOIN libraries l ON l.id=a.library_id`
 const albumSelect = albumColumns + ` FROM albums a` + albumRelations
 

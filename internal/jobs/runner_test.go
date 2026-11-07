@@ -62,7 +62,19 @@ func stopRunner(t *testing.T, cancel context.CancelFunc, done <-chan error) {
 }
 
 func TestRunnerBoundedConcurrencyLiveHeartbeatsAndCompletion(t *testing.T) {
+	runnerBoundedConcurrency(t, 0)
+}
+
+func TestRunnerBoundedConcurrencyLiveHeartbeatsAfterBoundedWriterWait(t *testing.T) {
+	runnerBoundedConcurrency(t, 4*time.Second)
+}
+
+func runnerBoundedConcurrency(t *testing.T, writerWait time.Duration) {
+	t.Helper()
 	q := runtimeFixture(t)
+	// Concurrency and renewal, not expiry, are under test. Keep the production
+	// lease above a legitimate 5s SQLite writer wait; separate 3s expiry tests stay.
+	q.policy.Lease = DefaultPolicy().Lease
 	jobs := []Job{enqueued(t, q, "one", 0), enqueued(t, q, "two", 0), enqueued(t, q, "three", 0)}
 	started := make(chan string, 3)
 	release := make(chan struct{})
@@ -90,6 +102,19 @@ func TestRunnerBoundedConcurrencyLiveHeartbeatsAndCompletion(t *testing.T) {
 	}
 	cancel, done := startRunner(t, q, map[string]Handler{"scan": handler})
 	defer stopRunner(t, cancel, done)
+	defer func() {
+		if !t.Failed() {
+			return
+		}
+		ctx, stop := context.WithTimeout(context.WithoutCancel(t.Context()), time.Second)
+		defer stop()
+		for _, job := range jobs {
+			current, err := q.Get(ctx, job.ID)
+			t.Logf("worker job snapshot: id=%s status=%s attempt=%d expiry=%d now=%d error=%v", job.ID, current.Status, current.Attempts, current.leaseUntil, q.clock().UnixMilli(), err)
+		}
+		workers, err := q.Workers(ctx, "", 30)
+		t.Logf("worker registry snapshot: workers=%+v error=%v", workers, err)
+	}()
 	for range 2 {
 		select {
 		case <-started:
@@ -100,6 +125,25 @@ func TestRunnerBoundedConcurrencyLiveHeartbeatsAndCompletion(t *testing.T) {
 	var firstExpiry int64
 	if err := q.db.QueryRow(`SELECT MIN(lease_expires_at) FROM jobs WHERE status='running'`).Scan(&firstExpiry); err != nil {
 		t.Fatal(err)
+	}
+	if writerWait > 0 {
+		// store.Open uses BEGIN IMMEDIATE: this holds a real SQLite writer without
+		// rewriting job/lease data, changing busy_timeout, or pausing worker code.
+		writer, err := q.db.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer writer.Rollback()
+		timer := time.NewTimer(writerWait)
+		defer timer.Stop()
+		select {
+		case <-t.Context().Done():
+			t.Fatal("writer-wait fixture was cancelled")
+		case <-timer.C:
+		}
+		if err := writer.Rollback(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	eventually(t, func() bool {
 		var renewed int

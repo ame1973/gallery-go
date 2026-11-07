@@ -160,7 +160,7 @@ func TestAlbumNameOrderHTTPRejectsInvalidStoredTitlesWithoutInternalDisclosure(t
 	failed := f.reader.request("GET", "/api/v2/albums?source_id=media-source&sort=name_asc", nil, "", "")
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
 	for _, secret := range []string{"source_name", "UTF-8", "SQL", f.source} {
-		if strings.Contains(failed.Body.String(), secret) {
+		if strings.Contains(problemContent(t, failed), secret) {
 			t.Fatal("bad title exposed private internal evidence", failed.Body.String())
 		}
 	}

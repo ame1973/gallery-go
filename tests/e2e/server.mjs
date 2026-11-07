@@ -24,6 +24,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'people',
     'album-metadata',
     'ratings',
+    'rating-order',
     'person-metadata',
     'album-tags',
     'tag-batches',
@@ -186,6 +187,29 @@ try {
         "INSERT INTO albums(id,library_id,source_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,? ,'.',?,?)",
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
+    if (prefix.startsWith('rating-order-')) {
+      // Empty selection cards only, not native mapping or renderer/READY proof.
+      // The primary card above owns actual isolated read-only PNG media.
+      for (const [suffix, restricted] of [
+        ['other-album', 0],
+        ['unrated-album', 0],
+        ['private-album', 1],
+      ]) {
+        fixtureDB
+          .prepare(
+            'INSERT INTO albums(id,library_id,source_id,source_name,access_restricted,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-${suffix}`,
+            library,
+            `${prefix}-source`,
+            'Empty rank card',
+            restricted,
+            Date.now(),
+            Date.now(),
+          );
+      }
+    }
     if (prefix.startsWith('creators-')) {
       for (const name of ['mapped', 'manual']) {
         fixtureDB

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -143,6 +144,56 @@ func assertProblem(t *testing.T, w *httptest.ResponseRecorder, status int) {
 	}
 	if w.Header().Get("Content-Type") != "application/problem+json" {
 		t.Fatal("incorrect problem MIME")
+	}
+}
+
+func problemContent(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	assertProblem(t, w, w.Code)
+	var payload map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	// Exclude only the separately verified correlation ID, never diagnostic fields.
+	delete(payload, "request_id")
+	content, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(content)
+}
+
+func TestProblemPrivacySeparatesGeneratedRequestIDFromDiagnostics(t *testing.T) {
+	w := httptest.NewRecorder()
+	// This real generated ID caused a whole-body SQL substring false positive.
+	w.Header().Set("X-Request-ID", "HH2I3YYHQMKLT2CG3SQL7RQUXM")
+	requestError(w, errors.New("/private/SQL/receipt"))
+	expectCode(t, w, 500, "INTERNAL_ERROR")
+	original := w.Body.String()
+	if !strings.Contains(original, "SQL") || strings.Contains(problemContent(t, w), "SQL") || w.Body.String() != original {
+		t.Fatal("the correlation ID was mistaken for a diagnostic or the response was changed", original)
+	}
+	for _, field := range []string{"type", "title", "code", "detail", "unknown", "request_id_diagnostic"} {
+		t.Run(field, func(t *testing.T) {
+			var payload map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			payload[field] = "/private/SQL/receipt"
+			if field == "unknown" || field == "request_id_diagnostic" {
+				payload[field] = map[string]string{"nested": "/private/SQL/receipt"}
+			}
+			leaked := httptest.NewRecorder()
+			leaked.Header().Set("X-Request-ID", w.Header().Get("X-Request-ID"))
+			leaked.Header().Set("Content-Type", "application/problem+json")
+			leaked.WriteHeader(500)
+			if err := json.NewEncoder(leaked).Encode(payload); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(problemContent(t, leaked), "/private/SQL/receipt") {
+				t.Fatal("a real diagnostic field was excluded from privacy checks", field)
+			}
+		})
 	}
 }
 

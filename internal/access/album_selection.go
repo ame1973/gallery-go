@@ -34,7 +34,7 @@ type AlbumFilter struct {
 
 func (filter AlbumFilter) Validate() error {
 	switch filter.Sort {
-	case "", "latest", "oldest", "name_asc", "name_desc":
+	case "", "latest", "oldest", "name_asc", "name_desc", "top_rated":
 	default:
 		return ErrAlbumSelection
 	}
@@ -51,8 +51,8 @@ func (filter AlbumFilter) Validate() error {
 	return nil
 }
 
-// Key freezes a public UTC-millisecond indexed_at or a framed literal title. Never
-// resolve a mutable/deleted anchor or hash/truncate titles into a different order.
+// Key freezes a public time, framed literal title or native mean. Never resolve
+// a mutable/deleted anchor, round scores or hash/truncate titles into another order.
 type AlbumPosition struct {
 	ID  string
 	Key string
@@ -62,6 +62,14 @@ type AlbumPosition struct {
 // distinguishes an empty title from a missing position. This is not a capability.
 func AlbumNameKey(title string) string {
 	return "n:" + base64.RawURLEncoding.EncodeToString([]byte(title))
+}
+
+// Preserve the complete published float64 mean, not a rounded display score.
+func AlbumRatingKey(average *float64) string {
+	if average == nil || *average == 0 {
+		return "r:0"
+	}
+	return "r:" + strconv.FormatFloat(*average, 'g', -1, 64)
 }
 
 func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
@@ -85,6 +93,16 @@ func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
 	if len(position.Key) > 32 {
 		return nil, ErrAlbumPosition
 	}
+	if filter.Sort == "top_rated" {
+		if !strings.HasPrefix(position.Key, "r:") {
+			return nil, ErrAlbumPosition
+		}
+		value, err := strconv.ParseFloat(position.Key[2:], 64)
+		if err != nil || !(value == 0 || value >= 1 && value <= 5) || AlbumRatingKey(&value) != position.Key {
+			return nil, ErrAlbumPosition
+		}
+		return value, nil
+	}
 	value, err := strconv.ParseInt(position.Key, 10, 64)
 	if err != nil || strconv.FormatInt(value, 10) != position.Key {
 		return nil, ErrAlbumPosition
@@ -98,11 +116,13 @@ func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
 
 func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sortKey any, limit int) (string, []any) {
 	from, key, relations := ` FROM albums a`, `a.id`, albumRelations
-	named := strings.HasPrefix(filter.Sort, "name_")
+	named, rated := strings.HasPrefix(filter.Sort, "name_"), filter.Sort == "top_rated"
 	if filter.Sort != "" {
 		orderIndex, prefix := "indexed", ""
 		if named {
 			orderIndex = "title"
+		} else if rated {
+			orderIndex = "rating"
 		}
 		switch {
 		case filter.PersonID != "":
@@ -162,8 +182,10 @@ func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sort
 		comparison, direction, orderKey := ">", "ASC", `a.created_at`
 		if named {
 			orderKey = albumTitle + ` COLLATE BINARY`
+		} else if rated {
+			orderKey = albumRatingScore
 		}
-		if filter.Sort == "latest" || filter.Sort == "name_desc" {
+		if filter.Sort == "latest" || filter.Sort == "name_desc" || rated {
 			comparison, direction = "<", "DESC"
 		}
 		if after.ID != "" {

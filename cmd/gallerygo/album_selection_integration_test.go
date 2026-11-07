@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"net/url"
 	"reflect"
 	"slices"
@@ -52,10 +53,21 @@ func assertCompiledAlbumOrder(t *testing.T, api *scanHTTPSClient, sourceID strin
 	}
 	// Sorting these at-most-two expected fixture cards is not a production catalog
 	// sort. The real socket endpoint must independently page the SQL order.
-	for _, order := range []string{"oldest", "latest", "name_asc", "name_desc"} {
+	for _, order := range []string{"oldest", "latest", "name_asc", "name_desc", "top_rated"} {
 		expected := slices.Clone(corpus.Items)
 		slices.SortFunc(expected, func(a, b access.Album) int {
-			if strings.HasPrefix(order, "name_") {
+			if order == "top_rated" {
+				one, two := 0.0, 0.0
+				if a.RatingAvg != nil {
+					one = *a.RatingAvg
+				}
+				if b.RatingAvg != nil {
+					two = *b.RatingAvg
+				}
+				if compared := cmp.Compare(one, two); compared != 0 {
+					return compared
+				}
+			} else if strings.HasPrefix(order, "name_") {
 				if compared := strings.Compare(a.Title, b.Title); compared != 0 {
 					return compared
 				}
@@ -64,7 +76,7 @@ func assertCompiledAlbumOrder(t *testing.T, api *scanHTTPSClient, sourceID strin
 			}
 			return strings.Compare(a.ID, b.ID)
 		})
-		if order == "latest" || order == "name_desc" {
+		if order == "latest" || order == "name_desc" || order == "top_rated" {
 			slices.Reverse(expected)
 		}
 		query.Set("sort", order)

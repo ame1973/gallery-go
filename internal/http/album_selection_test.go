@@ -145,7 +145,7 @@ func TestAlbumSelectionHTTPFreshResourceStateAndInternalFailureStayPrivate(t *te
 	failed := f.reader.request("GET", "/api/v2/albums?source_id=media-source", nil, "", "")
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
 	for _, secret := range []string{"idx_album_source_page", "SQL", "albums", f.source} {
-		if strings.Contains(failed.Body.String(), secret) {
+		if strings.Contains(problemContent(t, failed), secret) {
 			t.Fatal("album selection exposed internal SQL/source details", failed.Body.String())
 		}
 	}

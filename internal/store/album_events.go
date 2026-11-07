@@ -59,7 +59,7 @@ func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) e
 	var indexed int64
 	if err := tx.QueryRowContext(ctx, `SELECT a.id,a.library_id,a.source_id,a.person_id,a.source_name,a.display_name,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND `+MediaSourceConsistent+`),
- a.access_restricted,a.quarantined_at,(SELECT AVG(r.rating) FROM ratings r WHERE r.album_id=a.id),a.created_at,a.version
+ a.access_restricted,a.quarantined_at,a.rating_avg,a.created_at,a.version
  FROM albums a WHERE a.id=?`, id).Scan(&value.ID, &value.LibraryID, &value.SourceID, &value.PersonID,
 		&value.SourceName, &value.DisplayName, &value.CoverMediaID, &value.Restricted, &quarantine, &value.RatingAvg, &indexed, &value.Version); err != nil {
 		return err

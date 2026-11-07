@@ -169,17 +169,24 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
  INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-sparse' FROM albums WHERE CAST(substr(id,7) AS INTEGER)%997=0`); err != nil {
 		t.Fatal(err)
 	}
+	// Real indexed votes drive the derived native mean; no fake score update seeds
+	// the ranking field. Existing SQL setup stays isolated from production sources.
+	if _, err := s.db.Exec(`INSERT INTO ratings(user_id,album_id,rating,updated_at)
+ SELECT ?,id,1+CAST(substr(id,7) AS INTEGER)%5,0 FROM albums
+ WHERE id LIKE 'scale-%' AND CAST(substr(id,7) AS INTEGER)%7!=0`, owner.User.ID); err != nil {
+		t.Fatal(err)
+	}
 	for _, filter := range []AlbumFilter{
 		{}, {LibraryID: "scale-l1"}, {SourceID: "scale-s1"}, {PersonID: "scale-p1"},
 		{TagID: "scale-common"}, {TagID: "scale-sparse"},
 		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1"},
 		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-sparse"},
 	} {
-		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc"} {
+		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
 			filter.Sort = order
 			after, indexedKey := AlbumPosition{ID: "scale-050000"}, int64(0)
 			var sortKey any = int64(0)
-			nameKey := ""
+			nameKey, ratingKey := "", 0.0
 			switch order {
 			case "latest", "oldest":
 				after.Key, indexedKey, sortKey = "5", 5, int64(5)
@@ -189,6 +196,9 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 					nameKey = "Override 02"
 				}
 				after.Key, sortKey = AlbumNameKey(nameKey), nameKey
+			case "top_rated":
+				ratingKey = 5
+				after.Key, sortKey = AlbumRatingKey(&ratingKey), ratingKey
 			}
 			query, arguments := albumSelection(owner.User.ID, filter, after, sortKey, 11)
 			rows, err := s.db.QueryContext(t.Context(), `EXPLAIN QUERY PLAN `+query, arguments...)
@@ -230,6 +240,8 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 				}
 				if strings.HasPrefix(order, "name_") {
 					wantIndex = strings.Replace(wantIndex, "indexed", "title", 1)
+				} else if order == "top_rated" {
+					wantIndex = strings.Replace(wantIndex, "indexed", "rating", 1)
 				}
 			}
 			if err != nil || strings.Contains(plan.String(), "TEMP B-TREE") || !strings.Contains(plan.String(), wantIndex) || strings.Contains(query, "OFFSET") {
@@ -239,9 +251,12 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			if err != nil || len(items) != 11 {
 				t.Fatal("large selection did not return only its bounded cards", filter, len(items), err)
 			}
-			previousID, previousKey, previousTitle := after.ID, indexedKey, nameKey
+			previousID, previousKey, previousTitle, previousRating := after.ID, indexedKey, nameKey, ratingKey
 			for _, item := range items {
-				key := item.IndexedAt.UnixMilli()
+				key, score := item.IndexedAt.UnixMilli(), 0.0
+				if item.RatingAvg != nil {
+					score = *item.RatingAvg
+				}
 				ordered := item.ID > previousID
 				if order == "oldest" {
 					ordered = key > previousKey || (key == previousKey && item.ID > previousID)
@@ -251,11 +266,13 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 					ordered = item.Title > previousTitle || (item.Title == previousTitle && item.ID > previousID)
 				} else if order == "name_desc" {
 					ordered = item.Title < previousTitle || (item.Title == previousTitle && item.ID < previousID)
+				} else if order == "top_rated" {
+					ordered = score < previousRating || (score == previousRating && item.ID < previousID)
 				}
 				if !ordered || item.MediaCount != 0 || item.CoverMediaID != nil {
 					t.Fatal("large selection repeated keys or invented count/cover", filter, item)
 				}
-				previousID, previousKey, previousTitle = item.ID, key, item.Title
+				previousID, previousKey, previousTitle, previousRating = item.ID, key, item.Title, score
 			}
 		}
 	}

@@ -160,7 +160,7 @@ func TestTagCatalogHTTPRejectsUnsafeBodiesRolesAssociationsAndLateFailures(t *te
 	}
 	failed := f.admin.request("PATCH", path, map[string]string{"name": "Must roll back"}, tag, store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "SQL") || strings.Contains(failed.Body.String(), "receipt") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "SQL") || strings.Contains(problemContent(t, failed), "receipt") {
 		t.Fatal("tag failure disclosed internal SQL/path context", failed.Body.String())
 	}
 	if value := decodeResponse[access.Tag](t, f.admin.request("GET", path, nil, "", ""), 200); value != created {

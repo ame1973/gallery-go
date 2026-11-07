@@ -23,7 +23,7 @@ func albumSelectionPage(w http.ResponseWriter, r *http.Request) (pagination, acc
 			continue
 		}
 		if (key != "library_id" && key != "source_id" && key != "person_id" && key != "tag_id" && key != "sort") || len(values) != 1 || values[0] == "" {
-			problem(w, 400, "INVALID_FILTER", "Use one nonempty value for each resource ID or supported time/name sort, with limit and cursor.")
+			problem(w, 400, "INVALID_FILTER", "Use one nonempty value for each resource ID or supported time/name/rating sort, with limit and cursor.")
 			return page, access.AlbumFilter{}, false
 		}
 	}
@@ -51,9 +51,12 @@ func (a authorization) albums(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(items) > page.limit && filter.Sort != "" {
 		last := items[page.limit-1]
-		if strings.HasPrefix(filter.Sort, "name_") {
+		switch {
+		case strings.HasPrefix(filter.Sort, "name_"):
 			page.cursor.Position = access.AlbumNameKey(last.Title)
-		} else {
+		case filter.Sort == "top_rated":
+			page.cursor.Position = access.AlbumRatingKey(last.RatingAvg)
+		default:
 			page.cursor.Position = strconv.FormatInt(last.IndexedAt.UnixMilli(), 10)
 		}
 	}

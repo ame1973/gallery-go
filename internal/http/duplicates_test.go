@@ -145,7 +145,7 @@ func TestExactDuplicateHTTPRejectsAnonymousNonAdminAndSanitizesReadFailures(t *t
 	}
 	failed := admin.request("GET", path, nil, "", "")
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "media_revisions") || strings.Contains(failed.Body.String(), "SELECT") || strings.Contains(failed.Body.String(), "/private") {
+	if strings.Contains(problemContent(t, failed), "media_revisions") || strings.Contains(problemContent(t, failed), "SELECT") || strings.Contains(problemContent(t, failed), "/private") {
 		t.Fatal("duplicate SQL failure leaked private implementation", failed.Body.String())
 	}
 	if _, err := db.Exec(`UPDATE users SET active=0 WHERE id=?`, owner.ID); err != nil {

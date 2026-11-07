@@ -1,7 +1,7 @@
 # Personal album ratings
 
 All paths below use `/api/v2`. These are authenticated metadata APIs; rating UI,
-interaction-based ranking and offline operation replay are not enabled yet.
+popularity/view statistics and offline operation replay are not enabled yet.
 
 ## Read your vote
 
@@ -74,11 +74,13 @@ The monotonic vote revision survives receipt expiry.
 
 ## Shared averages and deletion
 
-Authorized album list/detail/creator-album cards use the same live SQLite
-`AVG(rating)` over the album's votes. A cleared null vote contributes nothing;
-no remaining votes means a null average, not zero. This is an aggregate, not a
-public list of voters. Votes belong to accounts, not sessions, so logout or
-account deactivation does not silently discard them.
+Authorized album list/detail/creator-album cards use the same transactionally
+maintained native SQLite `AVG(rating)` over the album's votes. A cleared null vote
+contributes nothing; no remaining votes means a null average, not zero. This is
+an aggregate, not a public list of voters. Votes belong to accounts, not sessions,
+so logout or account deactivation does not silently discard them. The
+[high-rating order](access.md#album-high-rating-ordering) uses this same complete
+public mean, with no hidden vote-count weighting.
 
 A real vote change advances the shared album version and writes the complete
 canonical album event with the current average. It also writes a private
@@ -97,13 +99,15 @@ or cover preferences and source files are preserved. Use deactivation instead
 when private application metadata must remain recoverable.
 
 Migration0024 preserves existing valid integer votes/timestamps with initial
-version1 and recreates the existing `idx_ratings_album`; no second aggregate
-index or cached average is introduced. The rebuilt leaf table retains enforced
-user/album foreign keys. An invalid historical fractional vote fails migration
-atomically rather than being rounded or silently deleted. Stop consumers and use
-the normal backup/migrate/start procedure; never alter real source files to repair
-a metadata problem.
+version1 and recreates the existing `idx_ratings_album`. The rebuilt leaf table
+retains enforced user/album foreign keys. An invalid historical fractional vote
+fails migration atomically rather than being rounded or silently deleted.
+Migration0025 adds a nullable native-AVG projection, maintained by transactional
+vote triggers, and four high-rating album indexes. It does not change personal
+revisions or introduce a second vote index, queue or journal. Stop consumers and
+use the normal backup/migrate/start procedure; never alter real source files to
+repair a metadata problem.
 
-This is not an offline conflict-resolution or ranking implementation. Future
-sync must preserve these personal versions, account scopes, fresh grants,
-idempotent outcomes and explicit conflicts instead of using last-write-wins.
+This does not enable offline conflict resolution, popularity statistics or the
+rating/home UI. Future sync must preserve these personal versions, account scopes,
+fresh grants, idempotent outcomes and explicit conflicts instead of last-write-wins.

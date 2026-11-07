@@ -121,7 +121,7 @@ func TestTagBatchHTTPStrictBodiesFreshRolesAndSanitizedLateRollback(t *testing.T
 	}
 	failed := f.admin.request("POST", path, valid, "", store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "SQL") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "SQL") {
 		t.Fatal("batch error leaked private SQL", failed.Body.String())
 	}
 	var count int

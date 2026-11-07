@@ -165,7 +165,7 @@ func TestAlbumRatingsHTTPFreshGrantsAccountDeleteAndPrivateRollback(t *testing.T
 	failed := f.admin.request("PUT", path, body, adminInitial.Header().Get("ETag"), store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
 	for _, secret := range []string{"/private", "SQL", "rating-receipt", f.source} {
-		if strings.Contains(failed.Body.String(), secret) {
+		if strings.Contains(problemContent(t, failed), secret) {
 			t.Fatal("late rating failure leaked private implementation detail", failed.Body.String())
 		}
 	}

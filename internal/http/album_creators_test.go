@@ -108,7 +108,7 @@ func TestAlbumCreatorHTTPRejectsUnsafeBodiesRolesAndLateJournalFailure(t *testin
 	}
 	failed := f.admin.request("PUT", path, map[string]string{"mode": "none"}, tag, store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "SQL") || strings.Contains(failed.Body.String(), "creator") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "SQL") || strings.Contains(problemContent(t, failed), "creator") {
 		t.Fatal("creator journal error exposed internals", failed.Body.String())
 	}
 	current := decodeResponse[access.AlbumCreator](t, f.admin.request("GET", path, nil, "", ""), 200)

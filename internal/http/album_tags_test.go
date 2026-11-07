@@ -173,7 +173,7 @@ func TestAlbumTagsHTTPStrictCommandsRolesAndLateRollback(t *testing.T) {
 	}
 	failed := f.admin.request("PUT", path, map[string]any{"tag_ids": []string{"tag-one"}}, tag, store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "SQL") || strings.Contains(failed.Body.String(), "receipt") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "SQL") || strings.Contains(problemContent(t, failed), "receipt") {
 		t.Fatal("late association failure exposed private DB context", failed.Body.String())
 	}
 	current := decodeResponse[access.AlbumTagSet](t, f.admin.request("GET", path, nil, "", ""), 200)

@@ -222,8 +222,10 @@ Only implemented endpoints are advertised:
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
   SQL-authorized metadata, counts, and covers. Album collections intersect exact
   `library_id`, `source_id`, `person_id` and `tag_id` selectors before indexed ID or
-  first-indexed-time/literal-title keyset pagination (`latest`, `oldest`, `name_asc`,
-  `name_desc`). Public `indexed_at` is server publication time, not capture/NAS mtime
+  first-indexed-time/literal-title/native-rating keyset pagination (`latest`, `oldest`,
+  `name_asc`, `name_desc`, `top_rated`). High-rating order uses the native mean, not
+  weighted vote counts, with unrated cards last and complete frozen score keys.
+  Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
 - `GET/PUT/DELETE /api/v2/albums/{album_id}/rating`: the current account's one

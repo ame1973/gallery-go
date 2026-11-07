@@ -109,7 +109,7 @@ func TestJobIssueHTTPAdministrativeBoundaryAndReadFailures(t *testing.T) {
 	}
 	failed := admin.request("GET", path, nil, "", "")
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "job_issues") || strings.Contains(failed.Body.String(), "SELECT") {
+	if strings.Contains(problemContent(t, failed), "job_issues") || strings.Contains(problemContent(t, failed), "SELECT") {
 		t.Fatal("diagnostic SQL failure leaked internal detail", failed.Body.String())
 	}
 	if _, err := db.Exec(`UPDATE users SET active=0 WHERE id=?`, owner.ID); err != nil {

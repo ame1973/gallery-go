@@ -101,7 +101,7 @@ func TestAlbumMetadataHTTPRejectsUnsafeBodiesHeadersRolesAndJournalFailures(t *t
 	}
 	failed := f.admin.request("PATCH", path, map[string]any{"display_name": "Must roll back"}, tag, store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "receipt") || strings.Contains(failed.Body.String(), "SQL") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "receipt") || strings.Contains(problemContent(t, failed), "SQL") {
 		t.Fatal("late mutation error exposed internal details", failed.Body.String())
 	}
 	value := decodeResponse[access.AlbumMetadata](t, f.admin.request("GET", path, nil, "", ""), 200)

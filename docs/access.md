@@ -201,8 +201,8 @@ always known for valid stored albums, so there is no synthetic unknown-time key
 or capture/mtime fallback. ID-only cursors reject an unrelated time position, and
 chronological cursors reject missing, noncanonical or out-of-range keys with
 `400 INVALID_CURSOR`. Treat cursors as opaque rather than constructing their JSON.
-Popular and top-rated album ordering and full text search are still required but
-not implemented; unsupported values fail explicitly, never become fake ranks.
+Popularity-based album ordering and full text search are still required but not
+implemented; unsupported values fail explicitly, never become fake ranks.
 
 ### Album literal name ordering
 
@@ -238,10 +238,40 @@ not reread its anchor after a rename/deletion. These remain live pages: concurre
 title changes can move records across the boundary or repeat/skip a record compared
 with an earlier view; immutable offline snapshots are not enabled.
 
+### Album high-rating ordering
+
+`sort=top_rated` compares the same public native SQLite arithmetic mean as
+`rating_avg`, descending, then album ID descending. Unrated nulls come last; their
+internal zero seek key is never exposed as a real zero average. Equal means tie
+by ID even when their voter counts differ. There is no Bayesian score, hidden
+vote-count weight, display rounding or popularity surrogate.
+
+Migration0025 backfills a nullable native-AVG projection without changing shared
+resource versions, indexed times, preferences or historical events. Three SQL
+triggers maintain it within actual vote insert/update/clear/move/delete transactions,
+including account cascades. The existing rating and account-deletion services still
+own business versions and the single complete album journal; triggers do not invent
+separate audit/change writers. All readers and the journal use the same mean.
+
+Four expression indexes share the exact `COALESCE(rating_avg,0),id` comparator,
+with library/source/person prefixes. Shared authorization and literal selectors
+still run in SQL before LIMIT; tag selection uses its indexed edge. No whole-
+catalog sort, temporary rank table, asynchronous stale result or source probe is
+needed. Average recomputation reads the indexed votes of affected albums only.
+
+Cursors freeze the entire published float64 mean and ID, using a canonical
+round-trippable position, not rounded star text or a mutable anchor lookup. Null
+has one encoding; nonfinite, noncanonical, out-of-range, missing and overlong keys
+return `400 INVALID_CURSOR`. Rating positions fit the existing 32-byte numeric
+bound; the album-only 8192-character envelope and other endpoints' 512-character
+limits are unchanged. Real re-rating, clearing and account deletion can move
+records across live pages; an issued anchor remains frozen, but this is not an
+immutable offline snapshot. Popularity/view statistics remain separate work.
+
 Lists use the standard `{items,next_cursor,has_more}` envelope, default limit 30,
 maximum 100, and stable indexed keyset order. Visibility and selection run in SQL
-before LIMIT, using finite library/source/person/time indexes and indexed tag edges
-rather than loading/sorting the whole catalog in memory. Cursors bind the current
+before LIMIT, using finite library/source/person/time/title/rating indexes and tag
+edges rather than loading/sorting the whole catalog in memory. Cursors bind the current
 account, scope, collection and literal selectors/sort; query key order/URL encoding
 is canonicalized, but changing a selector or sort requires a new first page. Every
 continuation rechecks current grants.

@@ -1336,7 +1336,7 @@ paths:
     get:
       operationId: listAlbums
       summary: List visible albums with authorized media counts and covers
-      description: Default album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. latest/oldest order uses public indexed_at, the immutable server first-indexed UTC-millisecond instant, never capture/NAS mtime or recent metadata edits. name_asc/name_desc order uses the exact effective public title with SQLite BINARY UTF-8 byte comparison, not case folding, NFKC, locale or natural numeric order. Both primary keys use same-direction album-ID ties; cursors freeze the full public time/title key and ID without rereading a mutable/deleted anchor or hashing/truncating names. Public titles are at most 4096 UTF-8 bytes; encoded name keys avoid control/HTML escaping expansion. The bounded 8192-character AlbumCursor is specific to this collection; other cursors retain their 512-character limit. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search and interaction-based album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter/sort values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
+      description: Default album-ID ascending keyset pages, with optional exact library/source/person/tag IDs combined by AND in SQL before default 30/max 100 pagination. latest/oldest order uses public indexed_at, the immutable server first-indexed UTC-millisecond instant, never capture/NAS mtime or recent metadata edits. name_asc/name_desc order uses the exact effective public title with SQLite BINARY UTF-8 byte comparison, not case folding, NFKC, locale or natural numeric order. Time/title orders use same-direction album-ID ties. top_rated uses the same native SQLite AVG as the public rating_avg, descending with album-ID descending ties and unrated nulls last; it is not vote-count weighted. A transactionally maintained projection and finite indexes preserve the complete public mean. Cursors freeze the full public time/title/mean key and ID without rereading a mutable/deleted anchor, rounding scores or hashing/truncating names. Public titles are at most 4096 UTF-8 bytes; encoded name keys avoid control/HTML escaping expansion. The bounded 8192-character AlbumCursor is specific to this collection; other cursors retain their 512-character limit. Each supplied selector must be one nonempty literal ID, at most 64 UTF-8 bytes, without surrounding whitespace, paths, control or format characters. Unknown, hidden, inactive or contradictory selectors return an empty authorized page, not global resource existence or labels. Person selection requires the effective creator and its same concrete indexed source/path, never a display label or cross-source association. Library grants remain mandatory and album restrictions only narrow them; counts/covers use the same shared media visibility as album detail. Only documented parameters are accepted; text search and popularity-based album sorts are not implemented. Cursors bind the account, current scope, collection and literal filter/sort values after URL/key-order canonicalization. These live pages are not immutable offline snapshots and never probe sources or grant downloads.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1360,8 +1360,8 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 64 }
         - name: sort
           in: query
-          description: Literal BINARY public-title or first-indexed server-time order, with same-direction stable album-ID ties. Omit sort for album-ID ascending order.
-          schema: { type: string, enum: [latest, oldest, name_asc, name_desc] }
+          description: Literal BINARY public-title, first-indexed server-time or native-rating order. top_rated uses mean/ID descending with unrated last, without vote-count weighting. Other primary/ID keys share their direction. Omit sort for album-ID ascending order.
+          schema: { type: string, enum: [latest, oldest, name_asc, name_desc, top_rated] }
       responses:
         '200':
           description: SQL-authorized album metadata without private filesystem paths.
@@ -1395,7 +1395,7 @@ paths:
     put:
       operationId: setAlbumRating
       summary: Replace the current account's one integer vote from 1 to 5
-      description: Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; future offline sync and ranking are not enabled here.
+      description: Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; offline sync and popularity statistics are not enabled here. High-rating album selection is a separate GET /albums sort.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -2889,7 +2889,11 @@ components:
         library_id: { type: string }
         cover_media_id: { type: [string, 'null'] }
         media_count: { type: integer, minimum: 0 }
-        rating_avg: { type: [number, 'null'], minimum: 1, maximum: 5 }
+        rating_avg:
+          type: [number, 'null']
+          minimum: 1
+          maximum: 5
+          description: Transactionally maintained native SQLite AVG of integer live votes, or null for no votes. Shared by cards, detail, canonical events and high-rating order without vote-count weighting or display rounding.
         indexed_at:
           type: string
           format: date-time

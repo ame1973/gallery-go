@@ -113,7 +113,7 @@ func TestAlbumOrderPositionSurvivesDeletedAndChangedAnchors(t *testing.T) {
 }
 
 func TestAlbumOrderRejectsAmbiguousSortPositionsAndInvalidStoredTime(t *testing.T) {
-	for _, order := range []string{"id_desc", "NAME_ASC", "popular", "top_rated", "LATEST", " latest", "oldest;DROP TABLE albums"} {
+	for _, order := range []string{"id_desc", "NAME_ASC", "popular", "TOP_RATED", "LATEST", " latest", "oldest;DROP TABLE albums"} {
 		if !errors.Is((AlbumFilter{Sort: order}).Validate(), ErrAlbumSelection) {
 			t.Fatal("unimplemented/ambiguous album sort accepted", order)
 		}

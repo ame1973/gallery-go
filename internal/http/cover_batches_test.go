@@ -110,7 +110,7 @@ func TestCoverBatchHTTPStrictNestedBodiesAndSanitizedReceiptRollback(t *testing.
 	}
 	failed := f.admin.request("POST", path, valid, "", store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "SQL") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "SQL") {
 		t.Fatal("cover error exposed private details", failed.Body.String())
 	}
 	var rows int

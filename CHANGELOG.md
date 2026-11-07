@@ -22,6 +22,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Indexed high-rating album keysets (`top_rated`) using the same native SQL mean
+  as public cards, DESC mean/ID ties and unrated last. Complete public float keys
+  survive re-rated/deleted anchors without rounding, whole-catalog sorting or fake
+  counts. Migration0025 backfills a nullable native-AVG projection and four indexes;
+  transactional vote triggers cover inserts, updates, clears, moves and deletions,
+  while existing rating/account-deletion writers own business versions and the
+  single canonical journal. Fresh shared visibility, real100k query plans and
+  actor-scoped cursor bindings remain mandatory. No source I/O or grant change.
+
 - Personal album rating GET/PUT/DELETE APIs with one integer vote per account,
   independent identity-bound preconditions, actor receipts and retained clear
   revisions. Real changes refresh the live average and shared album version with

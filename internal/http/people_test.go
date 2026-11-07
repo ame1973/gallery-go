@@ -118,7 +118,7 @@ func TestPersonMetadataHTTPRejectsUnsafeBodiesRolesPreconditionsAndLateFailures(
 	}
 	failed := f.admin.request("PATCH", path, map[string]any{"display_name": "Must roll back"}, tag, store.NewID())
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "/private") || strings.Contains(failed.Body.String(), "SQL") || strings.Contains(failed.Body.String(), "receipt") {
+	if strings.Contains(problemContent(t, failed), "/private") || strings.Contains(problemContent(t, failed), "SQL") || strings.Contains(problemContent(t, failed), "receipt") {
 		t.Fatal("late person journal failure exposed internal details", failed.Body.String())
 	}
 	value := decodeResponse[access.PersonMetadata](t, f.admin.request("GET", path, nil, "", ""), 200)
@@ -241,7 +241,7 @@ func TestPeopleHTTPRejectsAnonymousHiddenInactiveAndBrokenQueryContexts(t *testi
 	}
 	failed := f.reader.request("GET", "/api/v2/people", nil, "", "")
 	expectCode(t, failed, 500, "INTERNAL_ERROR")
-	if strings.Contains(failed.Body.String(), "people") || strings.Contains(failed.Body.String(), "SELECT") || strings.Contains(failed.Body.String(), "/private") {
+	if strings.Contains(problemContent(t, failed), "people") || strings.Contains(problemContent(t, failed), "SELECT") || strings.Contains(problemContent(t, failed), "/private") {
 		t.Fatal("person query failure exposed internal schema/path", failed.Body.String())
 	}
 	if _, err := f.db.Exec(`UPDATE users SET active=0 WHERE id=?`, f.user.ID); err != nil {
