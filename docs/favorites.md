@@ -2,9 +2,9 @@
 
 All paths below use `/api/v2`. These authenticated metadata endpoints manage only
 the calling account's favorite membership and collection assignment. `GET /albums`
-can filter the calling account's favorites across collections. Collection management,
-collection-specific browsing, hierarchy UI and offline operation replay remain
-separate required features.
+can filter the calling account's favorites across collections; personal collections
+can be created, listed and renamed. Collection deletion, collection-specific album
+browsing, hierarchy UI and offline operation replay remain separate required features.
 
 ## Read your state
 
@@ -37,6 +37,39 @@ The endpoint never probes or writes source files, grants original downloads or
 offline access, changes group policy, or advances a shared album/rating version.
 Another account's favorite and shared gallery edits do not invalidate your personal
 favorite validator. Private changes do not appear as fabricated public counts.
+
+## Create and rename collections
+
+`POST /favorite-collections` accepts `{"name":"Trips"}` for a root, or
+`{"name":"Summer","parent_id":"owned-parent-id"}` for a child. A null or omitted
+`parent_id` means root; it does **not** create or represent the default/unfiled
+favorite assignment. Send an `Idempotency-Key`, the configured HTTPS `Origin`, and
+current CSRF token. A successful `201` includes a `Location`, strong `ETag`, and
+`{id,parent_id,name,created_at,updated_at,version}`. It does not include album IDs
+or counts. Missing and foreign parents both return `404`.
+
+`GET /favorite-collections` lists all owned folders in album-independent ID order;
+`?root=true` lists roots, and `?parent_id=<owned-id>` lists direct children. Use
+only one selector, with optional `limit` and `cursor`; default limit is 30, maximum 100. Root accepts exactly `true`, and the parent ID must be nonempty and literal.
+Other users' folders remain invisible, including to administrators. Cursors bind
+account, scope, path and filters; these are live pages, not offline snapshots.
+`GET /favorite-collections/{id}` retrieves one owned folder and its personal ETag.
+
+To rename, send `PATCH /favorite-collections/{id}` with `{"name":"New name"}`,
+the folder's exact `ETag` in `If-Match`, a new `Idempotency-Key`, `Origin`, and CSRF
+token. Parent, children and assigned favorites do not change. Names are trimmed,
+1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters.
+Exact SQLite binary names are unique **within the same parent**; case and Unicode
+composition variants remain distinct. This is not NFKC/full-fold search. Duplicate
+names return `409 COLLECTION_NAME_TAKEN`; new stale versions return
+`409 VERSION_CONFLICT`. An identical name is a no-op except for its receipt.
+
+A matching create retry returns its historical owned result without recreating a
+subsequently removed folder or parent. Rename retries require current ownership and
+return their historical result without restoring an obsolete name. Use GET to
+refresh state. Real creation/rename co-commits private folder change/outbox, audit
+and actor receipt; no album, favorite, grant or scope is changed. Collection deletion,
+reparenting via API, and collection-specific album listing are not yet implemented.
 
 ## Filter visible albums
 
@@ -131,8 +164,11 @@ new database or silently repairing it.
 
 Subsequent SQL writes cannot change a collection's ID or owner, introduce a foreign
 parent or cycle, or use `OR REPLACE` to erase an existing identity/name. Nested
-account deletion still uses the existing same-statement foreign-key cascades. This
-schema preparation does not add collection-management or collection-deletion APIs.
+account deletion still uses the existing same-statement foreign-key cascades. The
+supported API currently creates, lists, reads and renames folders; it does not yet
+provide collection deletion or reparenting. Legacy stored IDs, names and times that
+are outside the public DTO's bounds fail safely rather than being trimmed, replaced
+or exposed as misleading data.
 
 A referenced collection cannot disappear through implicit `ON DELETE SET NULL`.
 Collection-deletion management must explicitly choose moving favorites to default
@@ -143,6 +179,6 @@ shared gallery rows. Use deactivation instead when private metadata must remain
 recoverable. Scan no-ops, source outages and provable folder moves retain private
 favorite identity/state, just as they retain ratings and shared preferences.
 
-This is not a favorite browsing screen, collection creator, offline sync contract,
+This is not a favorite browsing screen, collection-deletion API, offline sync contract,
 download grant or complete library acceptance. Those product features remain
 required before release.

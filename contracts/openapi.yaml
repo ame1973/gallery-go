@@ -1384,6 +1384,87 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Album' }
         default: { $ref: '#/components/responses/Problem' }
+  /favorite-collections:
+    get:
+      operationId: listFavoriteCollections
+      summary: List only the current account's favorite collections
+      description: Default album-independent ID keysets list all owned folders. Supply parent_id for direct children of an existing owned parent, or root=true for roots; the selectors cannot be combined. Missing and foreign parents both return 404. Default limit 30, maximum 100; cursors bind the current account, scope and filters. Folder metadata contains no album IDs or hidden counts. These are live pages, not offline snapshots or content grants.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - name: parent_id
+          in: query
+          description: Exact owned parent ID for direct children only; cannot be combined with root.
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: root
+          in: query
+          description: Use exactly true for root folders; omit to include all owned folders. Cannot be combined with parent_id.
+          schema: { type: boolean, enum: [true] }
+      responses:
+        '200':
+          description: Bounded current-account collection page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoriteCollectionPage' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createFavoriteCollection
+      summary: Create a personal root or child favorite collection
+      description: Requires a current session, same-origin CSRF and actor-bound Idempotency-Key. Omitted or null parent_id creates a root; otherwise the exact parent must belong to the current account. Missing and foreign parents return the same 404. Trimmed exact binary names are unique per parent, not normalized-search identities. The folder, private change/outbox, audit and receipt co-commit. An identical retry returns the historical result even if the folder or parent was later removed; it never restores either. No album membership, grant, source or shared gallery metadata changes.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FavoriteCollectionCreateRequest' }
+      responses:
+        '201':
+          description: Created collection or its historical actor-receipted result.
+          headers:
+            ETag: { $ref: '#/components/headers/ResourceETag' }
+            Location: { $ref: '#/components/headers/CreatedLocation' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoriteCollection' }
+        default: { $ref: '#/components/responses/Problem' }
+  /favorite-collections/{collection_id}:
+    parameters:
+      - { name: collection_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getFavoriteCollection
+      summary: Read one current-account collection with its strong ETag
+      description: Only the current account's collection is visible, including to administrators. Foreign and missing IDs both return 404. The ETag binds both account and collection; no query or target-account selector is accepted.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/FavoriteCollection' }
+        default: { $ref: '#/components/responses/Problem' }
+    patch:
+      operationId: renameFavoriteCollection
+      summary: Rename an owned favorite collection
+      description: Requires fresh ownership, an account/collection-bound If-Match, actor-bound Idempotency-Key and same-origin CSRF. Name is the sole writable field; children, parent and favorite memberships do not change. Real changes increment the personal version and atomically publish a private change/outbox, audit and receipt. No-op stores only a receipt. A matching retry returns its historical result without restoring an old name, but still requires current ownership. New stale requests conflict. No source I/O, grant or shared album change occurs.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NameRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/FavoriteCollection' }
+        default: { $ref: '#/components/responses/Problem' }
   /favorites/{album_id}:
     parameters:
       - { $ref: '#/components/parameters/AlbumID' }
@@ -1399,7 +1480,7 @@ paths:
     put:
       operationId: setAlbumFavorite
       summary: Favorite an album or replace this account's collection assignment
-      description: Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection management, hierarchy/UI and offline sync are not enabled by these endpoints.
+      description: Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection deletion, hierarchy/UI and offline sync are not enabled by these endpoints.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1760,6 +1841,13 @@ components:
       required: true
       schema: { type: string, minLength: 43, maxLength: 43 }
   responses:
+    FavoriteCollection:
+      description: Current or historical actor-receipted private collection metadata. GET refreshes current state; the ETag binds account and collection.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FavoriteCollection' }
     AlbumFavorite:
       description: Current or historical actor-receipted personal favorite, retained revision and server update instant. GET refreshes current state. Its validator binds account and album, not the shared album version.
       headers:
@@ -2905,6 +2993,48 @@ components:
           uniqueItems: true
           items: { type: string, minLength: 1, maxLength: 64 }
           description: Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant.
+    FavoriteCollection:
+      type: object
+      additionalProperties: false
+      required: [id, parent_id, name, created_at, updated_at, version]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64 }
+        parent_id:
+          type: [string, 'null']
+          description: The same-account parent, or null for a root. The default/unfiled album assignment is not a synthetic folder.
+        name:
+          type: string
+          description: Exact binary validated name; same-parent duplicates conflict but case/Unicode variants remain distinct.
+        created_at: { type: string, format: date-time }
+        updated_at:
+          {
+            type: string,
+            format: date-time,
+            description: Monotonic server UTC-millisecond metadata update time.,
+          }
+        version: { type: integer, format: int64, minimum: 1 }
+    FavoriteCollectionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/FavoriteCollection' } }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    FavoriteCollectionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Trimmed name of 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters.
+        parent_id:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 64
+          description: Omit or use null for a root. Otherwise an exact owned ID, at most 64 UTF-8 bytes, without surrounding whitespace, slashes, controls or format characters.
     AlbumFavorite:
       type: object
       additionalProperties: false

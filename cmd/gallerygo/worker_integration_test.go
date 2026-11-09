@@ -812,6 +812,12 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if err := db.QueryRow(`SELECT COUNT(*),COUNT(CASE WHEN favorited=0 AND collection_id IS NULL AND version=3 THEN 1 END) FROM favorites`).Scan(&favorites, &clearedFavorites); err != nil || favorites != 1 || clearedFavorites != 1 {
 				t.Fatal("closed-process/reopened database lost the native favorite clear revision", favorites, clearedFavorites, err)
 			}
+			var folders, hierarchy int
+			if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM favorite_collections),
+ (SELECT COUNT(*) FROM favorite_collections child JOIN favorite_collections parent ON parent.id=child.parent_id AND parent.user_id=child.user_id
+ WHERE parent.name='Native renamed' AND parent.version=2 AND child.name='Native child' AND child.version=1)`).Scan(&folders, &hierarchy); err != nil || folders != 2 || hierarchy != 1 {
+				t.Fatal("closed-process/reopened database lost personal collection hierarchy", folders, hierarchy, err)
+			}
 			var ratings, clearedRatings int
 			if err := db.QueryRow(`SELECT COUNT(*),COUNT(CASE WHEN rating IS NULL AND version=3 THEN 1 END) FROM ratings`).Scan(&ratings, &clearedRatings); err != nil || ratings != 1 || clearedRatings != 1 {
 				t.Fatal("closed-process/reopened database lost the native rating clear revision", ratings, clearedRatings, err)

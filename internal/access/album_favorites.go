@@ -56,18 +56,23 @@ func (s *Service) AlbumFavorite(ctx context.Context, current auth.Session, id st
 	return albumFavoriteInTx(ctx, tx, actor.ID, id)
 }
 
+func validFavoriteCollectionID(id string) bool {
+	if id == "" || len(id) > 64 || !utf8.ValidString(id) || strings.TrimSpace(id) != id || strings.ContainsAny(id, "/\\") {
+		return false
+	}
+	for _, character := range id {
+		if unicode.IsControl(character) || unicode.Is(unicode.Cf, character) {
+			return false
+		}
+	}
+	return true
+}
+
 // SetAlbumFavorite changes only the current actor's membership/assignment. It does
 // not edit shared gallery versions, grant content access or replay without visibility.
 func (s *Service) SetAlbumFavorite(ctx context.Context, current auth.Session, id string, version int64, favorited bool, collection *string, key string) (AlbumFavorite, error) {
-	if collection != nil {
-		if !favorited || *collection == "" || len(*collection) > 64 || !utf8.ValidString(*collection) || strings.TrimSpace(*collection) != *collection || strings.ContainsAny(*collection, "/\\") {
-			return AlbumFavorite{}, ErrAlbumFavorite
-		}
-		for _, character := range *collection {
-			if unicode.IsControl(character) || unicode.Is(unicode.Cf, character) {
-				return AlbumFavorite{}, ErrAlbumFavorite
-			}
-		}
+	if collection != nil && (!favorited || !validFavoriteCollectionID(*collection)) {
+		return AlbumFavorite{}, ErrAlbumFavorite
 	}
 	tx, actor, err := s.readTx(ctx, current)
 	if err != nil {

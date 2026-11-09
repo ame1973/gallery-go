@@ -229,11 +229,15 @@ Only implemented endpoints are advertised:
   Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
+- `GET/POST /api/v2/favorite-collections` and
+  `GET/PATCH /api/v2/favorite-collections/{collection_id}`: create/list/read/rename
+  only the current account's root or nested folders, with strong personal validators,
+  private events and receipts. Folder deletion and collection-specific album browsing
+  remain pending. See [favorite API](docs/favorites.md#create-and-rename-collections).
 - `GET/PUT/DELETE /api/v2/favorites/{album_id}`: only the current account's favorite,
   default/owned collection assignment, independent preconditions and historical
   receipts. Clear retains its revision; no shared gallery version or grant changes.
-  Collection management/collection-specific browsing, hierarchy UI and offline
-  sync remain pending. See [favorite API](docs/favorites.md).
+  Hierarchy UI and offline sync remain pending. See [favorite API](docs/favorites.md).
 - `GET/PUT/DELETE /api/v2/albums/{album_id}/rating`: the current account's one
   integer vote, independent strong preconditions and replay receipts. Clear keeps
   its revision; real changes and account deletion atomically refresh the shared
@@ -347,9 +351,12 @@ IDs/overrides, historical receipt replay and unchanged source bytes/modes. Priva
 rating and favorite commands survive that same scan/move and independent metadata
 changes; clear/replay keep distinct revisions and never restore an old state. After
 all application/worker handles close, a fresh SQLite pool verifies both retained
-clear revisions. These checks do not implement favorite collection management or
-UI. Person label commands then verify the same invariants through another real folder move,
-including retained album/media IDs and clearing to the new indexed creator label.
+clear revisions and the independently created root/child collection hierarchy.
+The same compiled HTTPS path verifies collection create/rename, direct-child pages,
+historical create replay and retained folder versions across scans. Collection
+deletion and the browsing UI remain pending. Person label commands then verify the
+same invariants through another real folder move, including retained album/media IDs
+and clearing to the new indexed creator label.
 Tag catalog commands then verify versioned create/rename/no-op/delete, duplicate
 label conflict, historical receipts versus current GET, anonymous denial and unchanged
 account scope through the same compiled HTTPS entrypoints. Album-tag replacement

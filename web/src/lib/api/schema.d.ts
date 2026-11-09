@@ -1144,6 +1144,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/favorite-collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List only the current account's favorite collections
+         * @description Default album-independent ID keysets list all owned folders. Supply parent_id for direct children of an existing owned parent, or root=true for roots; the selectors cannot be combined. Missing and foreign parents both return 404. Default limit 30, maximum 100; cursors bind the current account, scope and filters. Folder metadata contains no album IDs or hidden counts. These are live pages, not offline snapshots or content grants.
+         */
+        get: operations["listFavoriteCollections"];
+        put?: never;
+        /**
+         * Create a personal root or child favorite collection
+         * @description Requires a current session, same-origin CSRF and actor-bound Idempotency-Key. Omitted or null parent_id creates a root; otherwise the exact parent must belong to the current account. Missing and foreign parents return the same 404. Trimmed exact binary names are unique per parent, not normalized-search identities. The folder, private change/outbox, audit and receipt co-commit. An identical retry returns the historical result even if the folder or parent was later removed; it never restores either. No album membership, grant, source or shared gallery metadata changes.
+         */
+        post: operations["createFavoriteCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/favorite-collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one current-account collection with its strong ETag
+         * @description Only the current account's collection is visible, including to administrators. Foreign and missing IDs both return 404. The ETag binds both account and collection; no query or target-account selector is accepted.
+         */
+        get: operations["getFavoriteCollection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename an owned favorite collection
+         * @description Requires fresh ownership, an account/collection-bound If-Match, actor-bound Idempotency-Key and same-origin CSRF. Name is the sole writable field; children, parent and favorite memberships do not change. Real changes increment the personal version and atomically publish a private change/outbox, audit and receipt. No-op stores only a receipt. A matching retry returns its historical result without restoring an old name, but still requires current ownership. New stale requests conflict. No source I/O, grant or shared album change occurs.
+         */
+        patch: operations["renameFavoriteCollection"];
+        trace?: never;
+    };
     "/favorites/{album_id}": {
         parameters: {
             query?: never;
@@ -1160,7 +1210,7 @@ export interface paths {
         get: operations["getAlbumFavorite"];
         /**
          * Favorite an album or replace this account's collection assignment
-         * @description Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection management, hierarchy/UI and offline sync are not enabled by these endpoints.
+         * @description Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection deletion, hierarchy/UI and offline sync are not enabled by these endpoints.
          */
         put: operations["setAlbumFavorite"];
         post?: never;
@@ -1885,6 +1935,33 @@ export interface components {
             /** @description Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant. */
             group_ids: string[];
         };
+        FavoriteCollection: {
+            id: string;
+            /** @description The same-account parent, or null for a root. The default/unfiled album assignment is not a synthetic folder. */
+            parent_id: string | null;
+            /** @description Exact binary validated name; same-parent duplicates conflict but case/Unicode variants remain distinct. */
+            name: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Monotonic server UTC-millisecond metadata update time.
+             */
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        FavoriteCollectionPage: {
+            items: components["schemas"]["FavoriteCollection"][];
+            next_cursor: string | null;
+            has_more: boolean;
+        };
+        FavoriteCollectionCreateRequest: {
+            /** @description Trimmed name of 1..100 Unicode characters and at most 400 UTF-8 bytes, without control characters. */
+            name: string;
+            /** @description Omit or use null for a root. Otherwise an exact owned ID, at most 64 UTF-8 bytes, without surrounding whitespace, slashes, controls or format characters. */
+            parent_id?: string | null;
+        };
         AlbumFavorite: {
             album_id: string;
             /** @description Only the current account's membership. False means never-favorited or cleared, distinguished by version/time. */
@@ -2062,6 +2139,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted private collection metadata. GET refreshes current state; the ETag binds account and collection. */
+        FavoriteCollection: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["FavoriteCollection"];
+            };
+        };
         /** @description Current or historical actor-receipted personal favorite, retained revision and server update instant. GET refreshes current state. Its validator binds account and album, not the shared album version. */
         AlbumFavorite: {
             headers: {
@@ -4277,6 +4364,110 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Album"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listFavoriteCollections: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor bound to the current account scope, collection, and canonical filter/sort parameters. Account-policy or filter changes invalidate old cursors. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Exact owned parent ID for direct children only; cannot be combined with root. */
+                parent_id?: string;
+                /** @description Use exactly true for root folders; omit to include all owned folders. Cannot be combined with parent_id. */
+                root?: true;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded current-account collection page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteCollectionPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createFavoriteCollection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteCollectionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created collection or its historical actor-receipted result. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ResourceETag"];
+                    Location: components["headers"]["CreatedLocation"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteCollection"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getFavoriteCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["FavoriteCollection"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    renameFavoriteCollection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["FavoriteCollection"];
             default: components["responses"]["Problem"];
         };
     };

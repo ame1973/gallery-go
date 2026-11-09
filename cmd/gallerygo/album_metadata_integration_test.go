@@ -45,6 +45,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	if selected == "" {
 		t.Fatal("compiled album cover fixture is missing")
 	}
+	folders := beginCompiledFavoriteCollections(t, api)
 	rating, ratingHeaders := beginCompiledAlbumRating(t, api, albumID)
 	favorite, favoriteHeaders := beginCompiledAlbumFavorite(t, api, albumID)
 	path := "/admin/albums/" + albumID
@@ -103,6 +104,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	assertCompiledAlbumOrder(t, api, source.ID, 1)
 	finishCompiledAlbumRating(t, api, rating, ratingHeaders)
 	finishCompiledAlbumFavorite(t, api, favorite, favoriteHeaders)
+	finishCompiledFavoriteCollections(t, api, folders)
 	anonymous := *api.client
 	anonymous.Jar = nil
 	(&scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}).request("GET", path, nil, 401, nil)

@@ -27,12 +27,18 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
-- Migration0028 prepares owner-private collection hierarchies without exposing a
+- Owner-private favorite collection create/list/detail/rename APIs support root and
+  same-owner nested folders, bounded parent/root keysets, personal strong validators,
+  actor receipts and atomic private change/outbox/audit. Name identity remains exact
+  binary after validation. Album assignments and shared grants are unchanged;
+  explicit collection deletion and collection-specific album listing remain pending.
+
+- Migration0028 prepares owner-private collection hierarchies independently of the
   management API. It preserves existing folders/favorites, adds version/time and
   owner-parent keysets, and fails atomically on foreign parents, cycles or invalid
   IDs. Database guards prevent owner/ID changes, cycles and destructive REPLACE;
-  nested account cascades remain intact. Collection CRUD and explicit deletion
-  choices are still required.
+  nested account cascades remain intact. Explicit deletion and reparenting through
+  the API are still required.
 
 - Optional personal `favorite=true|false` album selection intersects current grants,
   library/source/creator/tag filters and existing keyset orders. True spans owned
@@ -46,8 +52,8 @@ All notable public changes are recorded here. This project uses Conventional Com
   and receipt without altering shared album versions, averages or grants. The
   migration preserves valid memberships/times and enforces same-account collection
   FKs, explicit collection removal and atomic nested account cascades. Source
-  outage/scan/move preservation remains required. Collection management/browsing,
-  hierarchy, favorite UI and offline sync remain separate required work.
+  outage/scan/move preservation remains required. Collection deletion/specific
+  album browsing, hierarchy UI and offline sync remain separate required work.
 
 - Indexed high-rating album keysets (`top_rated`) using the same native SQL mean
   as public cards, DESC mean/ID ties and unrated last. Complete public float keys

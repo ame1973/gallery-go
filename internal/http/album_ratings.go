@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-// Bind personal validators to both account and album, not just equal revisions.
+// Bind personal validators to both account and resource, not just equal revisions.
 func personalResourceID(r *http.Request, id string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(currentSession(r).User.ID + "\x00" + id))
 }
