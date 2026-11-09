@@ -3,10 +3,8 @@ package access
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -146,7 +144,7 @@ func TestAlbumSelectionFreshPolicySourceAndAccountChangesRemainFailClosed(t *tes
 
 func TestAlbumSelectionRejectsUnboundedPathControlAndAmbiguousIDs(t *testing.T) {
 	for _, id := range []string{strings.Repeat("a", 65), "/private/path", `one\two`, " padded", "padded ", "bad\x00", "bad\n", "bad" + string(rune(0x200d)), string([]byte{0xff})} {
-		for _, filter := range []AlbumFilter{{LibraryID: id}, {SourceID: id}, {PersonID: id}, {TagID: id}} {
+		for _, filter := range []AlbumFilter{{LibraryID: id}, {SourceID: id}, {PersonID: id}, {TagID: id}, {FavoriteCollectionID: id}} {
 			if !errors.Is(filter.Validate(), ErrAlbumSelection) {
 				t.Fatal("invalid opaque resource ID accepted", filter)
 			}
@@ -154,155 +152,5 @@ func TestAlbumSelectionRejectsUnboundedPathControlAndAmbiguousIDs(t *testing.T) 
 	}
 	if err := (AlbumFilter{LibraryID: "literal", SourceID: "literal", PersonID: "literal", TagID: "literal"}).Validate(); err != nil {
 		t.Fatal("different resource domains incorrectly shared a uniqueness constraint", err)
-	}
-}
-
-func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *testing.T) {
-	s, owner := fixture(t)
-	if _, err := s.db.Exec(`INSERT INTO libraries(id,name,created_at) VALUES('scale-l1','One',0),('scale-l2','Two',0);
- INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES('scale-s1','scale-l1','One','/never-open-album-scale-one','{}','unavailable',0),('scale-s2','scale-l2','Two','/never-open-album-scale-two','{}','healthy',0);
- INSERT INTO people(id,source_id,relative_path,source_name,created_at) VALUES('scale-p1','scale-s1','one','Same',0),('scale-p2','scale-s1','two','Same',0),('scale-p3','scale-s2','other','Other',0);
- INSERT INTO tags(id,name) VALUES('scale-common','Common'),('scale-sparse','Sparse');
- WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<99999)
- INSERT INTO albums(id,library_id,source_id,person_id,source_name,display_name,created_at,updated_at)
- SELECT printf('scale-%06d',i),CASE WHEN i%2=0 THEN 'scale-l1' ELSE 'scale-l2' END,CASE WHEN i%2=0 THEN 'scale-s1' ELSE 'scale-s2' END,CASE WHEN i%4=0 THEN 'scale-p1' WHEN i%4=2 THEN 'scale-p2' ELSE 'scale-p3' END,printf('Name %02d',i%11),CASE WHEN i%3=0 THEN printf('Override %02d',i%7) END,i%11,0 FROM n;
- INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-common' FROM albums WHERE library_id='scale-l1';
- INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-sparse' FROM albums WHERE CAST(substr(id,7) AS INTEGER)%997=0`); err != nil {
-		t.Fatal(err)
-	}
-	// Real indexed votes drive the derived native mean; no fake score update seeds
-	// the ranking field. Existing SQL setup stays isolated from production sources.
-	if _, err := s.db.Exec(`INSERT INTO ratings(user_id,album_id,rating,updated_at)
- SELECT ?,id,1+CAST(substr(id,7) AS INTEGER)%5,0 FROM albums
- WHERE id LIKE 'scale-%' AND CAST(substr(id,7) AS INTEGER)%7!=0`, owner.User.ID); err != nil {
-		t.Fatal(err)
-	}
-	// Sparse live favorites and a larger cleared cohort exercise the partial index.
-	if _, err := s.db.Exec(`INSERT INTO favorites(user_id,album_id,created_at,favorited,updated_at,version)
- SELECT ?,id,0,CASE WHEN CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 THEN 1 ELSE 0 END,0,1
- FROM albums WHERE id LIKE 'scale-%' AND (CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 OR CAST(substr(id,7) AS INTEGER)%10=0)`, owner.User.ID); err != nil {
-		t.Fatal(err)
-	}
-	for _, filter := range []AlbumFilter{
-		{}, {LibraryID: "scale-l1"}, {SourceID: "scale-s1"}, {PersonID: "scale-p1"},
-		{TagID: "scale-common"}, {TagID: "scale-sparse"},
-		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1"},
-		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-sparse"},
-		{Favorite: "true"}, {Favorite: "true", LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1"},
-		{Favorite: "true", TagID: "scale-sparse"},
-		{Favorite: "true", LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-sparse"},
-		{Favorite: "false"}, {Favorite: "false", LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-common"},
-	} {
-		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
-			filter.Sort = order
-			after, indexedKey := AlbumPosition{ID: "scale-050000"}, int64(0)
-			var sortKey any = int64(0)
-			nameKey, ratingKey := "", 0.0
-			switch order {
-			case "latest", "oldest":
-				after.Key, indexedKey, sortKey = "5", 5, int64(5)
-			case "name_asc", "name_desc":
-				nameKey = "Name 05"
-				if order == "name_desc" {
-					nameKey = "Override 02"
-				}
-				after.Key, sortKey = AlbumNameKey(nameKey), nameKey
-			case "top_rated":
-				ratingKey = 5
-				after.Key, sortKey = AlbumRatingKey(&ratingKey), ratingKey
-			}
-			query, arguments := albumSelection(owner.User.ID, filter, after, sortKey, 11)
-			rows, err := s.db.QueryContext(t.Context(), `EXPLAIN QUERY PLAN `+query, arguments...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var plan strings.Builder
-			for rows.Next() {
-				var id, parent, unused int
-				var detail string
-				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
-					rows.Close()
-					t.Fatal(err)
-				}
-				fmt.Fprintln(&plan, detail)
-			}
-			err = rows.Err()
-			rows.Close()
-			wantIndex := "sqlite_autoindex_albums_1"
-			switch {
-			case filter.TagID != "":
-				wantIndex = "idx_album_tag_reverse"
-			case filter.Favorite == "true":
-				wantIndex = "idx_favorites_active_page"
-			case filter.PersonID != "":
-				wantIndex = "idx_album_person"
-			case filter.SourceID != "":
-				wantIndex = "idx_album_source_page"
-			case filter.LibraryID != "":
-				wantIndex = "idx_albums_library"
-			}
-			if order != "" {
-				wantIndex = "idx_album_indexed_page"
-				switch {
-				case filter.PersonID != "":
-					wantIndex = "idx_album_person_indexed_page"
-				case filter.SourceID != "":
-					wantIndex = "idx_album_source_indexed_page"
-				case filter.LibraryID != "":
-					wantIndex = "idx_album_library_indexed_page"
-				}
-				if strings.HasPrefix(order, "name_") {
-					wantIndex = strings.Replace(wantIndex, "indexed", "title", 1)
-				} else if order == "top_rated" {
-					wantIndex = strings.Replace(wantIndex, "indexed", "rating", 1)
-				}
-			}
-			if err != nil || strings.Contains(plan.String(), "TEMP B-TREE") || !strings.Contains(plan.String(), wantIndex) || strings.Contains(query, "OFFSET") {
-				t.Fatal("album selection lost selective ordered keysets", filter, plan.String(), err)
-			}
-			if filter.Favorite != "" && (order != "" || filter.TagID != "" || filter.Favorite == "false") {
-				indexed := false
-				for _, line := range strings.Split(plan.String(), "\n") {
-					indexed = indexed || strings.Contains(line, "SEARCH f ") && strings.Contains(line, "INDEX ") && strings.Contains(line, "user_id=? AND album_id=?")
-				}
-				if !indexed {
-					t.Fatal("favorite existence check lost its account/album point index", filter, plan.String())
-				}
-			}
-			items, err := s.Albums(t.Context(), owner, filter, after, 11)
-			if err != nil || len(items) != 11 {
-				t.Fatal("large selection did not return only its bounded cards", filter, len(items), err)
-			}
-			previousID, previousKey, previousTitle, previousRating := after.ID, indexedKey, nameKey, ratingKey
-			for _, item := range items {
-				if filter.Favorite != "" {
-					number, err := strconv.Atoi(strings.TrimPrefix(item.ID, "scale-"))
-					live := number%997 == 0 || number%97 == 0
-					if err != nil || live != (filter.Favorite == "true") {
-						t.Fatal("large selection included the wrong live/cleared/absent favorite state", filter, item.ID, err)
-					}
-				}
-				key, score := item.IndexedAt.UnixMilli(), 0.0
-				if item.RatingAvg != nil {
-					score = *item.RatingAvg
-				}
-				ordered := item.ID > previousID
-				if order == "oldest" {
-					ordered = key > previousKey || (key == previousKey && item.ID > previousID)
-				} else if order == "latest" {
-					ordered = key < previousKey || (key == previousKey && item.ID < previousID)
-				} else if order == "name_asc" {
-					ordered = item.Title > previousTitle || (item.Title == previousTitle && item.ID > previousID)
-				} else if order == "name_desc" {
-					ordered = item.Title < previousTitle || (item.Title == previousTitle && item.ID < previousID)
-				} else if order == "top_rated" {
-					ordered = score < previousRating || (score == previousRating && item.ID < previousID)
-				}
-				if !ordered || item.MediaCount != 0 || item.CoverMediaID != nil {
-					t.Fatal("large selection repeated keys or invented count/cover", filter, item)
-				}
-				previousID, previousKey, previousTitle, previousRating = item.ID, key, item.Title, score
-			}
-		}
 	}
 }

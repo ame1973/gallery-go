@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrAlbumSelection = errors.New("use bounded literal resource IDs, favorite=true or false, and a supported album sort")
+	ErrAlbumSelection = errors.New("use bounded literal resource IDs, compatible favorite filters, and a supported album sort")
 	ErrAlbumPosition  = errors.New("the album page position is invalid for this sort")
 )
 
@@ -25,15 +25,20 @@ const MaxAlbumTitleBytes = 4096
 // Selectors intersect already-visible albums; they never grant access or resolve
 // a global private catalog label. Empty fields mean omitted, not an HTTP value.
 type AlbumFilter struct {
-	LibraryID string
-	SourceID  string
-	PersonID  string
-	TagID     string
-	Favorite  string
-	Sort      string
+	LibraryID            string
+	SourceID             string
+	PersonID             string
+	TagID                string
+	Favorite             string
+	FavoriteCollectionID string
+	FavoriteUnfiled      bool
+	Sort                 string
 }
 
 func (filter AlbumFilter) Validate() error {
+	if filter.FavoriteCollectionID != "" && filter.FavoriteUnfiled || filter.Favorite == "false" && (filter.FavoriteCollectionID != "" || filter.FavoriteUnfiled) {
+		return ErrAlbumSelection
+	}
 	switch filter.Favorite {
 	case "", "true", "false":
 	default:
@@ -44,7 +49,7 @@ func (filter AlbumFilter) Validate() error {
 	default:
 		return ErrAlbumSelection
 	}
-	for _, id := range []string{filter.LibraryID, filter.SourceID, filter.PersonID, filter.TagID} {
+	for _, id := range []string{filter.LibraryID, filter.SourceID, filter.PersonID, filter.TagID, filter.FavoriteCollectionID} {
 		if len(id) > 64 || !utf8.ValidString(id) || strings.TrimSpace(id) != id || strings.ContainsAny(id, "/\\") {
 			return ErrAlbumSelection
 		}
@@ -120,10 +125,14 @@ func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
 	return value, nil
 }
 
-func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sortKey any, limit int) (string, []any) {
+// AlbumSelectionQuery builds SQL for an already validated selection and position.
+// Callers must authenticate the viewer and validate filter, position and limit;
+// constructing a query does not itself authorize the supplied viewer ID.
+func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition, sortKey any, limit int) (string, []any) {
 	from, key, relations := ` FROM albums a`, `a.id`, albumRelations
 	named, rated := strings.HasPrefix(filter.Sort, "name_"), filter.Sort == "top_rated"
-	favoriteDriver := filter.Favorite == "true" && filter.Sort == "" && filter.TagID == ""
+	folderFilter := filter.FavoriteCollectionID != "" || filter.FavoriteUnfiled
+	favoriteDriver := (filter.Favorite == "true" || folderFilter) && filter.Sort == "" && filter.TagID == ""
 	if filter.Sort != "" {
 		orderIndex, prefix := "indexed", ""
 		if named {
@@ -151,8 +160,12 @@ func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sort
 			relations = ` CROSS JOIN libraries l ON l.id=a.library_id`
 			key = `selection.album_id`
 		case favoriteDriver:
-			// The partial index excludes cleared revisions while preserving ID order.
-			from = ` FROM favorites selection INDEXED BY idx_favorites_active_page CROSS JOIN albums a ON a.id=selection.album_id`
+			// Both partial indexes exclude cleared revisions while preserving ID order.
+			index := "idx_favorites_active_page"
+			if folderFilter {
+				index = "idx_favorites_live_collection_page"
+			}
+			from = ` FROM favorites selection INDEXED BY ` + index + ` CROSS JOIN albums a ON a.id=selection.album_id`
 			relations = ` CROSS JOIN libraries l ON l.id=a.library_id`
 			key = `selection.album_id`
 		case filter.PersonID != "":
@@ -173,15 +186,27 @@ func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sort
 		}
 		arguments = append(arguments, filter.TagID)
 	}
-	if filter.Favorite != "" {
-		switch {
-		case favoriteDriver:
-			query += ` AND selection.user_id=? AND selection.favorited=1`
-		case filter.Favorite == "true":
-			query += ` AND EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1)`
-		default:
-			query += ` AND NOT EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1)`
+	if favoriteDriver {
+		query += ` AND selection.user_id=? AND selection.favorited=1`
+		arguments = append(arguments, viewer)
+		if filter.FavoriteCollectionID != "" {
+			query += ` AND selection.collection_id=?`
+			arguments = append(arguments, filter.FavoriteCollectionID)
+		} else if filter.FavoriteUnfiled {
+			query += ` AND selection.collection_id IS NULL`
 		}
+	} else if filter.Favorite == "true" || folderFilter {
+		query += ` AND EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1`
+		arguments = append(arguments, viewer)
+		if filter.FavoriteCollectionID != "" {
+			query += ` AND f.collection_id=?`
+			arguments = append(arguments, filter.FavoriteCollectionID)
+		} else if filter.FavoriteUnfiled {
+			query += ` AND f.collection_id IS NULL`
+		}
+		query += `)`
+	} else if filter.Favorite == "false" {
+		query += ` AND NOT EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1)`
 		arguments = append(arguments, viewer)
 	}
 	if filter.LibraryID != "" {
@@ -236,7 +261,7 @@ func (s *Service) Albums(ctx context.Context, current auth.Session, filter Album
 		return nil, err
 	}
 	defer tx.Rollback()
-	query, arguments := albumSelection(viewer.ID, filter, after, sortKey, limit)
+	query, arguments := AlbumSelectionQuery(viewer.ID, filter, after, sortKey, limit)
 	rows, err := tx.QueryContext(ctx, query, arguments...)
 	if err != nil {
 		return nil, err

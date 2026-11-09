@@ -808,9 +808,12 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(err)
 			}
 			defer db.Close()
-			var favorites, clearedFavorites int
-			if err := db.QueryRow(`SELECT COUNT(*),COUNT(CASE WHEN favorited=0 AND collection_id IS NULL AND version=3 THEN 1 END) FROM favorites`).Scan(&favorites, &clearedFavorites); err != nil || favorites != 1 || clearedFavorites != 1 {
+			var favorites, clearedFavorites, liveDefault int
+			if err := db.QueryRow(`SELECT COUNT(*),COUNT(CASE WHEN favorited=0 AND collection_id IS NULL AND version=4 THEN 1 END) FROM favorites`).Scan(&favorites, &clearedFavorites); err != nil || favorites != 1 || clearedFavorites != 1 {
 				t.Fatal("closed-process/reopened database lost the native favorite clear revision", favorites, clearedFavorites, err)
+			}
+			if err := db.QueryRow(`SELECT COUNT(*) FROM favorites INDEXED BY idx_favorites_live_collection_page WHERE favorited=1 AND collection_id IS NULL`).Scan(&liveDefault); err != nil || liveDefault != 0 {
+				t.Fatal("reopened live default index included the cleared favorite", liveDefault, err)
 			}
 			var folders, hierarchy int
 			if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM favorite_collections),

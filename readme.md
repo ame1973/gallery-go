@@ -222,7 +222,8 @@ Only implemented endpoints are advertised:
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
   SQL-authorized metadata, counts, and covers. Album collections intersect exact
   `library_id`, `source_id`, `person_id`, `tag_id` and optional current-account
-  `favorite=true|false` selectors before indexed ID or first-indexed-time/literal-title/
+  `favorite=true|false`, `favorite_collection_id` or `favorite_unfiled=true` selectors
+  before indexed ID or first-indexed-time/literal-title/
   native-rating keyset pagination (`latest`, `oldest`, `name_asc`, `name_desc`,
   `top_rated`). High-rating order uses the native mean, not
   weighted vote counts, with unrated cards last and complete frozen score keys.
@@ -232,8 +233,9 @@ Only implemented endpoints are advertised:
 - `GET/POST /api/v2/favorite-collections` and
   `GET/PATCH /api/v2/favorite-collections/{collection_id}`: create/list/read/rename
   only the current account's root or nested folders, with strong personal validators,
-  private events and receipts. Folder deletion and collection-specific album browsing
-  remain pending. See [favorite API](docs/favorites.md#create-and-rename-collections).
+  private events and receipts. Direct folder album selection excludes descendants;
+  folder deletion and recursive subtree browsing remain pending. See
+  [favorite API](docs/favorites.md#create-and-rename-collections).
 - `GET/PUT/DELETE /api/v2/favorites/{album_id}`: only the current account's favorite,
   default/owned collection assignment, independent preconditions and historical
   receipts. Clear retains its revision; no shared gallery version or grant changes.

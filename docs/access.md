@@ -164,11 +164,16 @@ normalization. Repeated, empty and unknown parameters return `400 INVALID_FILTER
 unsupported `q` and `sort` values are not silently ignored. Use the documented
 `limit` and `cursor` pagination parameters. `favorite=true` selects only the current
 account's live favorites across all collections; `favorite=false` includes cleared
-and never-favorited albums. Omission does not restrict favorite state. Other users'
-favorites have no effect; only lowercase `true` and `false` are accepted. See
+and never-favorited albums. Omitting all favorite filters does not restrict favorite
+state. Other users'
+favorites have no effect; only lowercase `true` and `false` are accepted. Add
+`favorite_collection_id=<id>` for live favorites assigned directly to one owned
+folder, excluding descendants, or `favorite_unfiled=true` for live default favorites.
+These two selectors are mutually exclusive, imply `favorite=true` and reject
+`favorite=false`. A missing or foreign collection ID returns an empty page. See
 [personal favorites](favorites.md#filter-visible-albums) for live-page boundaries.
 
-Unknown, unauthorized, inactive and contradictory selectors return `200` with
+Unknown, unauthorized, inactive and contradictory resource selectors return `200` with
 `{"items":[],"next_cursor":null,"has_more":false}`. This does not disclose whether
 any global private resource exists. In contrast, single-resource routes and
 `GET /people/{person_id}/albums` retain their missing/hidden-parent 404 behavior.

@@ -2,9 +2,10 @@
 
 All paths below use `/api/v2`. These authenticated metadata endpoints manage only
 the calling account's favorite membership and collection assignment. `GET /albums`
-can filter the calling account's favorites across collections; personal collections
-can be created, listed and renamed. Collection deletion, collection-specific album
-browsing, hierarchy UI and offline operation replay remain separate required features.
+can filter the calling account's favorites across collections, within one direct
+collection or in default/unfiled. Personal collections can be created, listed and
+renamed. Collection deletion, recursive subtree browsing, hierarchy UI and offline
+operation replay remain separate required features.
 
 ## Read your state
 
@@ -69,28 +70,35 @@ subsequently removed folder or parent. Rename retries require current ownership 
 return their historical result without restoring an obsolete name. Use GET to
 refresh state. Real creation/rename co-commits private folder change/outbox, audit
 and actor receipt; no album, favorite, grant or scope is changed. Collection deletion,
-reparenting via API, and collection-specific album listing are not yet implemented.
+reparenting via API, and recursive subtree album listing are not yet implemented.
 
 ## Filter visible albums
 
 `GET /albums?favorite=true` selects the current account's live favorites across all
 owned collections, including default/unfiled. `favorite=false` selects visible
-albums never favorited or subsequently cleared. Omit the parameter for all visible
-albums; use exactly lowercase `true` or `false` once. No account ID is accepted.
+albums never favorited or subsequently cleared. Omit all favorite filters for all
+visible albums; use exactly lowercase `true` or `false` once. No account ID is accepted.
+
+`GET /albums?favorite_collection_id=<id>` selects only live favorites assigned
+directly to that owned collection; it does **not** include child collections. A
+missing or another account's collection ID returns the same empty authorized page.
+`GET /albums?favorite_unfiled=true` selects live favorites assigned to the default,
+not cleared or never-favorited albums. Use exactly `true` once. The two selectors
+are mutually exclusive and cannot be combined with `favorite=false`; either may
+be combined with `favorite=true`.
 
 The filter can be combined with the documented library, source, creator and tag
 selectors, all supported album sort orders, and bounded keyset pagination. Current
 session and shared album visibility still apply before pagination; favorites never
-grant access. A partial index skips cleared rows for favorite-only ID-order pages;
-other orders use their existing indexes and an account/album point lookup. Sparse
-filters may still traverse candidates in the requested order.
+grant access. Partial indexes skip cleared rows for favorite-only or direct-folder
+ID-order pages; other orders use their existing indexes and an account/album point
+lookup. Sparse filters may still traverse candidates in the requested order.
 
 Cursors bind the account, scope, exact filters and sort. A continuation uses its
 frozen position but reads current membership and access; adding, clearing or moving
 items can change which records appear between live pages. These are not immutable
 offline snapshots. Historical mutation receipts do not reactivate a cleared favorite.
-For collection-specific browsing and complete text/media search, the remaining
-collection and search APIs are still required.
+Recursive subtree browsing and complete text/media search remain required.
 
 ## Favorite, move or clear
 
@@ -168,7 +176,9 @@ account deletion still uses the existing same-statement foreign-key cascades. Th
 supported API currently creates, lists, reads and renames folders; it does not yet
 provide collection deletion or reparenting. Legacy stored IDs, names and times that
 are outside the public DTO's bounds fail safely rather than being trimmed, replaced
-or exposed as misleading data.
+or exposed as misleading data. Migration0029 adds only a partial live-favorite
+index for direct-folder and default ID pages; it does not rewrite personal rows or
+historical events.
 
 A referenced collection cannot disappear through implicit `ON DELETE SET NULL`.
 Collection-deletion management must explicitly choose moving favorites to default

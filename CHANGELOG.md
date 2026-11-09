@@ -27,11 +27,18 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Direct personal favorite-folder and default/unfiled album selectors intersect
+  current grants, existing filters and keyset orders. Folder IDs select direct live
+  assignments only; cleared rows are excluded, and foreign/missing folders yield
+  empty pages. Migration0029 adds a partial collection/album index without rewriting
+  data. Recursive subtree browsing, collection deletion, UI and offline sync remain
+  pending; selections never grant media access.
+
 - Owner-private favorite collection create/list/detail/rename APIs support root and
   same-owner nested folders, bounded parent/root keysets, personal strong validators,
   actor receipts and atomic private change/outbox/audit. Name identity remains exact
   binary after validation. Album assignments and shared grants are unchanged;
-  explicit collection deletion and collection-specific album listing remain pending.
+  explicit collection deletion and recursive subtree album listing remain pending.
 
 - Migration0028 prepares owner-private collection hierarchies independently of the
   management API. It preserves existing folders/favorites, adds version/time and
@@ -44,7 +51,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   library/source/creator/tag filters and existing keyset orders. True spans owned
   collections; false includes cleared and never-favorited albums. An index-only
   migration excludes tombstones from sparse favorite ID pages. Pages remain live;
-  collection-specific browsing and full normalized search are not yet implemented.
+  recursive subtree browsing and full normalized search are not yet implemented.
 
 - Personal favorite GET/PUT/DELETE APIs with independent account/album validators,
   default or exact owned collection assignment, retained clear revisions and
@@ -52,8 +59,8 @@ All notable public changes are recorded here. This project uses Conventional Com
   and receipt without altering shared album versions, averages or grants. The
   migration preserves valid memberships/times and enforces same-account collection
   FKs, explicit collection removal and atomic nested account cascades. Source
-  outage/scan/move preservation remains required. Collection deletion/specific
-  album browsing, hierarchy UI and offline sync remain separate required work.
+  outage/scan/move preservation remains required. Collection deletion, recursive
+  subtree browsing, hierarchy UI and offline sync remain separate required work.
 
 - Indexed high-rating album keysets (`top_rated`) using the same native SQL mean
   as public cards, DESC mean/ID ties and unrated last. Complete public float keys

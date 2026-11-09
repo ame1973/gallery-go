@@ -102,16 +102,83 @@ test('HTTPS personal collections keep owned hierarchy, receipts and favorite ass
     const initial = await context.request.get(favoritePath);
     expect(initial.status()).toBe(200);
     const albumBefore = await (await context.request.get(`/api/v2/albums/${album}`)).json();
+    const favoriteKey = randomUUID();
     const favorite = await context.request.put(favoritePath, {
       headers: {
         ...ownHeaders,
         'If-Match': initial.headers().etag!,
-        'Idempotency-Key': randomUUID(),
+        'Idempotency-Key': favoriteKey,
       },
       data: { collection_id: child.id },
     });
     expect(favorite.status()).toBe(200);
     expect(await favorite.json()).toMatchObject({ favorited: true, collection_id: child.id });
+    const albums = async (selector: Record<string, string>) => {
+      const query = new URLSearchParams({ library_id: `${prefix}-library`, ...selector });
+      const response = await context.request.get(`/api/v2/albums?${query}`);
+      expect(response.status()).toBe(200);
+      expect(response.headers()['cache-control']).toBe('private, no-store');
+      return (await response.json()) as components['schemas']['AlbumPage'];
+    };
+    expect(
+      (await albums({ favorite_collection_id: child.id })).items.map((item) => item.id),
+    ).toEqual([album]);
+    expect((await albums({ favorite_collection_id: root.id })).items).toEqual([]);
+    expect((await albums({ favorite_unfiled: 'true' })).items).toEqual([]);
+    expect((await albums({ favorite_collection_id: randomUUID() })).items).toEqual([]);
+    expect(
+      (
+        (await (
+          await api.get(`/api/v2/albums?favorite_collection_id=${child.id}`)
+        ).json()) as components['schemas']['AlbumPage']
+      ).items,
+    ).toEqual([]);
+    expect(
+      (
+        await context.request.get(
+          `/api/v2/albums?favorite=false&favorite_collection_id=${child.id}`,
+        )
+      ).status(),
+    ).toBe(400);
+    const moved = await context.request.put(favoritePath, {
+      headers: {
+        ...ownHeaders,
+        'If-Match': favorite.headers().etag!,
+        'Idempotency-Key': randomUUID(),
+      },
+      data: { collection_id: null },
+    });
+    expect(moved.status()).toBe(200);
+    expect((await albums({ favorite_collection_id: child.id })).items).toEqual([]);
+    expect((await albums({ favorite_unfiled: 'true' })).items.map((item) => item.id)).toEqual([
+      album,
+    ]);
+    const returned = await context.request.put(favoritePath, {
+      headers: {
+        ...ownHeaders,
+        'If-Match': moved.headers().etag!,
+        'Idempotency-Key': randomUUID(),
+      },
+      data: { collection_id: child.id },
+    });
+    expect(returned.status()).toBe(200);
+    const favoriteReplay = await context.request.put(favoritePath, {
+      headers: {
+        ...ownHeaders,
+        'If-Match': initial.headers().etag!,
+        'Idempotency-Key': favoriteKey,
+      },
+      data: { collection_id: child.id },
+    });
+    expect(favoriteReplay.status()).toBe(200);
+    expect(await favoriteReplay.json()).toMatchObject({ version: 2, collection_id: child.id });
+    expect(await (await context.request.get(favoritePath)).json()).toMatchObject({
+      version: 4,
+      collection_id: child.id,
+    });
+    expect(
+      (await albums({ favorite_collection_id: child.id })).items.map((item) => item.id),
+    ).toEqual([album]);
     const renameKey = randomUUID();
     const renamed = await context.request.patch(`${path}/${root.id}`, {
       headers: {
@@ -153,6 +220,8 @@ test('HTTPS personal collections keep owned hierarchy, receipts and favorite ass
       ).status(),
     ).toBe(204);
     expect((await context.request.get(favoritePath)).status()).toBe(404);
+    expect((await albums({ favorite_collection_id: child.id })).items).toEqual([]);
+    expect((await albums({ favorite_unfiled: 'true' })).items).toEqual([]);
     expect((await context.request.get(`${path}/${root.id}`)).status()).toBe(200);
     expect((await context.request.get(`${path}?${continued}`)).status()).toBe(400);
   } finally {

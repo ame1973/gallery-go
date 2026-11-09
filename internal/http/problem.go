@@ -103,7 +103,7 @@ func requestError(w http.ResponseWriter, err error) {
 	case errors.Is(err, access.ErrAlbumMetadata), errors.Is(err, access.ErrAlbumCover), errors.Is(err, access.ErrPersonMetadata), errors.Is(err, access.ErrAlbumRating), errors.Is(err, access.ErrAlbumFavorite):
 		problem(w, 422, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, access.ErrAlbumSelection):
-		problem(w, 400, "INVALID_FILTER", "Use bounded literal resource IDs, favorite=true or false, and a supported album order.")
+		problem(w, 400, "INVALID_FILTER", "Use bounded resource IDs, compatible favorite filters, and a supported album order.")
 	case errors.Is(err, access.ErrAlbumPosition):
 		problem(w, 400, "INVALID_CURSOR", "The album page position is invalid for this sort.")
 	case errors.Is(err, media.ErrMediaSelection):

@@ -158,7 +158,7 @@ func TestAlbumSelectionHTTPFreshResourceStateAndInternalFailureStayPrivate(t *te
 func TestAlbumSelectionHTTPRejectsUnsupportedSelectorsAndPreservesAnonymousDenial(t *testing.T) {
 	f := albumSelectionHTTPFixture(t)
 	const path = "/api/v2/albums"
-	for _, field := range []string{"library_id", "source_id", "person_id", "tag_id"} {
+	for _, field := range []string{"library_id", "source_id", "person_id", "tag_id", "favorite_collection_id"} {
 		for _, value := range []string{"", " padded", "/private/path", "bad\x00", strings.Repeat("a", 65), "bad" + string(rune(0x200d)), string([]byte{0xff})} {
 			expectCode(t, f.reader.request("GET", path+"?"+url.Values{field: {value}}.Encode(), nil, "", ""), 400, "INVALID_FILTER")
 		}

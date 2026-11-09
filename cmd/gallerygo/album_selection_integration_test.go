@@ -22,10 +22,13 @@ type compiledAlbumPage struct {
 func assertCompiledAlbumSelection(t *testing.T, api *scanHTTPSClient, filter access.AlbumFilter, wantIDs ...string) {
 	t.Helper()
 	query := url.Values{"limit": {"100"}}
-	for key, value := range map[string]string{"library_id": filter.LibraryID, "source_id": filter.SourceID, "person_id": filter.PersonID, "tag_id": filter.TagID, "favorite": filter.Favorite, "sort": filter.Sort} {
+	for key, value := range map[string]string{"library_id": filter.LibraryID, "source_id": filter.SourceID, "person_id": filter.PersonID, "tag_id": filter.TagID, "favorite": filter.Favorite, "favorite_collection_id": filter.FavoriteCollectionID, "sort": filter.Sort} {
 		if value != "" {
 			query.Set(key, value)
 		}
+	}
+	if filter.FavoriteUnfiled {
+		query.Set("favorite_unfiled", "true")
 	}
 	var page compiledAlbumPage
 	headers := api.request("GET", "/albums?"+query.Encode(), nil, 200, &page)
