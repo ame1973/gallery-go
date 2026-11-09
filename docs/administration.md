@@ -113,7 +113,9 @@ No passwords, cookie capabilities, or CSRF tokens enter audit or change payloads
 `DELETE /admin/users/{user_id}` requires its current `If-Match` and returns `204`.
 This permanently removes the account, sessions, memberships, favorites, favorite
 collections, ratings, playlists, playback progress, and its sync-operation
-receipts. Deleting your own account expires your cookie.
+receipts. Both live and cleared [favorite revisions](favorites.md) are removed;
+nested collection ownership cascades atomically without changing another account's
+favorites or shared gallery versions. Deleting your own account expires your cookie.
 
 Security audit history remains. Shared libraries, albums, media metadata, and
 source files are **not** deleted. Each removed live rating refreshes the album's

@@ -11,8 +11,8 @@ test:
 check:
 	python3 -I tests/integration/repository_hygiene.py
 	go vet ./...
-	# Keep production-strength bcrypt; allow the full race matrix to finish.
-	go test -timeout=15m -race -cover ./...
+	# Keep production-strength bcrypt and avoid overlapping isolated package binaries.
+	go test -p 1 -timeout=15m -race -cover ./...
 	test -z "$$(gofmt -l cmd internal migrations contracts)"
 	pnpm api:check
 	pnpm typecheck

@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Run isolated Go package binaries sequentially during the race/coverage gate,
+  retaining all tests, test-internal concurrency, production bcrypt and the
+  15-minute per-package timeout. Allow enough total CI job time for the growing
+  full suite and the remaining frontend/browser checks; no production budget changes.
+
 - Prepare codec exec arguments/environment and seccomp filters before budgets, then
   use an allocation-free private Linux handoff for AS/filter/exec. Quiesce only the
   short-lived Go helper, avoiding GC/profiling allocations under codec limits.
@@ -21,6 +26,15 @@ All notable public changes are recorded here. This project uses Conventional Com
   fail-closed. A real writer-timeout regression covers atomic completion.
 
 ### Added
+
+- Personal favorite GET/PUT/DELETE APIs with independent account/album validators,
+  default or exact owned collection assignment, retained clear revisions and
+  historical actor receipts. Real changes co-commit private change/outbox, audit
+  and receipt without altering shared album versions, averages or grants. The
+  migration preserves valid memberships/times and enforces same-account collection
+  FKs, explicit collection removal and atomic nested account cascades. Source
+  outage/scan/move preservation remains required. Collection management/browsing,
+  hierarchy, favorite filters/UI and offline sync remain separate required work.
 
 - Indexed high-rating album keysets (`top_rated`) using the same native SQL mean
   as public cards, DESC mean/ID ties and unrated last. Complete public float keys

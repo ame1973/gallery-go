@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-// Bind the validator to both account and album, not just equal vote revisions.
-func ratingResourceID(r *http.Request, id string) string {
+// Bind personal validators to both account and album, not just equal revisions.
+func personalResourceID(r *http.Request, id string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(currentSession(r).User.ID + "\x00" + id))
 }
 
@@ -21,7 +21,7 @@ func (a authorization) albumRating(w http.ResponseWriter, r *http.Request) {
 		requestError(w, err)
 		return
 	}
-	w.Header().Set("ETag", resourceETag("rating", ratingResourceID(r, id), value.Version))
+	w.Header().Set("ETag", resourceETag("rating", personalResourceID(r, id), value.Version))
 	writeJSON(w, http.StatusOK, value)
 }
 
@@ -31,7 +31,7 @@ func (a authorization) setAlbumRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("album_id")
-	version, ok := resourcePrecondition(w, r, "rating", ratingResourceID(r, id))
+	version, ok := resourcePrecondition(w, r, "rating", personalResourceID(r, id))
 	if !ok {
 		return
 	}
@@ -56,6 +56,6 @@ func (a authorization) setAlbumRating(w http.ResponseWriter, r *http.Request) {
 		requestError(w, err)
 		return
 	}
-	w.Header().Set("ETag", resourceETag("rating", ratingResourceID(r, id), value.Version))
+	w.Header().Set("ETag", resourceETag("rating", personalResourceID(r, id), value.Version))
 	writeJSON(w, http.StatusOK, value)
 }

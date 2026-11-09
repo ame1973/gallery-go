@@ -85,6 +85,9 @@ DELETE, and group/policy PUT:
   rating changes and removal of an account's live votes also advance this shared
   version and journal the current average. Personal rating writes use a separate
   account-and-album-bound ETag; see [rating rules](ratings.md).
+- [Personal favorites](favorites.md) use a separate account-and-album-bound
+  favorite validator. They do not change shared album versions, rating averages,
+  authorization scopes or another account's favorite state.
 
 Missing preconditions return 428; malformed/foreign/weak/list/wildcard tags return
 400; stale versions return `409 VERSION_CONFLICT`. A lost PUT response should be

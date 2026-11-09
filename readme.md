@@ -228,6 +228,11 @@ Only implemented endpoints are advertised:
   Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
+- `GET/PUT/DELETE /api/v2/favorites/{album_id}`: only the current account's favorite,
+  default/owned collection assignment, independent preconditions and historical
+  receipts. Clear retains its revision; no shared gallery version or grant changes.
+  Collection management/browsing, favorite filters/UI and offline sync remain
+  pending. See [favorite API](docs/favorites.md).
 - `GET/PUT/DELETE /api/v2/albums/{album_id}/rating`: the current account's one
   integer vote, independent strong preconditions and replay receipts. Clear keeps
   its revision; real changes and account deletion atomically refresh the shared
@@ -294,6 +299,11 @@ execution. See [codec sandbox boundaries](docs/codec-sandbox.md). The scan inspe
 uses it for controlled AVIF/TIFF/video metadata; the current container still does
 not bundle these external tools.
 
+The Go race/coverage step runs isolated package binaries one at a time, with a
+15-minute limit per package. It does not change bcrypt strength, test-internal
+concurrency or production settings. The full suite can take substantial time;
+the CI test job has a two-hour overall limit for all Go, frontend and browser gates.
+
 ```sh
 make check                         # Go race/vet, formatting, API, TS, lint, unit tests, build
 CGO_ENABLED=0 go test ./...         # Pure-Go deployment path
@@ -332,8 +342,12 @@ A real versioned source-mapping update then creates an indexed Person; all four
 modes verify list/detail/album counts, stable no-op metadata, anonymous denial and
 mount-marker loss without source probing or recreation. Versioned display/cover
 commands then verify no-op scan retention, a provable whole-folder move with stable
-IDs/overrides, historical receipt replay and unchanged source bytes/modes. Person
-label commands then verify the same invariants through another real folder move,
+IDs/overrides, historical receipt replay and unchanged source bytes/modes. Private
+rating and favorite commands survive that same scan/move and independent metadata
+changes; clear/replay keep distinct revisions and never restore an old state. After
+all application/worker handles close, a fresh SQLite pool verifies both retained
+clear revisions. These checks do not implement favorite collection management or
+UI. Person label commands then verify the same invariants through another real folder move,
 including retained album/media IDs and clearing to the new indexed creator label.
 Tag catalog commands then verify versioned create/rename/no-op/delete, duplicate
 label conflict, historical receipts versus current GET, anonymous denial and unchanged

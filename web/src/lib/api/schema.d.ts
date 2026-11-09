@@ -1144,6 +1144,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/favorites/{album_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read only the current account's versioned album favorite
+         * @description Requires a fresh session and shared album visibility, including for administrators. No query parameters or target account selectors. Never-favorited albums return favorited=false, collection_id=null, updated_at=null and version=1; cleared memberships retain their personal version/time. The strong ETag binds account and album independently of shared metadata or other accounts. Hidden, inactive, inconsistent and missing albums return 404. No source files are probed and no content/offline permission is granted.
+         */
+        get: operations["getAlbumFavorite"];
+        /**
+         * Favorite an album or replace this account's collection assignment
+         * @description Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection management, favorite album selection, hierarchy/UI and offline sync are not enabled by these endpoints.
+         */
+        put: operations["setAlbumFavorite"];
+        post?: never;
+        /**
+         * Clear only the current account's favorite and retain its revision
+         * @description Requires an empty body, personal favorite If-Match, actor-bound Idempotency-Key and same-origin CSRF. A real clear stores favorited=false and collection_id=null with a new personal revision/private delete event. Repeated clear is a no-op with a receipt. Fresh session/album visibility is mandatory even for historical replay; replay never restores a subsequently cleared or reassigned favorite. Other accounts, collections, shared gallery rows and source files are not changed.
+         */
+        delete: operations["deleteAlbumFavorite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/albums/{album_id}/rating": {
         parameters: {
             query?: never;
@@ -1855,6 +1885,27 @@ export interface components {
             /** @description Empty with restricted=true denies all regular users; restricted=false requires an empty array and still needs a library grant. */
             group_ids: string[];
         };
+        AlbumFavorite: {
+            album_id: string;
+            /** @description Only the current account's membership. False means never-favorited or cleared, distinguished by version/time. */
+            favorited: boolean;
+            /** @description This account's exact collection ID; null for default/unfiled or a cleared membership. Never another account's collection. */
+            collection_id: string | null;
+            /**
+             * Format: date-time
+             * @description Monotonic server UTC-millisecond membership/assignment update time, or null for an unmaterialized initial state.
+             */
+            updated_at: string | null;
+            /**
+             * Format: int64
+             * @description Personal account/album favorite revision, retained after clear and independent of shared metadata or other accounts.
+             */
+            version: number;
+        };
+        AlbumFavoriteRequest: {
+            /** @description Omit or use null for default/unfiled. Otherwise a literal existing owned collection ID, at most 64 UTF-8 bytes, no padding, slash, backslash, control or format characters. */
+            collection_id?: string | null;
+        };
         AlbumRating: {
             album_id: string;
             /** @description Only the calling account's vote; null means never-rated or cleared, distinguished by the retained version/time. */
@@ -2011,6 +2062,16 @@ export interface components {
         };
     };
     responses: {
+        /** @description Current or historical actor-receipted personal favorite, retained revision and server update instant. GET refreshes current state. Its validator binds account and album, not the shared album version. */
+        AlbumFavorite: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumFavorite"];
+            };
+        };
         /** @description Current or historical actor-receipted personal vote, retained revision and server update instant. GET refreshes current state. The validator binds both account and album, not the shared album version. */
         AlbumRating: {
             headers: {
@@ -4214,6 +4275,71 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Album"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAlbumFavorite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumFavorite"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setAlbumFavorite: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlbumFavoriteRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AlbumFavorite"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteAlbumFavorite: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumFavorite"];
             default: components["responses"]["Problem"];
         };
     };
