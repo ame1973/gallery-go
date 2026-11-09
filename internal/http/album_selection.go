@@ -22,14 +22,15 @@ func albumSelectionPage(w http.ResponseWriter, r *http.Request) (pagination, acc
 		if key == "limit" || key == "cursor" {
 			continue
 		}
-		if (key != "library_id" && key != "source_id" && key != "person_id" && key != "tag_id" && key != "sort") || len(values) != 1 || values[0] == "" {
-			problem(w, 400, "INVALID_FILTER", "Use one nonempty value for each resource ID or supported time/name/rating sort, with limit and cursor.")
+		if (key != "library_id" && key != "source_id" && key != "person_id" && key != "tag_id" && key != "favorite" && key != "sort") || len(values) != 1 || values[0] == "" {
+			problem(w, 400, "INVALID_FILTER", "Use one nonempty value for each resource ID, favorite filter or supported sort, with limit and cursor.")
 			return page, access.AlbumFilter{}, false
 		}
 	}
 	filter := access.AlbumFilter{
 		LibraryID: page.query.Get("library_id"), SourceID: page.query.Get("source_id"),
-		PersonID: page.query.Get("person_id"), TagID: page.query.Get("tag_id"), Sort: page.query.Get("sort"),
+		PersonID: page.query.Get("person_id"), TagID: page.query.Get("tag_id"),
+		Favorite: page.query.Get("favorite"), Sort: page.query.Get("sort"),
 	}
 	if err := filter.Validate(); err != nil {
 		requestError(w, err)

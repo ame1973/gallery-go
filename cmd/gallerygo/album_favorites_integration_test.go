@@ -19,11 +19,17 @@ func beginCompiledAlbumFavorite(t *testing.T, api *scanHTTPSClient, id string) (
 	}
 	var albumBefore, albumAfter access.Album
 	api.request("GET", "/albums/"+id, nil, 200, &albumBefore)
+	assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "false"}, id)
+	assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "true"})
 	headers := http.Header{"If-Match": {before.Get("ETag")}, "Idempotency-Key": {store.NewID()}}
 	var changed access.AlbumFavorite
 	response := api.request("PUT", path, map[string]any{}, 200, &changed, headers)
 	if changed.AlbumID != id || !changed.Favorited || changed.Version != 2 || changed.CollectionID != nil || changed.UpdatedAt == nil {
 		t.Fatal("compiled favorite did not publish its private state", changed)
+	}
+	for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
+		assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "true", Sort: order}, id)
+		assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "false", Sort: order})
 	}
 	var noop access.AlbumFavorite
 	api.request("PUT", path, map[string]any{"collection_id": nil}, 200, &noop, http.Header{"If-Match": {response.Get("ETag")}})
@@ -44,6 +50,7 @@ func finishCompiledAlbumFavorite(t *testing.T, api *scanHTTPSClient, before acce
 	}
 	var albumBefore, albumAfter access.Album
 	api.request("GET", "/albums/"+before.AlbumID, nil, 200, &albumBefore)
+	assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "true"}, before.AlbumID)
 	var cleared access.AlbumFavorite
 	clearHeaders := api.request("DELETE", path, nil, 200, &cleared, http.Header{"If-Match": {currentHeaders.Get("ETag")}})
 	if cleared.Favorited || cleared.Version != 3 || cleared.CollectionID != nil || cleared.UpdatedAt == nil {
@@ -58,6 +65,8 @@ func finishCompiledAlbumFavorite(t *testing.T, api *scanHTTPSClient, before acce
 	if !reflect.DeepEqual(current, cleared) {
 		t.Fatal("compiled replay restored a cleared membership", current, cleared)
 	}
+	assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "true"})
+	assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "false"}, before.AlbumID)
 	api.request("PUT", path, map[string]any{}, 409, nil, http.Header{"If-Match": {original.Get("If-Match")}})
 	api.request("DELETE", path, nil, 200, &current, http.Header{"If-Match": {clearHeaders.Get("ETag")}})
 	api.request("GET", "/albums/"+before.AlbumID, nil, 200, &albumAfter)

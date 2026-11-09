@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -176,11 +177,21 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
  WHERE id LIKE 'scale-%' AND CAST(substr(id,7) AS INTEGER)%7!=0`, owner.User.ID); err != nil {
 		t.Fatal(err)
 	}
+	// Sparse live favorites and a larger cleared cohort exercise the partial index.
+	if _, err := s.db.Exec(`INSERT INTO favorites(user_id,album_id,created_at,favorited,updated_at,version)
+ SELECT ?,id,0,CASE WHEN CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 THEN 1 ELSE 0 END,0,1
+ FROM albums WHERE id LIKE 'scale-%' AND (CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 OR CAST(substr(id,7) AS INTEGER)%10=0)`, owner.User.ID); err != nil {
+		t.Fatal(err)
+	}
 	for _, filter := range []AlbumFilter{
 		{}, {LibraryID: "scale-l1"}, {SourceID: "scale-s1"}, {PersonID: "scale-p1"},
 		{TagID: "scale-common"}, {TagID: "scale-sparse"},
 		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1"},
 		{LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-sparse"},
+		{Favorite: "true"}, {Favorite: "true", LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1"},
+		{Favorite: "true", TagID: "scale-sparse"},
+		{Favorite: "true", LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-sparse"},
+		{Favorite: "false"}, {Favorite: "false", LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-common"},
 	} {
 		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
 			filter.Sort = order
@@ -221,6 +232,8 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			switch {
 			case filter.TagID != "":
 				wantIndex = "idx_album_tag_reverse"
+			case filter.Favorite == "true":
+				wantIndex = "idx_favorites_active_page"
 			case filter.PersonID != "":
 				wantIndex = "idx_album_person"
 			case filter.SourceID != "":
@@ -247,12 +260,28 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			if err != nil || strings.Contains(plan.String(), "TEMP B-TREE") || !strings.Contains(plan.String(), wantIndex) || strings.Contains(query, "OFFSET") {
 				t.Fatal("album selection lost selective ordered keysets", filter, plan.String(), err)
 			}
+			if filter.Favorite != "" && (order != "" || filter.TagID != "" || filter.Favorite == "false") {
+				indexed := false
+				for _, line := range strings.Split(plan.String(), "\n") {
+					indexed = indexed || strings.Contains(line, "SEARCH f ") && strings.Contains(line, "INDEX ") && strings.Contains(line, "user_id=? AND album_id=?")
+				}
+				if !indexed {
+					t.Fatal("favorite existence check lost its account/album point index", filter, plan.String())
+				}
+			}
 			items, err := s.Albums(t.Context(), owner, filter, after, 11)
 			if err != nil || len(items) != 11 {
 				t.Fatal("large selection did not return only its bounded cards", filter, len(items), err)
 			}
 			previousID, previousKey, previousTitle, previousRating := after.ID, indexedKey, nameKey, ratingKey
 			for _, item := range items {
+				if filter.Favorite != "" {
+					number, err := strconv.Atoi(strings.TrimPrefix(item.ID, "scale-"))
+					live := number%997 == 0 || number%97 == 0
+					if err != nil || live != (filter.Favorite == "true") {
+						t.Fatal("large selection included the wrong live/cleared/absent favorite state", filter, item.ID, err)
+					}
+				}
 				key, score := item.IndexedAt.UnixMilli(), 0.0
 				if item.RatingAvg != nil {
 					score = *item.RatingAvg

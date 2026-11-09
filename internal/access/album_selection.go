@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrAlbumSelection = errors.New("use bounded literal resource IDs and a supported album sort")
+	ErrAlbumSelection = errors.New("use bounded literal resource IDs, favorite=true or false, and a supported album sort")
 	ErrAlbumPosition  = errors.New("the album page position is invalid for this sort")
 )
 
@@ -29,10 +29,16 @@ type AlbumFilter struct {
 	SourceID  string
 	PersonID  string
 	TagID     string
+	Favorite  string
 	Sort      string
 }
 
 func (filter AlbumFilter) Validate() error {
+	switch filter.Favorite {
+	case "", "true", "false":
+	default:
+		return ErrAlbumSelection
+	}
 	switch filter.Sort {
 	case "", "latest", "oldest", "name_asc", "name_desc", "top_rated":
 	default:
@@ -117,6 +123,7 @@ func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
 func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sortKey any, limit int) (string, []any) {
 	from, key, relations := ` FROM albums a`, `a.id`, albumRelations
 	named, rated := strings.HasPrefix(filter.Sort, "name_"), filter.Sort == "top_rated"
+	favoriteDriver := filter.Favorite == "true" && filter.Sort == "" && filter.TagID == ""
 	if filter.Sort != "" {
 		orderIndex, prefix := "indexed", ""
 		if named {
@@ -143,6 +150,11 @@ func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sort
 			from = ` FROM album_tags selection INDEXED BY idx_album_tag_reverse CROSS JOIN albums a ON a.id=selection.album_id`
 			relations = ` CROSS JOIN libraries l ON l.id=a.library_id`
 			key = `selection.album_id`
+		case favoriteDriver:
+			// The partial index excludes cleared revisions while preserving ID order.
+			from = ` FROM favorites selection INDEXED BY idx_favorites_active_page CROSS JOIN albums a ON a.id=selection.album_id`
+			relations = ` CROSS JOIN libraries l ON l.id=a.library_id`
+			key = `selection.album_id`
 		case filter.PersonID != "":
 			from += ` INDEXED BY idx_album_person`
 		case filter.SourceID != "":
@@ -160,6 +172,17 @@ func albumSelection(viewer string, filter AlbumFilter, after AlbumPosition, sort
 			query += ` AND EXISTS(SELECT 1 FROM album_tags selection WHERE selection.album_id=a.id AND selection.tag_id=?)`
 		}
 		arguments = append(arguments, filter.TagID)
+	}
+	if filter.Favorite != "" {
+		switch {
+		case favoriteDriver:
+			query += ` AND selection.user_id=? AND selection.favorited=1`
+		case filter.Favorite == "true":
+			query += ` AND EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1)`
+		default:
+			query += ` AND NOT EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1)`
+		}
+		arguments = append(arguments, viewer)
 	}
 	if filter.LibraryID != "" {
 		query += ` AND a.library_id=?`

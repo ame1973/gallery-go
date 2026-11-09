@@ -1,9 +1,10 @@
 # Personal album favorites
 
 All paths below use `/api/v2`. These authenticated metadata endpoints manage only
-the calling account's favorite membership and collection assignment. Collection
-management/browsing, favorite album filters, hierarchy UI and offline operation
-replay are separate required features and are not enabled by this API.
+the calling account's favorite membership and collection assignment. `GET /albums`
+can filter the calling account's favorites across collections. Collection management,
+collection-specific browsing, hierarchy UI and offline operation replay remain
+separate required features.
 
 ## Read your state
 
@@ -36,6 +37,27 @@ The endpoint never probes or writes source files, grants original downloads or
 offline access, changes group policy, or advances a shared album/rating version.
 Another account's favorite and shared gallery edits do not invalidate your personal
 favorite validator. Private changes do not appear as fabricated public counts.
+
+## Filter visible albums
+
+`GET /albums?favorite=true` selects the current account's live favorites across all
+owned collections, including default/unfiled. `favorite=false` selects visible
+albums never favorited or subsequently cleared. Omit the parameter for all visible
+albums; use exactly lowercase `true` or `false` once. No account ID is accepted.
+
+The filter can be combined with the documented library, source, creator and tag
+selectors, all supported album sort orders, and bounded keyset pagination. Current
+session and shared album visibility still apply before pagination; favorites never
+grant access. A partial index skips cleared rows for favorite-only ID-order pages;
+other orders use their existing indexes and an account/album point lookup. Sparse
+filters may still traverse candidates in the requested order.
+
+Cursors bind the account, scope, exact filters and sort. A continuation uses its
+frozen position but reads current membership and access; adding, clearing or moving
+items can change which records appear between live pages. These are not immutable
+offline snapshots. Historical mutation receipts do not reactivate a cleared favorite.
+For collection-specific browsing and complete text/media search, the remaining
+collection and search APIs are still required.
 
 ## Favorite, move or clear
 

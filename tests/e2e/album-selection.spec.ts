@@ -99,6 +99,79 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
       const result = await selected(selection);
       expect(result.items.map((album) => album.id)).toEqual(albums.slice(0, 2));
     }
+    const csrf = (await (await context.request.get('/api/v2/auth/csrf')).json()) as {
+      token: string;
+    };
+    const personalHeaders = { Origin: headers.Origin, 'X-CSRF-Token': csrf.token };
+    expect(await selected({ ...filter, favorite: true })).toEqual(empty);
+    expect((await selected({ ...filter, favorite: false })).items.map((album) => album.id)).toEqual(
+      albums.slice(0, 2),
+    );
+    const favoriteCommands: { id: string; tag: string; key: string }[] = [];
+    for (const id of albums.slice(0, 2)) {
+      const initial = await context.request.get(`/api/v2/favorites/${id}`);
+      expect(initial.status()).toBe(200);
+      const command = { id, tag: initial.headers().etag!, key: randomUUID() };
+      const changed = await context.request.put(`/api/v2/favorites/${id}`, {
+        headers: {
+          ...personalHeaders,
+          'If-Match': command.tag,
+          'Idempotency-Key': command.key,
+        },
+        data: {},
+      });
+      expect(changed.status()).toBe(200);
+      favoriteCommands.push(command);
+    }
+    const favoriteFirst = await selected({ ...filter, favorite: true, limit: 1 });
+    expect(favoriteFirst).toMatchObject({ items: [{ id: albums[0] }], has_more: true });
+    const favoriteLast = await selected({
+      ...filter,
+      favorite: true,
+      limit: 1,
+      cursor: favoriteFirst.next_cursor!,
+    });
+    expect(favoriteLast).toMatchObject({
+      items: [{ id: albums[1] }],
+      has_more: false,
+      next_cursor: null,
+    });
+    const wrongFavorite = await context.request.get(
+      `/api/v2/albums?${queryString({ ...filter, favorite: false, cursor: favoriteFirst.next_cursor! })}`,
+    );
+    expect(wrongFavorite.status()).toBe(400);
+    expect(await wrongFavorite.json()).toMatchObject({ code: 'INVALID_CURSOR' });
+    const adminFavorites = await api.get(
+      `/api/v2/albums?${queryString({ ...filter, favorite: true })}`,
+    );
+    expect(adminFavorites.status()).toBe(200);
+    expect(await adminFavorites.json()).toEqual(empty);
+    const secondFavorite = favoriteCommands[1]!;
+    const secondCurrent = await context.request.get(`/api/v2/favorites/${secondFavorite.id}`);
+    const cleared = await context.request.delete(`/api/v2/favorites/${secondFavorite.id}`, {
+      headers: {
+        ...personalHeaders,
+        'If-Match': secondCurrent.headers().etag!,
+        'Idempotency-Key': randomUUID(),
+      },
+    });
+    expect(cleared.status()).toBe(200);
+    const replay = await context.request.put(`/api/v2/favorites/${secondFavorite.id}`, {
+      headers: {
+        ...personalHeaders,
+        'If-Match': secondFavorite.tag,
+        'Idempotency-Key': secondFavorite.key,
+      },
+      data: {},
+    });
+    expect(replay.status()).toBe(200);
+    expect(await replay.json()).toMatchObject({ favorited: true, version: 2 });
+    expect(
+      await selected({ ...filter, favorite: true, cursor: favoriteFirst.next_cursor! }),
+    ).toEqual(empty);
+    expect((await selected({ ...filter, favorite: false })).items.map((album) => album.id)).toEqual(
+      [albums[1]],
+    );
     const first = await selected({ ...filter, limit: 1 });
     expect(first).toMatchObject({
       items: [{ id: albums[0], media_count: 2, cover_media_id: `${prefix}-media` }],
@@ -215,6 +288,12 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
       ).status(),
     ).toBe(204);
     expect(await selected(filter)).toEqual(empty);
+    expect(await selected({ ...filter, favorite: true })).toEqual(empty);
+    const staleFavorite = await context.request.get(
+      `/api/v2/albums?${queryString({ ...filter, favorite: true, cursor: favoriteFirst.next_cursor! })}`,
+    );
+    expect(staleFavorite.status()).toBe(400);
+    expect(await staleFavorite.json()).toMatchObject({ code: 'INVALID_CURSOR' });
     const stale = await context.request.get(
       `/api/v2/albums?${queryString({ ...filter, cursor: first.next_cursor! })}`,
     );

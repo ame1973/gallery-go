@@ -221,9 +221,10 @@ Only implemented endpoints are advertised:
   `/admin/albums/{album_id}/access`: fail-closed grants and additive restrictions.
 - `GET /api/v2/libraries`, `/libraries/{library_id}`, `/albums`, `/albums/{album_id}`:
   SQL-authorized metadata, counts, and covers. Album collections intersect exact
-  `library_id`, `source_id`, `person_id` and `tag_id` selectors before indexed ID or
-  first-indexed-time/literal-title/native-rating keyset pagination (`latest`, `oldest`,
-  `name_asc`, `name_desc`, `top_rated`). High-rating order uses the native mean, not
+  `library_id`, `source_id`, `person_id`, `tag_id` and optional current-account
+  `favorite=true|false` selectors before indexed ID or first-indexed-time/literal-title/
+  native-rating keyset pagination (`latest`, `oldest`, `name_asc`, `name_desc`,
+  `top_rated`). High-rating order uses the native mean, not
   weighted vote counts, with unrated cards last and complete frozen score keys.
   Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
@@ -231,8 +232,8 @@ Only implemented endpoints are advertised:
 - `GET/PUT/DELETE /api/v2/favorites/{album_id}`: only the current account's favorite,
   default/owned collection assignment, independent preconditions and historical
   receipts. Clear retains its revision; no shared gallery version or grant changes.
-  Collection management/browsing, favorite filters/UI and offline sync remain
-  pending. See [favorite API](docs/favorites.md).
+  Collection management/collection-specific browsing, hierarchy UI and offline
+  sync remain pending. See [favorite API](docs/favorites.md).
 - `GET/PUT/DELETE /api/v2/albums/{album_id}/rating`: the current account's one
   integer vote, independent strong preconditions and replay receipts. Clear keeps
   its revision; real changes and account deletion atomically refresh the shared

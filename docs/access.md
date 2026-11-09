@@ -144,7 +144,8 @@ CSRF tokens, session capabilities, or source filesystem paths.
 
 ### Album collection selection
 
-`GET /albums` accepts these optional **single exact IDs**, combined by AND:
+`GET /albums` accepts these optional **single exact IDs**, combined by AND with
+an optional personal favorite filter:
 
 | Parameter    | Selection                                                               |
 | ------------ | ----------------------------------------------------------------------- |
@@ -160,7 +161,11 @@ bytes, without leading/trailing whitespace, path separators, control or format
 characters. IDs are literal: no trimming, case folding, label resolution or Unicode
 normalization. Repeated, empty and unknown parameters return `400 INVALID_FILTER`;
 unsupported `q` and `sort` values are not silently ignored. Use the documented
-`limit` and `cursor` pagination parameters.
+`limit` and `cursor` pagination parameters. `favorite=true` selects only the current
+account's live favorites across all collections; `favorite=false` includes cleared
+and never-favorited albums. Omission does not restrict favorite state. Other users'
+favorites have no effect; only lowercase `true` and `false` are accepted. See
+[personal favorites](favorites.md#filter-visible-albums) for live-page boundaries.
 
 Unknown, unauthorized, inactive and contradictory selectors return `200` with
 `{"items":[],"next_cursor":null,"has_more":false}`. This does not disclose whether
