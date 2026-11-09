@@ -27,6 +27,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Migration0028 prepares owner-private collection hierarchies without exposing a
+  management API. It preserves existing folders/favorites, adds version/time and
+  owner-parent keysets, and fails atomically on foreign parents, cycles or invalid
+  IDs. Database guards prevent owner/ID changes, cycles and destructive REPLACE;
+  nested account cascades remain intact. Collection CRUD and explicit deletion
+  choices are still required.
+
 - Optional personal `favorite=true|false` album selection intersects current grants,
   library/source/creator/tag filters and existing keyset orders. True spans owned
   collections; false includes cleared and never-favorited albums. An index-only

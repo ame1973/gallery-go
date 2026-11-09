@@ -118,6 +118,22 @@ cross-account assignments atomically rather than silently moving/deleting them.
 The required composite parent key and indexed child relation enforce ownership;
 foreign-key checking stays enabled throughout migration and normal transactions.
 
+Migration0028 prepares the existing collection hierarchy for later management. It
+preserves collection IDs, owners, parents, names, creation times, and favorite rows;
+adds a positive version and an update time initially equal to creation time; and
+indexes owner/parent/ID pages. Every parent must belong to the same account and
+all collections must be reachable from an owned root. Existing cross-account links,
+cycles, null/empty/over-64-byte/NUL collection IDs, or incompatible stored creation
+times cause migration to fail atomically rather than deleting or moving data. Back
+up the database before upgrading; if validation fails, restore a verified backup
+or inspect the affected data under controlled administration instead of starting a
+new database or silently repairing it.
+
+Subsequent SQL writes cannot change a collection's ID or owner, introduce a foreign
+parent or cycle, or use `OR REPLACE` to erase an existing identity/name. Nested
+account deletion still uses the existing same-statement foreign-key cascades. This
+schema preparation does not add collection-management or collection-deletion APIs.
+
 A referenced collection cannot disappear through implicit `ON DELETE SET NULL`.
 Collection-deletion management must explicitly choose moving favorites to default
 or removing them; that management API is not implemented here. Account deletion
