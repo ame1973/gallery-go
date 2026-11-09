@@ -244,6 +244,11 @@ Only implemented endpoints are advertised:
   integer vote, independent strong preconditions and replay receipts. Clear keeps
   its revision; real changes and account deletion atomically refresh the shared
   average/version and events. No source I/O or content grant. See [rating API](docs/ratings.md).
+- `GET/POST /api/v2/albums/{album_id}/views`: current-account view state and explicit
+  idempotent server-timed events. Shared album totals include retained account
+  contributions; deleting an account removes its contribution. No source or
+  download grant. Recent/popular sorting and download statistics remain pending.
+  See [view API](docs/views.md).
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are
   probed by enqueue; a compatible embedded or standalone worker executes the job.
@@ -316,9 +321,16 @@ make check                         # Go race/vet, formatting, API, TS, lint, uni
 CGO_ENABLED=0 go test ./...         # Pure-Go deployment path
 pnpm exec playwright install chromium
 make e2e                           # Real Go process + temporary SQLite + production JS
+make views-load                    # Host-dependent 100k account-deletion deadline checks
 python3 -I tests/integration/docker_smoke.py gallerygo:local
 python3 -I tests/integration/docker_ingest.py gallerygo:local
 ```
+
+`views-load` is a separate host-dependent capacity check: it runs without race
+instrumentation against fresh temporary SQLite databases, including a compiled
+server behind HTTPS, and keeps the production 10-second metadata deadline. It
+checks 100,000 affected albums, late rollback, retry and reopened outbox state; it
+does not establish performance on a real NAS or guarantee arbitrary-size deletes.
 
 E2E starts an isolated HTTPS proxy on `127.0.0.1:4318` and a Go server on
 `127.0.0.1:4319`; both ports must be free, and OpenSSL must be installed. The harness

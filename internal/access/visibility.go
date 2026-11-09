@@ -75,6 +75,7 @@ type Album struct {
 	CoverMediaID *string   `json:"cover_media_id"`
 	MediaCount   int64     `json:"media_count"`
 	RatingAvg    *float64  `json:"rating_avg"`
+	ViewCount    int64     `json:"view_count"`
 	IndexedAt    time.Time `json:"indexed_at"`
 	Version      int64     `json:"version"`
 }
@@ -87,14 +88,14 @@ const albumRatingScore = `COALESCE(a.rating_avg,0)`
 const albumColumns = `SELECT a.id,` + albumTitle + `,a.library_id,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaVisible + `),
  (SELECT COUNT(*) FROM media m WHERE m.album_id=a.id AND ` + MediaVisible + `),
- a.rating_avg,a.created_at,a.version`
+ a.rating_avg,a.view_count,a.created_at,a.version`
 const albumRelations = ` JOIN libraries l ON l.id=a.library_id`
 const albumSelect = albumColumns + ` FROM albums a` + albumRelations
 
 func scanAlbum(row interface{ Scan(...any) error }) (Album, error) {
 	var album Album
 	var indexed int64
-	err := row.Scan(&album.ID, &album.Title, &album.LibraryID, &album.CoverMediaID, &album.MediaCount, &album.RatingAvg, &indexed, &album.Version)
+	err := row.Scan(&album.ID, &album.Title, &album.LibraryID, &album.CoverMediaID, &album.MediaCount, &album.RatingAvg, &album.ViewCount, &indexed, &album.Version)
 	if err != nil {
 		return album, err
 	}

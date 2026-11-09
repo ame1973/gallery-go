@@ -48,6 +48,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	folders := beginCompiledFavoriteCollections(t, api)
 	rating, ratingHeaders := beginCompiledAlbumRating(t, api, albumID)
 	favorite, favoriteHeaders := beginCompiledAlbumFavorite(t, api, albumID, folders)
+	view, viewHeaders := beginCompiledAlbumView(t, api, albumID)
 	path := "/admin/albums/" + albumID
 	var before access.AlbumMetadata
 	initial := api.request("GET", path, nil, 200, &before)
@@ -105,6 +106,7 @@ func verifyCompiledAlbumOverrides(t *testing.T, api *scanHTTPSClient, source lib
 	finishCompiledAlbumRating(t, api, rating, ratingHeaders)
 	finishCompiledAlbumFavorite(t, api, favorite, favoriteHeaders)
 	finishCompiledFavoriteCollections(t, api, folders)
+	finishCompiledAlbumView(t, api, view, viewHeaders)
 	anonymous := *api.client
 	anonymous.Jar = nil
 	(&scanHTTPSClient{t: t, client: &anonymous, origin: api.origin}).request("GET", path, nil, 401, nil)

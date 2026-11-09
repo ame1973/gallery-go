@@ -36,7 +36,7 @@ func AlbumTagIDsTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error)
 }
 
 // JournalAlbumTx records one complete current shared album projection. It lives
-// below auth/access because account deletion is also a rating aggregate producer.
+// below auth/access because account deletion also changes shared aggregates.
 // Callers authorize or fence the write and commit this journal with the mutation.
 // Only transaction-bound DB reads occur; no source paths or files are read.
 func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
@@ -52,6 +52,7 @@ func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) e
 		QuarantinedAt *time.Time `json:"quarantined_at"`
 		TagIDs        []string   `json:"tag_ids"`
 		RatingAvg     *float64   `json:"rating_avg"`
+		ViewCount     int64      `json:"view_count"`
 		IndexedAt     time.Time  `json:"indexed_at"`
 		Version       int64      `json:"version"`
 	}
@@ -59,9 +60,9 @@ func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) e
 	var indexed int64
 	if err := tx.QueryRowContext(ctx, `SELECT a.id,a.library_id,a.source_id,a.person_id,a.source_name,a.display_name,
  (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND `+MediaSourceConsistent+`),
- a.access_restricted,a.quarantined_at,a.rating_avg,a.created_at,a.version
+ a.access_restricted,a.quarantined_at,a.rating_avg,a.view_count,a.created_at,a.version
  FROM albums a WHERE a.id=?`, id).Scan(&value.ID, &value.LibraryID, &value.SourceID, &value.PersonID,
-		&value.SourceName, &value.DisplayName, &value.CoverMediaID, &value.Restricted, &quarantine, &value.RatingAvg, &indexed, &value.Version); err != nil {
+		&value.SourceName, &value.DisplayName, &value.CoverMediaID, &value.Restricted, &quarantine, &value.RatingAvg, &value.ViewCount, &indexed, &value.Version); err != nil {
 		return err
 	}
 	value.IndexedAt = time.UnixMilli(indexed).UTC()

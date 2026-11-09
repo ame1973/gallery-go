@@ -808,6 +808,10 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 				t.Fatal(err)
 			}
 			defer db.Close()
+			var views, viewTotal int
+			if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM album_views WHERE view_count=2 AND version=3),(SELECT SUM(view_count) FROM albums)`).Scan(&views, &viewTotal); err != nil || views != 1 || viewTotal != 2 {
+				t.Fatal("closed-process/reopened database lost native views or their shared total", views, viewTotal, err)
+			}
 			var favorites, clearedFavorites, liveDefault int
 			if err := db.QueryRow(`SELECT COUNT(*),COUNT(CASE WHEN favorited=0 AND collection_id IS NULL AND version=4 THEN 1 END) FROM favorites`).Scan(&favorites, &clearedFavorites); err != nil || favorites != 1 || clearedFavorites != 1 {
 				t.Fatal("closed-process/reopened database lost the native favorite clear revision", favorites, clearedFavorites, err)

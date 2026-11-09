@@ -24,6 +24,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'people',
     'album-metadata',
     'ratings',
+    'views',
     'favorites',
     'favorite-collections',
     'rating-order',

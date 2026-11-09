@@ -112,8 +112,8 @@ No passwords, cookie capabilities, or CSRF tokens enter audit or change payloads
 
 `DELETE /admin/users/{user_id}` requires its current `If-Match` and returns `204`.
 This permanently removes the account, sessions, memberships, favorites, favorite
-collections, ratings, playlists, playback progress, and its sync-operation
-receipts. Both live and cleared [favorite revisions](favorites.md) are removed;
+collections, ratings, personal [album views](views.md), playlists, playback progress,
+and its sync-operation receipts. Both live and cleared [favorite revisions](favorites.md) are removed;
 nested collection ownership cascades atomically without changing another account's
 favorites or shared gallery versions. Deleting your own account expires your cookie.
 
@@ -121,9 +121,14 @@ Security audit history remains. Shared libraries, albums, media metadata, and
 source files are **not** deleted. Each removed live rating refreshes the album's
 SQL average and advances its shared version with the same complete album journal
 as ordinary rating writes, even if the account can no longer see that album.
+Removing personal views also updates the shared retained-account total. If an album
+has both interactions, deletion writes one complete final shared projection.
 Cleared vote tombstones do not invent aggregate changes. Deactivation preserves
-votes and their averages; it does not silently remove them. Use account deactivation
+votes, views and their aggregates; it does not silently remove them. Use account deactivation
 instead if the person's private application metadata must remain recoverable.
+Deletion is one atomic SQLite write subject to the 10-second metadata deadline. On
+slow or busy storage, or sufficiently large histories, it may time out and roll back;
+retrying is not guaranteed to succeed until capacity or a resumable cleanup is available.
 An API client should obtain
 explicit confirmation before submitting a deletion; the API does not silently
 turn a stale version into a successful delete.

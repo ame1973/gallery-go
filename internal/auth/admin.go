@@ -343,11 +343,11 @@ func (s *Service) DeleteUser(ctx context.Context, current Session, id string, ve
 		}
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	if err := deleteUserRatingsTx(ctx, tx, id, now); err != nil {
+	if err := deleteUserInteractionsTx(ctx, tx, id, now); err != nil {
 		return err
 	}
 	// These baseline foreign keys deliberately do not cascade. Remove only account
-	// metadata; changed rating aggregates were versioned and journaled above. Source
+	// metadata; changed rating and view aggregates were journaled above. Source
 	// media and all shared gallery identities/preferences remain untouched.
 	for _, query := range []struct {
 		sql  string

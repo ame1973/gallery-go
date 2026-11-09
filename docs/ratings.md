@@ -1,7 +1,8 @@
 # Personal album ratings
 
 All paths below use `/api/v2`. These are authenticated metadata APIs; rating UI,
-popularity/view statistics and offline operation replay are not enabled yet.
+view-based popularity ordering and offline operation replay are not enabled yet.
+Explicit view counters are documented separately in [views.md](views.md).
 
 ## Read your vote
 
@@ -108,6 +109,6 @@ revisions or introduce a second vote index, queue or journal. Stop consumers and
 use the normal backup/migrate/start procedure; never alter real source files to
 repair a metadata problem.
 
-This does not enable offline conflict resolution, popularity statistics or the
+This does not enable offline conflict resolution, popularity ordering or the
 rating/home UI. Future sync must preserve these personal versions, account scopes,
 fresh grants, idempotent outcomes and explicit conflicts instead of last-write-wins.

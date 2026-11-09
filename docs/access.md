@@ -82,9 +82,10 @@ DELETE, and group/policy PUT:
 - Memberships share the account's `"user:<id>:<version>"` tag.
 - Library settings and grants share `"library:<id>:<version>"`.
 - Album metadata and restrictions share `"album:<id>:<version>"`. Real personal
-  rating changes and removal of an account's live votes also advance this shared
-  version and journal the current average. Personal rating writes use a separate
-  account-and-album-bound ETag; see [rating rules](ratings.md).
+  rating changes, explicit views and removal of an account's votes/views also advance
+  this shared version and journal current aggregates. Personal rating and view
+  states use separate account-and-album-bound ETags; see [rating rules](ratings.md)
+  and [view rules](views.md).
 - [Personal favorites](favorites.md) use a separate account-and-album-bound
   favorite validator. Owned collections use an account-and-collection-bound
   validator. Neither changes shared album versions, rating averages, authorization

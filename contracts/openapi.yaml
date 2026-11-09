@@ -1533,7 +1533,7 @@ paths:
     put:
       operationId: setAlbumRating
       summary: Replace the current account's one integer vote from 1 to 5
-      description: Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; offline sync and popularity statistics are not enabled here. High-rating album selection is a separate GET /albums sort.
+      description: Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; offline sync and view-based popularity rankings are not enabled here. High-rating album selection is a separate GET /albums sort.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1562,6 +1562,31 @@ paths:
         - { $ref: '#/components/parameters/Csrf' }
       responses:
         '200': { $ref: '#/components/responses/AlbumRating' }
+        default: { $ref: '#/components/responses/Problem' }
+  /albums/{album_id}/views:
+    parameters:
+      - { $ref: '#/components/parameters/AlbumID' }
+    get:
+      operationId: getAlbumView
+      summary: Read the current account's album view history
+      description: A fresh session and current shared album visibility are mandatory. The personal count, last server UTC-millisecond instant and version belong only to the current account; never-viewed albums return zero, null and version 1. The strong ETag binds the account and album. Hidden and missing albums both return 404. No query parameters, source probes, content grants or download counts are included.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AlbumView' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: recordAlbumView
+      summary: Record one current-account album view
+      description: Requires an empty body, actor-bound Idempotency-Key and same-origin CSRF. A fresh same-transaction session and album visibility precede even historical receipt replay. A new accepted key increments one personal view and the shared retained-account total, advances personal/shared versions and co-commits complete private/shared changes, outboxes and receipt without adding per-view entries to the administrative audit. An identical retry within 24 hours returns its historical personal result without incrementing again. The event uses server UTC milliseconds and never changes source bytes, grants or download statistics. Account deletion removes its personal views and updates the shared total. No client timestamp or target account is accepted.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+      responses:
+        '200': { $ref: '#/components/responses/AlbumView' }
         default: { $ref: '#/components/responses/Problem' }
   /albums/{album_id}/media:
     get:
@@ -1863,6 +1888,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AlbumFavorite' }
+    AlbumView:
+      description: Current or historical actor-receipted personal view count and last server instant. GET refreshes current state; the ETag binds account and album, not the shared total.
+      headers:
+        ETag: { $ref: '#/components/headers/ResourceETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AlbumView' }
     AlbumRating:
       description: Current or historical actor-receipted personal vote, retained revision and server update instant. GET refreshes current state. The validator binds both account and album, not the shared album version.
       headers:
@@ -3073,6 +3105,26 @@ components:
           minLength: 1
           maxLength: 64
           description: Omit or use null for default/unfiled. Otherwise a literal existing owned collection ID, at most 64 UTF-8 bytes, no padding, slash, backslash, control or format characters.
+    AlbumView:
+      type: object
+      additionalProperties: false
+      required: [album_id, view_count, last_viewed_at, version]
+      properties:
+        album_id: { type: string }
+        view_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Only the current account's explicitly recorded views, not downloads or automatic metadata reads.
+        last_viewed_at:
+          type: [string, 'null']
+          format: date-time
+          description: Monotonic server UTC-millisecond instant, or null before the first recorded view.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Personal account/album view revision, independent of other accounts and shared album edits.
     AlbumRating:
       type: object
       additionalProperties: false
@@ -3103,7 +3155,17 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, title, library_id, cover_media_id, media_count, rating_avg, indexed_at, version]
+        [
+          id,
+          title,
+          library_id,
+          cover_media_id,
+          media_count,
+          rating_avg,
+          view_count,
+          indexed_at,
+          version,
+        ]
       properties:
         id: { type: string }
         title:
@@ -3118,6 +3180,11 @@ components:
           minimum: 1
           maximum: 5
           description: Transactionally maintained native SQLite AVG of integer live votes, or null for no votes. Shared by cards, detail, canonical events and high-rating order without vote-count weighting or display rounding.
+        view_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Shared sum of explicitly recorded views retained for current accounts, not metadata reads or downloads. Account deletion removes its contribution.
         indexed_at:
           type: string
           format: date-time

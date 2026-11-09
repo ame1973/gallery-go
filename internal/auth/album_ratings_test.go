@@ -69,12 +69,16 @@ func TestDeleteUserRatingsRefreshEveryAffectedCanonicalAlbumIncludingHiddenSourc
 			t.Fatal(err)
 		}
 		var payload map[string]json.RawMessage
-		if json.Unmarshal([]byte(data), &payload) != nil || len(payload) != 13 {
+		if json.Unmarshal([]byte(data), &payload) != nil || len(payload) != 14 {
 			t.Fatal("deleted voter emitted a partial or different album projection", data)
 		}
 		var projected *float64
 		if json.Unmarshal(payload["rating_avg"], &projected) != nil || !reflect.DeepEqual(projected, item.average) {
 			t.Fatal("album journal did not refresh the removed vote", data, item.average)
+		}
+		var views int64
+		if err := json.Unmarshal(payload["view_count"], &views); err != nil || views != 0 {
+			t.Fatal("album journal lost the current shared view count", data, err)
 		}
 	}
 	var retained, missing, changedEmpty int

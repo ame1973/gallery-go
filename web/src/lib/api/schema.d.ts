@@ -1240,7 +1240,7 @@ export interface paths {
         get: operations["getAlbumRating"];
         /**
          * Replace the current account's one integer vote from 1 to 5
-         * @description Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; offline sync and popularity statistics are not enabled here. High-rating album selection is a separate GET /albums sort.
+         * @description Requires the personal rating response's exact strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. No target account or client time is accepted. Fresh same-transaction session and album visibility precede even historical receipt replay. A real change advances the personal and shared album versions, refreshes the live SQL average and co-commits complete shared/private change events, outboxes, audit and receipt. The same vote is a version/event/time no-op with a receipt. Another voter does not invalidate this personal precondition. Reusing the identical key/body/original precondition within 24 hours returns its historical personal result without restoring a subsequently changed vote. Use GET to refresh; offline sync and view-based popularity rankings are not enabled here. High-rating album selection is a separate GET /albums sort.
          */
         put: operations["setAlbumRating"];
         post?: never;
@@ -1249,6 +1249,32 @@ export interface paths {
          * @description Empty body, personal rating If-Match, actor-bound Idempotency-Key and same-origin CSRF required. Uses the same fresh visibility, atomic journal and replay boundaries as PUT. A real clear stores a nullable vote tombstone, advances personal/shared versions and removes that vote from the SQL average. A repeated clear is a no-op with a receipt. Historical versions are never reused after clear/re-rate, and historical retries never reinstate a removed vote. Other accounts, shared preferences and source files are untouched.
          */
         delete: operations["deleteAlbumRating"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/albums/{album_id}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the current account's album view history
+         * @description A fresh session and current shared album visibility are mandatory. The personal count, last server UTC-millisecond instant and version belong only to the current account; never-viewed albums return zero, null and version 1. The strong ETag binds the account and album. Hidden and missing albums both return 404. No query parameters, source probes, content grants or download counts are included.
+         */
+        get: operations["getAlbumView"];
+        put?: never;
+        /**
+         * Record one current-account album view
+         * @description Requires an empty body, actor-bound Idempotency-Key and same-origin CSRF. A fresh same-transaction session and album visibility precede even historical receipt replay. A new accepted key increments one personal view and the shared retained-account total, advances personal/shared versions and co-commits complete private/shared changes, outboxes and receipt without adding per-view entries to the administrative audit. An identical retry within 24 hours returns its historical personal result without incrementing again. The event uses server UTC milliseconds and never changes source bytes, grants or download statistics. Account deletion removes its personal views and updates the shared total. No client timestamp or target account is accepted.
+         */
+        post: operations["recordAlbumView"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1983,6 +2009,24 @@ export interface components {
             /** @description Omit or use null for default/unfiled. Otherwise a literal existing owned collection ID, at most 64 UTF-8 bytes, no padding, slash, backslash, control or format characters. */
             collection_id?: string | null;
         };
+        AlbumView: {
+            album_id: string;
+            /**
+             * Format: int64
+             * @description Only the current account's explicitly recorded views, not downloads or automatic metadata reads.
+             */
+            view_count: number;
+            /**
+             * Format: date-time
+             * @description Monotonic server UTC-millisecond instant, or null before the first recorded view.
+             */
+            last_viewed_at: string | null;
+            /**
+             * Format: int64
+             * @description Personal account/album view revision, independent of other accounts and shared album edits.
+             */
+            version: number;
+        };
         AlbumRating: {
             album_id: string;
             /** @description Only the calling account's vote; null means never-rated or cleared, distinguished by the retained version/time. */
@@ -2010,6 +2054,11 @@ export interface components {
             media_count: number;
             /** @description Transactionally maintained native SQLite AVG of integer live votes, or null for no votes. Shared by cards, detail, canonical events and high-rating order without vote-count weighting or display rounding. */
             rating_avg: number | null;
+            /**
+             * Format: int64
+             * @description Shared sum of explicitly recorded views retained for current accounts, not metadata reads or downloads. Account deletion removes its contribution.
+             */
+            view_count: number;
             /**
              * Format: date-time
              * @description Immutable server first-indexed instant, UTC with millisecond precision and years 0001..9999. Not capture time, NAS mtime or a metadata-edit timestamp.
@@ -2157,6 +2206,16 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["AlbumFavorite"];
+            };
+        };
+        /** @description Current or historical actor-receipted personal view count and last server instant. GET refreshes current state; the ETag binds account and album, not the shared total. */
+        AlbumView: {
+            headers: {
+                ETag: components["headers"]["ResourceETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AlbumView"];
             };
         };
         /** @description Current or historical actor-receipted personal vote, retained revision and server update instant. GET refreshes current state. The validator binds both account and album, not the shared album version. */
@@ -4602,6 +4661,42 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["AlbumRating"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAlbumView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumView"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    recordAlbumView: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+            };
+            path: {
+                album_id: components["parameters"]["AlbumID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AlbumView"];
             default: components["responses"]["Problem"];
         };
     };

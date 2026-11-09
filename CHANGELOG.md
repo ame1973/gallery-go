@@ -27,6 +27,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Explicit server-timed album view events and private current-account view state,
+  with actor receipts, shared retained-account totals and complete private/shared
+  journals. Routine views are not added to the administrator audit.
+  Deleting an account removes its contribution, including hidden albums, without
+  source writes. Recent/popular orders, download statistics and UI remain pending.
+
 - Direct personal favorite-folder and default/unfiled album selectors intersect
   current grants, existing filters and keyset orders. Folder IDs select direct live
   assignments only; cleared rows are excluded, and foreign/missing folders yield
