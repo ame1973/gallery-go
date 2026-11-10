@@ -634,15 +634,17 @@ that becomes non-media cannot retain its former original-content eligibility.
 
 Content streams do not inherit the 10-second metadata timeout. Writes have a
 30-second refreshed idle deadline, and reads/seeks check cancellation and file
-size/modification signatures. A detected in-flight change or broken write aborts
-the connection/stream; it never appends JSON to partially delivered media or
-silently accepts mixed revisions. A client must discard an incomplete body.
+identity, size and modification time. On Linux they also check the opened file's
+change time, detecting common in-flight same-size rewrites that restore mtime. A
+detected in-flight change or broken write aborts the connection/stream; it never
+appends JSON to partially delivered media. A client must discard an incomplete body.
 
-These signatures are not an adversarial tamper-proof NAS snapshot. Full source
-hashes belong to ingestion/publication; they are not recomputed for each Range
-request. Future offline downloads must verify complete length and SHA-256 before
-marking bytes ready. Correct immutable publication and trusted cache storage remain
-required.
+These signatures are not an adversarial tamper-proof NAS snapshot. A rewrite before
+the file was opened can preserve size and mtime, and remote filesystems may not
+immediately report all changes. Full source hashes belong to ingestion/publication;
+they are not recomputed for each Range request. Future offline downloads must verify
+complete length and SHA-256 before marking bytes ready. Correct immutable publication
+and trusted cache storage remain required.
 
 `os.Root` confines entry traversal/TOCTOU, but does not forbid privileged bind
 mounts, device files, or make stalled kernel NAS I/O cancellable. Use trusted

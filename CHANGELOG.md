@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- On Linux, detect change-time updates during protected original and variant streams,
+  including common same-size rewrites with restored modification times. A detected
+  in-flight change aborts the response; this does not replace source hashing or an
+  immutable NAS snapshot.
+
 - Run isolated Go package binaries sequentially during the race/coverage gate,
   retaining all tests, test-internal concurrency, production bcrypt and the
   15-minute per-package timeout. Allow enough total CI job time for the growing

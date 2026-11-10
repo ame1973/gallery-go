@@ -93,7 +93,7 @@ func (content *Content) check() error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Size() != content.info.Size() || !info.ModTime().Equal(content.info.ModTime()) {
+	if !info.Mode().IsRegular() || !os.SameFile(content.info, info) || info.Size() != content.info.Size() || !info.ModTime().Equal(content.info.ModTime()) || contentChangeTimeChanged(content.info, info) {
 		return ErrContentChanged
 	}
 	return nil
