@@ -6,6 +6,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Restrict Tailwind utility discovery to the application source and entry HTML so
+  source-archive builds do not turn neighboring local files into public CSS.
+  An isolated real-build regression checks included and excluded inputs.
+
 - Verify complete original and variant bytes against their indexed SHA-256 before
   returning a strong ETag or evaluating conditional and Range requests. Recheck
   access and resource pins after the bounded-concurrency read. Each request can
