@@ -124,7 +124,7 @@ that key returns `409 IDEMPOTENCY_CONFLICT`.
 
 Each affected favorite retains a monotonic personal revision and receives a complete
 private upsert/delete event and outbox. Each removed folder gets a private tombstone;
-one of these events grants access to hidden resources. One deletion audit records the
+none of these events grants access to hidden resources. One deletion audit records the
 root, action and new root version without listing hidden items. Business changes,
 events, outboxes, audit and receipt commit together; no shared album, other account,
 authorization grant or source file is modified. This is an atomic SQLite operation,
