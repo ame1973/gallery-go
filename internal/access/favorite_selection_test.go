@@ -75,6 +75,7 @@ func TestFavoriteAlbumSelectionUsesLiveActorStateAcrossCollectionsAndReceipts(t 
 		{"name_asc", []string{"person-open", "person-other"}},
 		{"name_desc", []string{"person-other", "person-open"}},
 		{"top_rated", []string{"person-other", "person-open"}},
+		{"popular", []string{"person-other", "person-open"}},
 	} {
 		filter.Sort = order.name
 		selected(f.base, filter, order.want...)

@@ -27,11 +27,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Indexed `popular` album keysets use actual shared retained-account view totals,
+  descending with ID ties and zero-view albums last. All existing selectors and
+  fresh ACLs apply before LIMIT; cursors freeze the public count without resolving
+  a changed/deleted anchor. No source probes, content grants or home UI are added.
+
 - Explicit server-timed album view events and private current-account view state,
   with actor receipts, shared retained-account totals and complete private/shared
   journals. Routine views are not added to the administrator audit.
   Deleting an account removes its contribution, including hidden albums, without
-  source writes. Recent/popular orders, download statistics and UI remain pending.
+  source writes. Recent browsing, download statistics and UI remain pending.
 
 - Direct personal favorite-folder and default/unfiled album selectors intersect
   current grants, existing filters and keyset orders. Folder IDs select direct live

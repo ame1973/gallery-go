@@ -89,7 +89,7 @@ func TestFavoriteFolderSelectionHTTPIsolationCursorsAndLiveMutations(t *testing.
 
 	// Each cursor freezes the ordered key and binds the actual actor, scope and filters.
 	var firstCursor string
-	for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
+	for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated", "popular"} {
 		query := url.Values{}
 		for key, values := range root {
 			query[key] = slices.Clone(values)

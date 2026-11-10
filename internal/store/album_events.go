@@ -35,11 +35,50 @@ func AlbumTagIDsTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error)
 	return ids, rows.Err()
 }
 
+const albumJournalSelect = `SELECT a.id,a.library_id,a.source_id,a.person_id,a.source_name,a.display_name,
+ (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND ` + MediaSourceConsistent + `),
+ a.access_restricted,a.quarantined_at,a.rating_avg,a.view_count,a.created_at,a.version
+ FROM albums a WHERE a.id=?`
+
 // JournalAlbumTx records one complete current shared album projection. It lives
 // below auth/access because account deletion also changes shared aggregates.
 // Callers authorize or fence the write and commit this journal with the mutation.
 // Only transaction-bound DB reads occur; no source paths or files are read.
 func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
+	return journalAlbumRow(ctx, tx, id, now, tx.QueryRowContext(ctx, albumJournalSelect, id))
+}
+
+// JournalAlbumBatchTx uses the same canonical projector as JournalAlbumTx while
+// reusing its prepared read for a bounded, unique page of up to 128 album IDs.
+// The caller owns authorization and the transaction; any error requires rollback.
+func JournalAlbumBatchTx(ctx context.Context, tx *sql.Tx, ids []string, now time.Time) error {
+	if len(ids) > 128 {
+		return errors.New("album journal page exceeds 128 IDs")
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if _, duplicate := seen[id]; duplicate {
+			return errors.New("album journal page contains a duplicate ID")
+		}
+		seen[id] = struct{}{}
+	}
+	statement, err := tx.PrepareContext(ctx, albumJournalSelect)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	for _, id := range ids {
+		if err := journalAlbumRow(ctx, tx, id, now, statement.QueryRowContext(ctx, id)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func journalAlbumRow(ctx context.Context, tx *sql.Tx, id string, now time.Time, row *sql.Row) error {
 	var value struct {
 		ID            string     `json:"id"`
 		LibraryID     string     `json:"library_id"`
@@ -58,10 +97,7 @@ func JournalAlbumTx(ctx context.Context, tx *sql.Tx, id string, now time.Time) e
 	}
 	var quarantine sql.NullInt64
 	var indexed int64
-	if err := tx.QueryRowContext(ctx, `SELECT a.id,a.library_id,a.source_id,a.person_id,a.source_name,a.display_name,
- (SELECT m.id FROM media m WHERE m.id=a.cover_media_id AND m.album_id=a.id AND `+MediaSourceConsistent+`),
- a.access_restricted,a.quarantined_at,a.rating_avg,a.view_count,a.created_at,a.version
- FROM albums a WHERE a.id=?`, id).Scan(&value.ID, &value.LibraryID, &value.SourceID, &value.PersonID,
+	if err := row.Scan(&value.ID, &value.LibraryID, &value.SourceID, &value.PersonID,
 		&value.SourceName, &value.DisplayName, &value.CoverMediaID, &value.Restricted, &quarantine, &value.RatingAvg, &value.ViewCount, &indexed, &value.Version); err != nil {
 		return err
 	}

@@ -223,10 +223,12 @@ Only implemented endpoints are advertised:
   SQL-authorized metadata, counts, and covers. Album collections intersect exact
   `library_id`, `source_id`, `person_id`, `tag_id` and optional current-account
   `favorite=true|false`, `favorite_collection_id` or `favorite_unfiled=true` selectors
-  before indexed ID or first-indexed-time/literal-title/
-  native-rating keyset pagination (`latest`, `oldest`, `name_asc`, `name_desc`,
-  `top_rated`). High-rating order uses the native mean, not
+  before indexed ID or first-indexed-time/literal-title/native-rating/view-count
+  keyset pagination (`latest`, `oldest`, `name_asc`, `name_desc`, `top_rated`,
+  `popular`). High-rating order uses the native mean, not
   weighted vote counts, with unrated cards last and complete frozen score keys.
+  Popular order uses the actual retained-account `view_count` and ID descending,
+  with zero-view cards last; its cursor freezes the complete count.
   Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
@@ -247,7 +249,7 @@ Only implemented endpoints are advertised:
 - `GET/POST /api/v2/albums/{album_id}/views`: current-account view state and explicit
   idempotent server-timed events. Shared album totals include retained account
   contributions; deleting an account removes its contribution. No source or
-  download grant. Recent/popular sorting and download statistics remain pending.
+  download grant. Recent browsing and download statistics remain pending.
   See [view API](docs/views.md).
 - `POST /api/v2/admin/scans`: snapshot/deduplicate a full, incremental, source,
   all-source, or album-target scan intent into a durable queued job. No files are

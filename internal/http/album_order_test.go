@@ -121,7 +121,7 @@ func TestAlbumOrderHTTPValidatesFrozenPositionsAndLiveScopeWithoutAnchorLookup(t
 
 func TestAlbumOrderHTTPRejectsUnimplementedAmbiguousSortsAndInvalidStoredTime(t *testing.T) {
 	f := albumOrderHTTPFixture(t)
-	for _, query := range []string{"sort=", "sort=latest&sort=oldest", "sort=LATEST", "sort=NAME_ASC", "sort=popular", "sort=TOP_RATED", "sort=id_asc"} {
+	for _, query := range []string{"sort=", "sort=latest&sort=oldest", "sort=LATEST", "sort=NAME_ASC", "sort=POPULAR", "sort=TOP_RATED", "sort=id_asc"} {
 		expectCode(t, f.reader.request("GET", "/api/v2/albums?"+query, nil, "", ""), 400, "INVALID_FILTER")
 	}
 	if _, err := f.db.Exec(`UPDATE albums SET created_at=253402300800000 WHERE id='media-album'`); err != nil {

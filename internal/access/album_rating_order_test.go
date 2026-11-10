@@ -152,7 +152,7 @@ func TestAlbumRatingOrderRejectsNoncanonicalUnknownAndNonfinitePositions(t *test
 	if AlbumRatingKey(nil) != "r:0" || AlbumRatingKey(new(math.Copysign(0, -1))) != "r:0" {
 		t.Fatal("null score has more than one zero encoding")
 	}
-	for _, other := range []string{"", "latest", "oldest", "name_asc", "name_desc"} {
+	for _, other := range []string{"", "latest", "oldest", "name_asc", "name_desc", "popular"} {
 		if _, err := (AlbumPosition{ID: "album", Key: "r:5"}).orderKey(AlbumFilter{Sort: other}); !errors.Is(err, ErrAlbumPosition) {
 			t.Fatal("rating position was accepted for an unrelated order", other, err)
 		}

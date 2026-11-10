@@ -28,6 +28,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'favorites',
     'favorite-collections',
     'rating-order',
+    'popular-order',
     'person-metadata',
     'album-tags',
     'tag-batches',
@@ -190,7 +191,7 @@ try {
         "INSERT INTO albums(id,library_id,source_id,source_name,relative_path,created_at,updated_at) VALUES(?,?,?,? ,'.',?,?)",
       )
       .run(album, library, `${prefix}-source`, 'Real PNG fixture', Date.now(), Date.now());
-    if (prefix.startsWith('rating-order-')) {
+    if (prefix.startsWith('rating-order-') || prefix.startsWith('popular-order-')) {
       // Empty selection cards only, not native mapping or renderer/READY proof.
       // The primary card above owns actual isolated read-only PNG media.
       for (const [suffix, restricted] of [

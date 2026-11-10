@@ -216,8 +216,8 @@ always known for valid stored albums, so there is no synthetic unknown-time key
 or capture/mtime fallback. ID-only cursors reject an unrelated time position, and
 chronological cursors reject missing, noncanonical or out-of-range keys with
 `400 INVALID_CURSOR`. Treat cursors as opaque rather than constructing their JSON.
-Popularity-based album ordering and full text search are still required but not
-implemented; unsupported values fail explicitly, never become fake ranks.
+Full text search is still required but not implemented; unsupported sort values
+fail explicitly, never become fake ranks.
 
 ### Album literal name ordering
 
@@ -281,11 +281,33 @@ return `400 INVALID_CURSOR`. Rating positions fit the existing 32-byte numeric
 bound; the album-only 8192-character envelope and other endpoints' 512-character
 limits are unchanged. Real re-rating, clearing and account deletion can move
 records across live pages; an issued anchor remains frozen, but this is not an
-immutable offline snapshot. Popularity/view statistics remain separate work.
+immutable offline snapshot. [View-count popularity](#album-popularity-ordering) is
+a separate order, not a substitute for a rating average.
+
+### Album popularity ordering
+
+`sort=popular` uses the actual shared `view_count` shown on each authorized album,
+descending, followed by album ID descending. Albums with no recorded views remain
+in the result with a zero count after positive counts. The count is the sum of
+explicit views retained for current accounts; account deletion removes its own
+contribution, so a total can decrease. It is not a count of downloads, a lifetime
+anonymous score, a time-decayed rank or a personalized value. See [view rules](views.md).
+
+Four SQLite indexes seek the `(view_count,id)` tuple globally or under a library,
+source or creator. Existing visibility, tag and personal favorite/folder selectors
+are applied in SQL before the bounded page; no full-catalog memory sort, source
+probe, content grant or offline snapshot is implied. Migration0031 adds indexes
+without rewriting the existing view counters or historical events.
+
+The cursor freezes the complete nonnegative integer count and ID, even when the
+anchor's views change or the anchor is deleted. Noncanonical, negative, overflowing
+or foreign-order positions return `400 INVALID_CURSOR`. Concurrent view changes or
+account deletion can still move other records between live pages. Treat cursors as
+opaque and recheck current authorization on every continuation.
 
 Lists use the standard `{items,next_cursor,has_more}` envelope, default limit 30,
 maximum 100, and stable indexed keyset order. Visibility and selection run in SQL
-before LIMIT, using finite library/source/person/time/title/rating indexes and tag
+before LIMIT, using finite library/source/person/time/title/rating/view-count indexes and tag
 edges rather than loading/sorting the whole catalog in memory. Cursors bind the current
 account, scope, collection and literal selectors/sort; query key order/URL encoding
 is canonicalized, but changing a selector or sort requires a new first page. Every

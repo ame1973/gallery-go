@@ -62,6 +62,8 @@ func (a authorization) albums(w http.ResponseWriter, r *http.Request) {
 			page.cursor.Position = access.AlbumNameKey(last.Title)
 		case filter.Sort == "top_rated":
 			page.cursor.Position = access.AlbumRatingKey(last.RatingAvg)
+		case filter.Sort == "popular":
+			page.cursor.Position = access.AlbumPopularityKey(last.ViewCount)
 		default:
 			page.cursor.Position = strconv.FormatInt(last.IndexedAt.UnixMilli(), 10)
 		}

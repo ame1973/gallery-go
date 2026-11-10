@@ -45,7 +45,7 @@ func (filter AlbumFilter) Validate() error {
 		return ErrAlbumSelection
 	}
 	switch filter.Sort {
-	case "", "latest", "oldest", "name_asc", "name_desc", "top_rated":
+	case "", "latest", "oldest", "name_asc", "name_desc", "top_rated", "popular":
 	default:
 		return ErrAlbumSelection
 	}
@@ -62,8 +62,8 @@ func (filter AlbumFilter) Validate() error {
 	return nil
 }
 
-// Key freezes a public time, framed literal title or native mean. Never resolve
-// a mutable/deleted anchor, round scores or hash/truncate titles into another order.
+// Key freezes a public time, framed literal title, native mean or view total.
+// Never resolve a mutable/deleted anchor or round/truncate its ordering value.
 type AlbumPosition struct {
 	ID  string
 	Key string
@@ -81,6 +81,11 @@ func AlbumRatingKey(average *float64) string {
 		return "r:0"
 	}
 	return "r:" + strconv.FormatFloat(*average, 'g', -1, 64)
+}
+
+// AlbumPopularityKey freezes the complete public, nonnegative integer view total.
+func AlbumPopularityKey(count int64) string {
+	return "v:" + strconv.FormatInt(count, 10)
 }
 
 func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
@@ -103,6 +108,16 @@ func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
 	}
 	if len(position.Key) > 32 {
 		return nil, ErrAlbumPosition
+	}
+	if filter.Sort == "popular" {
+		if !strings.HasPrefix(position.Key, "v:") {
+			return nil, ErrAlbumPosition
+		}
+		value, err := strconv.ParseInt(position.Key[2:], 10, 64)
+		if err != nil || value < 0 || AlbumPopularityKey(value) != position.Key {
+			return nil, ErrAlbumPosition
+		}
+		return value, nil
 	}
 	if filter.Sort == "top_rated" {
 		if !strings.HasPrefix(position.Key, "r:") {
@@ -130,7 +145,7 @@ func (position AlbumPosition) orderKey(filter AlbumFilter) (any, error) {
 // constructing a query does not itself authorize the supplied viewer ID.
 func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition, sortKey any, limit int) (string, []any) {
 	from, key, relations := ` FROM albums a`, `a.id`, albumRelations
-	named, rated := strings.HasPrefix(filter.Sort, "name_"), filter.Sort == "top_rated"
+	named, rated, popular := strings.HasPrefix(filter.Sort, "name_"), filter.Sort == "top_rated", filter.Sort == "popular"
 	folderFilter := filter.FavoriteCollectionID != "" || filter.FavoriteUnfiled
 	favoriteDriver := (filter.Favorite == "true" || folderFilter) && filter.Sort == "" && filter.TagID == ""
 	if filter.Sort != "" {
@@ -139,6 +154,8 @@ func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition,
 			orderIndex = "title"
 		} else if rated {
 			orderIndex = "rating"
+		} else if popular {
+			orderIndex = "view"
 		}
 		switch {
 		case filter.PersonID != "":
@@ -232,8 +249,10 @@ func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition,
 			orderKey = albumTitle + ` COLLATE BINARY`
 		} else if rated {
 			orderKey = albumRatingScore
+		} else if popular {
+			orderKey = `a.view_count`
 		}
-		if filter.Sort == "latest" || filter.Sort == "name_desc" || rated {
+		if filter.Sort == "latest" || filter.Sort == "name_desc" || rated || popular {
 			comparison, direction = "<", "DESC"
 		}
 		if after.ID != "" {

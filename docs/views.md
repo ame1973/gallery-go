@@ -57,5 +57,6 @@ A retry is not guaranteed to finish if the workload exceeds available capacity.
 
 Totals are not anonymous lifetime counters and can decrease after account deletion.
 A view count is not proof that media bytes were fully displayed or downloaded.
-Recent browsing, popularity ordering, download statistics, offline operation replay
-and their UI remain separate required features; this API does not implement them.
+[Popularity ordering](access.md#album-popularity-ordering) uses this same current
+shared total. Recent browsing, the popularity/home UI, download statistics and
+offline operation replay remain separate required features.

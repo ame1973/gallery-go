@@ -35,6 +35,11 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
  SELECT ?,id,1+CAST(substr(id,7) AS INTEGER)%5,0 FROM albums WHERE id LIKE 'scale-%' AND CAST(substr(id,7) AS INTEGER)%7!=0`, f.owner.User.ID); err != nil {
 		t.Fatal(err)
 	}
+	// Existing per-account counters drive shared totals through the real view trigger.
+	if _, err := f.db.Exec(`INSERT INTO album_views(user_id,album_id,view_count,last_viewed_at,version)
+ SELECT ?,id,1+CAST(substr(id,7) AS INTEGER)%7,0,2 FROM albums WHERE id LIKE 'scale-%' AND CAST(substr(id,7) AS INTEGER)%13!=0`, f.owner.User.ID); err != nil {
+		t.Fatal(err)
+	}
 	// Retain the original sparse favorite and clear distribution for the owner.
 	if _, err := f.db.Exec(`INSERT INTO favorites(user_id,album_id,created_at,favorited,updated_at,version)
  SELECT ?,id,0,CASE WHEN CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 THEN 1 ELSE 0 END,0,1
@@ -70,7 +75,7 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 		{FavoriteUnfiled: true, TagID: "scale-folder-sparse"},
 		{FavoriteUnfiled: true, LibraryID: "scale-l1", SourceID: "scale-s1", PersonID: "scale-p1", TagID: "scale-common"},
 	} {
-		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
+		for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated", "popular"} {
 			filter.Sort = order
 			viewer, group := f.owner, 0
 			if filter.FavoriteCollectionID != "" {
@@ -93,6 +98,9 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			case "top_rated":
 				ratingKey = 5
 				after.Key, sortKey = access.AlbumRatingKey(&ratingKey), ratingKey
+			case "popular":
+				indexedKey = 5
+				after.Key, sortKey = access.AlbumPopularityKey(indexedKey), indexedKey
 			}
 			query, arguments := access.AlbumSelectionQuery(viewer.User.ID, filter, after, sortKey, 11)
 			rows, err := f.db.QueryContext(t.Context(), `EXPLAIN QUERY PLAN `+query, arguments...)
@@ -140,6 +148,8 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 					wantIndex = strings.Replace(wantIndex, "indexed", "title", 1)
 				} else if order == "top_rated" {
 					wantIndex = strings.Replace(wantIndex, "indexed", "rating", 1)
+				} else if order == "popular" {
+					wantIndex = strings.Replace(wantIndex, "indexed", "view", 1)
 				}
 			}
 			if err != nil || strings.Contains(plan.String(), "TEMP B-TREE") || !strings.Contains(plan.String(), wantIndex) || strings.Contains(query, "OFFSET") {
@@ -167,7 +177,7 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			if err != nil || len(items) != 11 {
 				t.Fatal("large selection did not return only its bounded cards", filter, len(items), err)
 			}
-			previousID, previousKey, previousTitle, previousRating := after.ID, indexedKey, nameKey, ratingKey
+			previousID, previousKey, previousTitle, previousRating, previousViews := after.ID, indexedKey, nameKey, ratingKey, indexedKey
 			for _, item := range items {
 				number, err := strconv.Atoi(strings.TrimPrefix(item.ID, "scale-"))
 				if err != nil {
@@ -198,16 +208,22 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 					ordered = item.Title < previousTitle || item.Title == previousTitle && item.ID < previousID
 				} else if order == "top_rated" {
 					ordered = score < previousRating || score == previousRating && item.ID < previousID
+				} else if order == "popular" {
+					ordered = item.ViewCount < previousViews || item.ViewCount == previousViews && item.ID < previousID
 				}
-				if !ordered || item.MediaCount != 0 || item.CoverMediaID != nil {
-					t.Fatal("large selection repeated keys or invented count/cover", filter, item)
+				wantViews := int64(0)
+				if number%13 != 0 {
+					wantViews = int64(1 + number%7)
 				}
-				previousID, previousKey, previousTitle, previousRating = item.ID, key, item.Title, score
+				if !ordered || item.ViewCount != wantViews || item.MediaCount != 0 || item.CoverMediaID != nil {
+					t.Fatal("large selection repeated keys, changed real totals or invented count/cover", filter, item, wantViews)
+				}
+				previousID, previousKey, previousTitle, previousRating, previousViews = item.ID, key, item.Title, score, item.ViewCount
 			}
 			checked[group]++
 		}
 	}
-	if checked != [3]int{84, 24, 24} {
+	if checked != [3]int{98, 28, 28} {
 		t.Fatal("original and folder query-plan/result matrices were not fully checked", checked)
 	}
 	foreign, err := f.service.Albums(t.Context(), f.owner, access.AlbumFilter{FavoriteCollectionID: "scale-folder"}, access.AlbumPosition{}, 11)

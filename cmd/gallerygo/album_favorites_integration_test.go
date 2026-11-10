@@ -27,7 +27,7 @@ func beginCompiledAlbumFavorite(t *testing.T, api *scanHTTPSClient, id string, f
 	if changed.AlbumID != id || !changed.Favorited || changed.Version != 2 || changed.CollectionID == nil || *changed.CollectionID != folders.child.ID || changed.UpdatedAt == nil {
 		t.Fatal("compiled favorite did not publish its private child-folder state", changed)
 	}
-	for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated"} {
+	for _, order := range []string{"", "latest", "oldest", "name_asc", "name_desc", "top_rated", "popular"} {
 		assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "true", Sort: order}, id)
 		assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, Favorite: "false", Sort: order})
 		assertCompiledAlbumSelection(t, api, access.AlbumFilter{LibraryID: albumBefore.LibraryID, FavoriteCollectionID: folders.child.ID, Sort: order}, id)

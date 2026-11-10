@@ -263,7 +263,7 @@ test('HTTPS album selectors intersect current grants before bounded cards and sc
     expect(wrongAccount.status()).toBe(400);
     expect(await wrongAccount.json()).toMatchObject({ code: 'INVALID_CURSOR' });
     for (const query of [
-      'sort=popular',
+      'sort=POPULAR',
       'q=not-search',
       'tag_id=',
       'source_id=one&source_id=two',

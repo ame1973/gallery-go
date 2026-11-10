@@ -81,10 +81,8 @@ func deleteUserInteractionsTx(ctx context.Context, tx *sql.Tx, user string, now 
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		for _, id := range ids {
-			if err := store.JournalAlbumTx(ctx, tx, id, now); err != nil {
-				return err
-			}
+		if err := store.JournalAlbumBatchTx(ctx, tx, ids, now); err != nil {
+			return err
 		}
 		if len(ids) < 128 {
 			break

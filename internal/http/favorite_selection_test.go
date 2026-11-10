@@ -71,7 +71,7 @@ func TestFavoriteAlbumSelectionHTTPActorCursorsLiveMutationsAndFreshVisibility(t
 	if len(canonical.Items) != 1 || canonical.Items[0].ID != "selection-other-album" {
 		t.Fatal("equivalent URL encoding or query order changed the bound selector", canonical)
 	}
-	for _, order := range []string{"latest", "oldest", "name_asc", "name_desc", "top_rated"} {
+	for _, order := range []string{"latest", "oldest", "name_asc", "name_desc", "top_rated", "popular"} {
 		ordered := url.Values{}
 		for key, values := range query {
 			ordered[key] = slices.Clone(values)
