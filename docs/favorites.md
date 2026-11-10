@@ -3,9 +3,9 @@
 All paths below use `/api/v2`. These authenticated metadata endpoints manage only
 the calling account's favorite membership and collection assignment. `GET /albums`
 can filter the calling account's favorites across collections, within one direct
-collection or in default/unfiled. Personal collections can be created, listed and
-renamed. Collection deletion, recursive subtree browsing, hierarchy UI and offline
-operation replay remain separate required features.
+collection or in default/unfiled. Personal collections can be created, listed,
+renamed and explicitly deleted with a two-step choice. Recursive subtree browsing,
+hierarchy UI and offline operation replay remain separate required features.
 
 ## Read your state
 
@@ -69,8 +69,69 @@ A matching create retry returns its historical owned result without recreating a
 subsequently removed folder or parent. Rename retries require current ownership and
 return their historical result without restoring an obsolete name. Use GET to
 refresh state. Real creation/rename co-commits private folder change/outbox, audit
-and actor receipt; no album, favorite, grant or scope is changed. Collection deletion,
-reparenting via API, and recursive subtree album listing are not yet implemented.
+and actor receipt; no album, favorite, grant or scope is changed. Reparenting via API
+and recursive subtree album listing are not yet implemented.
+
+## Confirm and delete a collection subtree
+
+Deletion removes the selected folder **and all its descendant folders**. Choose one
+explicit action for all their assigned favorites:
+
+- `move_to_default` keeps each favorite and moves it to default/unfiled.
+- `remove_favorites` clears each favorite while retaining its personal revision.
+
+The choice also applies to this account's previously assigned favorites whose albums
+are now hidden by changed grants. Preview responses do not disclose those album IDs
+or hidden-item counts. Explain this warning before the user confirms in a UI.
+
+1. Read `GET /favorite-collections/{id}` and retain its exact root `ETag`.
+2. Read `GET /favorite-collections/{id}/deletion-preview?action=move_to_default`
+   or use `action=remove_favorites`. The private response includes:
+
+   ```json
+   {
+     "action": "move_to_default",
+     "confirmation_token": "opaque-64-lowercase-hex-characters",
+     "includes_descendants": true,
+     "hidden_items_may_be_affected": true
+   }
+   ```
+
+   The illustrated token is a placeholder, not a valid value. Use the returned token
+   unchanged; it is bound to the live session, account, scope, root, action, subtree
+   and favorite revisions, and does not itself grant access. A client-known session
+   cookie is not used as the secret key: a 32-byte installation-private key, generated
+   with `crypto/rand`, protects the confirmation from offline guesses about hidden
+   items. The first authorized preview initializes this key with a short database
+   write; subsequent snapshot scans use read transactions. The key stays in the
+   protected SQLite database, is never returned, and survives restart or independent
+   server processes using the same database. Replacing or losing it invalidates old
+   confirmations; obtain a new preview. Protect it along with database backups.
+
+3. Send `DELETE /favorite-collections/{id}` with JSON containing that same `action`
+   and `confirmation_token`, the root tag in `If-Match`, an actor-bound new
+   `Idempotency-Key`, the configured HTTPS `Origin` and current CSRF token. Success
+   returns an empty `204`. Missing and foreign collection IDs both return `404`.
+
+If the scope, hierarchy, favorite assignments/revisions or selected action changes,
+confirmation fails with `409 VERSION_CONFLICT`. Re-read the root and obtain a new
+preview; do not silently reuse the old choice. Folder metadata version alone does not
+freeze its contents. Concurrent deletion and assignment are serialized by the writer
+transaction. A matching retry of the original request and key within 24 hours returns
+its historical `204` even after the folder is gone, without repeating the operation;
+a fresh active session and the same actor remain mandatory. A different request with
+that key returns `409 IDEMPOTENCY_CONFLICT`.
+
+Each affected favorite retains a monotonic personal revision and receives a complete
+private upsert/delete event and outbox. Each removed folder gets a private tombstone;
+one of these events grants access to hidden resources. One deletion audit records the
+root, action and new root version without listing hidden items. Business changes,
+events, outboxes, audit and receipt commit together; no shared album, other account,
+authorization grant or source file is modified. This is an atomic SQLite operation,
+not a resumable background job. A sufficiently large or busy subtree can exceed the
+10-second metadata deadline; the transaction rolls back instead of reporting partial
+success, and a retry is not guaranteed to finish. Historical private change/outbox
+records remain stored after deletion and must be protected in databases and backups.
 
 ## Filter visible albums
 
@@ -173,22 +234,25 @@ new database or silently repairing it.
 Subsequent SQL writes cannot change a collection's ID or owner, introduce a foreign
 parent or cycle, or use `OR REPLACE` to erase an existing identity/name. Nested
 account deletion still uses the existing same-statement foreign-key cascades. The
-supported API currently creates, lists, reads and renames folders; it does not yet
-provide collection deletion or reparenting. Legacy stored IDs, names and times that
+supported API creates, lists, reads, renames and explicitly deletes folder subtrees;
+it does not yet provide reparenting. Legacy stored IDs, names and times that
 are outside the public DTO's bounds fail safely rather than being trimmed, replaced
 or exposed as misleading data. Migration0029 adds only a partial live-favorite
 index for direct-folder and default ID pages; it does not rewrite personal rows or
-historical events.
+historical events. Migration0032 adds an empty constrained singleton for the
+installation-private confirmation key; it does not rewrite existing collections,
+favorites or event history. The first authorized deletion preview initializes the
+key using the process's cryptographic random source.
 
 A referenced collection cannot disappear through implicit `ON DELETE SET NULL`.
-Collection-deletion management must explicitly choose moving favorites to default
-or removing them; that management API is not implemented here. Account deletion
-removes its live/cleared favorites and nested collections together, with existing
-account revoke/audit boundaries, without changing another account's favorites or
-shared gallery rows. Use deactivation instead when private metadata must remain
-recoverable. Scan no-ops, source outages and provable folder moves retain private
-favorite identity/state, just as they retain ratings and shared preferences.
+The explicit subtree deletion above updates or clears every affected personal
+membership before removing folders. Account deletion removes its live/cleared favorites
+and nested collections together, with existing account revoke/audit boundaries,
+without changing another account's favorites or shared gallery rows. Use deactivation
+instead when private metadata must remain recoverable. Scan no-ops, source outages
+and provable folder moves retain private favorite identity/state, just as they retain
+ratings and shared preferences.
 
-This is not a favorite browsing screen, collection-deletion API, offline sync contract,
-download grant or complete library acceptance. Those product features remain
-required before release.
+This is not a favorite browsing screen, hierarchy UI, offline sync contract, download
+grant or complete library acceptance. Those product features remain required before
+release.

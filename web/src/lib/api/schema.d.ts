@@ -1184,7 +1184,11 @@ export interface paths {
         get: operations["getFavoriteCollection"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a confirmed personal favorite collection subtree
+         * @description Two-step destructive operation. First obtain a deletion preview for this exact action and session. Then send that confirmation token, the root collection's strong If-Match, same-origin CSRF and an actor-bound Idempotency-Key. The root and all descendants are deleted; move_to_default retains their favorites unfiled, while remove_favorites clears them. This also affects the owner's memberships whose albums are no longer visible, without disclosing hidden IDs or counts. A changed subtree, membership, action or authorization scope conflicts rather than silently changing the confirmed set. Personal favorite revisions, private change/outbox records, collection tombstones, audit and receipt commit atomically. An identical retry within 24 hours returns the historical 204 without reapplying changes, even after the folder is gone, and requires a fresh active session. No other account, shared gallery metadata, content grant or source file is changed. Large operations can exceed the 10-second metadata deadline and roll back; this is not an asynchronous job.
+         */
+        delete: operations["deleteFavoriteCollection"];
         options?: never;
         head?: never;
         /**
@@ -1192,6 +1196,28 @@ export interface paths {
          * @description Requires fresh ownership, an account/collection-bound If-Match, actor-bound Idempotency-Key and same-origin CSRF. Name is the sole writable field; children, parent and favorite memberships do not change. Real changes increment the personal version and atomically publish a private change/outbox, audit and receipt. No-op stores only a receipt. A matching retry returns its historical result without restoring an old name, but still requires current ownership. New stale requests conflict. No source I/O, grant or shared album change occurs.
          */
         patch: operations["renameFavoriteCollection"];
+        trace?: never;
+    };
+    "/favorite-collections/{collection_id}/deletion-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Prepare one explicit personal collection deletion choice
+         * @description Reads a consistent owned subtree and personal membership snapshot, including hidden memberships, without disclosing hidden IDs or counts. The opaque token is protected by an installation-private key and bound to the current session, account, authorization scope, root, action, hierarchy and favorite revisions. The first authorized preview can initialize that key in a short database write. It grants no access by itself. Repeat the preview if any relevant state changes or use a different action. Missing and foreign collection IDs both return 404.
+         */
+        get: operations["previewCollectionDelete"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/favorites/{album_id}": {
@@ -1210,7 +1236,7 @@ export interface paths {
         get: operations["getAlbumFavorite"];
         /**
          * Favorite an album or replace this account's collection assignment
-         * @description Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection deletion, hierarchy/UI and offline sync are not enabled by these endpoints.
+         * @description Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection deletion is available separately; hierarchy UI and offline sync are not enabled by these endpoints.
          */
         put: operations["setAlbumFavorite"];
         post?: never;
@@ -1987,6 +2013,24 @@ export interface components {
             name: string;
             /** @description Omit or use null for a root. Otherwise an exact owned ID, at most 64 UTF-8 bytes, without surrounding whitespace, slashes, controls or format characters. */
             parent_id?: string | null;
+        };
+        /**
+         * @description Explicitly preserve affected favorites in default/unfiled or clear them, including inaccessible memberships in the selected subtree.
+         * @enum {string}
+         */
+        FavoriteCollectionDeleteAction: "move_to_default" | "remove_favorites";
+        FavoriteCollectionDeletionPreview: {
+            action: components["schemas"]["FavoriteCollectionDeleteAction"];
+            /** @description Opaque current-session confirmation, not a content or authorization capability. */
+            confirmation_token: string;
+            /** @constant */
+            includes_descendants: true;
+            /** @constant */
+            hidden_items_may_be_affected: true;
+        };
+        FavoriteCollectionDeleteRequest: {
+            action: components["schemas"]["FavoriteCollectionDeleteAction"];
+            confirmation_token: string;
         };
         AlbumFavorite: {
             album_id: string;
@@ -4507,6 +4551,39 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    deleteFavoriteCollection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact strong ETag from the target resource. Wildcards, weak tags, lists, other resource tags, and stale versions are rejected. Copy the returned tag unchanged; a personal rating tag binds both account and album and is not interchangeable with the shared album tag. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+                /** @description Must exactly match the configured HTTPS origin; browsers supply this automatically. */
+                Origin: components["parameters"]["Origin"];
+                "X-CSRF-Token": components["parameters"]["Csrf"];
+                /** @description A unique request key, scoped to the calling account and retained for 24 hours. Reuse only for the identical operation, body, and original precondition. UUIDs are recommended; credentials must never be used as keys. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteCollectionDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Confirmed deletion committed or its actor-bound historical receipt was replayed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     renameFavoriteCollection: {
         parameters: {
             query?: never;
@@ -4531,6 +4608,32 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["FavoriteCollection"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewCollectionDelete: {
+        parameters: {
+            query: {
+                /** @description Choose exactly one action for this confirmation. */
+                action: components["schemas"]["FavoriteCollectionDeleteAction"];
+            };
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private confirmation for the selected current snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteCollectionDeletionPreview"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

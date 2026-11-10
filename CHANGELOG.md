@@ -37,6 +37,13 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Two-step personal favorite-collection subtree deletion requires an explicit move
+  to default or remove-favorites choice, an installation-key-protected session-bound
+  snapshot confirmation, strong root precondition and actor receipt. Hidden memberships
+  are included without exposing their identities or counts. Personal revisions, private events/outboxes,
+  one audit and the receipt commit atomically; large operations can exceed the
+  metadata deadline and roll back. No shared gallery or source files are changed.
+
 - Indexed `popular` album keysets use actual shared retained-account view totals,
   descending with ID ties and zero-view albums last. All existing selectors and
   fresh ACLs apply before LIMIT; cursors freeze the public count without resolving
@@ -52,21 +59,20 @@ All notable public changes are recorded here. This project uses Conventional Com
   current grants, existing filters and keyset orders. Folder IDs select direct live
   assignments only; cleared rows are excluded, and foreign/missing folders yield
   empty pages. Migration0029 adds a partial collection/album index without rewriting
-  data. Recursive subtree browsing, collection deletion, UI and offline sync remain
-  pending; selections never grant media access.
+  data. Recursive subtree browsing, UI and offline sync remain pending; selections
+  never grant media access.
 
 - Owner-private favorite collection create/list/detail/rename APIs support root and
   same-owner nested folders, bounded parent/root keysets, personal strong validators,
   actor receipts and atomic private change/outbox/audit. Name identity remains exact
   binary after validation. Album assignments and shared grants are unchanged;
-  explicit collection deletion and recursive subtree album listing remain pending.
+  recursive subtree album listing remains pending.
 
 - Migration0028 prepares owner-private collection hierarchies independently of the
   management API. It preserves existing folders/favorites, adds version/time and
   owner-parent keysets, and fails atomically on foreign parents, cycles or invalid
   IDs. Database guards prevent owner/ID changes, cycles and destructive REPLACE;
-  nested account cascades remain intact. Explicit deletion and reparenting through
-  the API are still required.
+  nested account cascades remain intact. Reparenting through the API remains required.
 
 - Optional personal `favorite=true|false` album selection intersects current grants,
   library/source/creator/tag filters and existing keyset orders. True spans owned
@@ -80,8 +86,8 @@ All notable public changes are recorded here. This project uses Conventional Com
   and receipt without altering shared album versions, averages or grants. The
   migration preserves valid memberships/times and enforces same-account collection
   FKs, explicit collection removal and atomic nested account cascades. Source
-  outage/scan/move preservation remains required. Collection deletion, recursive
-  subtree browsing, hierarchy UI and offline sync remain separate required work.
+  outage/scan/move preservation remains required. Recursive subtree browsing,
+  hierarchy UI and offline sync remain separate required work.
 
 - Indexed high-rating album keysets (`top_rated`) using the same native SQL mean
   as public cards, DESC mean/ID ties and unrated last. Complete public float keys

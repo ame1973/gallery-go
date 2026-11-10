@@ -1473,6 +1473,48 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/FavoriteCollection' }
         default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteFavoriteCollection
+      summary: Delete a confirmed personal favorite collection subtree
+      description: Two-step destructive operation. First obtain a deletion preview for this exact action and session. Then send that confirmation token, the root collection's strong If-Match, same-origin CSRF and an actor-bound Idempotency-Key. The root and all descendants are deleted; move_to_default retains their favorites unfiled, while remove_favorites clears them. This also affects the owner's memberships whose albums are no longer visible, without disclosing hidden IDs or counts. A changed subtree, membership, action or authorization scope conflicts rather than silently changing the confirmed set. Personal favorite revisions, private change/outbox records, collection tombstones, audit and receipt commit atomically. An identical retry within 24 hours returns the historical 204 without reapplying changes, even after the folder is gone, and requires a fresh active session. No other account, shared gallery metadata, content grant or source file is changed. Large operations can exceed the 10-second metadata deadline and roll back; this is not an asynchronous job.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ResourceIfMatch' }
+        - { $ref: '#/components/parameters/Origin' }
+        - { $ref: '#/components/parameters/Csrf' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FavoriteCollectionDeleteRequest' }
+      responses:
+        '204':
+          description: Confirmed deletion committed or its actor-bound historical receipt was replayed.
+        default: { $ref: '#/components/responses/Problem' }
+  /favorite-collections/{collection_id}/deletion-preview:
+    parameters:
+      - { name: collection_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: previewCollectionDelete
+      summary: Prepare one explicit personal collection deletion choice
+      description: Reads a consistent owned subtree and personal membership snapshot, including hidden memberships, without disclosing hidden IDs or counts. The opaque token is protected by an installation-private key and bound to the current session, account, authorization scope, root, action, hierarchy and favorite revisions. The first authorized preview can initialize that key in a short database write. It grants no access by itself. Repeat the preview if any relevant state changes or use a different action. Missing and foreign collection IDs both return 404.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: action
+          in: query
+          required: true
+          description: Choose exactly one action for this confirmation.
+          schema: { $ref: '#/components/schemas/FavoriteCollectionDeleteAction' }
+      responses:
+        '200':
+          description: Private confirmation for the selected current snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoriteCollectionDeletionPreview' }
+        default: { $ref: '#/components/responses/Problem' }
   /favorites/{album_id}:
     parameters:
       - { $ref: '#/components/parameters/AlbumID' }
@@ -1488,7 +1530,7 @@ paths:
     put:
       operationId: setAlbumFavorite
       summary: Favorite an album or replace this account's collection assignment
-      description: Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection deletion, hierarchy/UI and offline sync are not enabled by these endpoints.
+      description: Requires the personal favorite's strong If-Match, actor-bound Idempotency-Key and same-origin CSRF. An empty object or null collection_id selects default/unfiled; a nonnull ID must name an existing collection owned by the current account. Foreign and missing collections return the same 404, not a global label lookup. No client time, user selector or favorited flag is accepted. Fresh same-transaction session/album visibility precedes receipt replay. A real membership or assignment change increments only this personal revision and co-commits its private change/outbox, audit and receipt. Shared album versions, ratings and scopes do not change. Identical state is a no-op with a receipt. An identical request/key/original precondition within 24 hours returns its historical result without restoring an obsolete membership; GET refreshes current state. Collection deletion is available separately; hierarchy UI and offline sync are not enabled by these endpoints.
       tags: [Library]
       security: [{ sessionCookie: [] }]
       parameters:
@@ -3075,6 +3117,29 @@ components:
           minLength: 1
           maxLength: 64
           description: Omit or use null for a root. Otherwise an exact owned ID, at most 64 UTF-8 bytes, without surrounding whitespace, slashes, controls or format characters.
+    FavoriteCollectionDeleteAction:
+      type: string
+      enum: [move_to_default, remove_favorites]
+      description: Explicitly preserve affected favorites in default/unfiled or clear them, including inaccessible memberships in the selected subtree.
+    FavoriteCollectionDeletionPreview:
+      type: object
+      additionalProperties: false
+      required: [action, confirmation_token, includes_descendants, hidden_items_may_be_affected]
+      properties:
+        action: { $ref: '#/components/schemas/FavoriteCollectionDeleteAction' }
+        confirmation_token:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Opaque current-session confirmation, not a content or authorization capability.
+        includes_descendants: { type: boolean, const: true }
+        hidden_items_may_be_affected: { type: boolean, const: true }
+    FavoriteCollectionDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [action, confirmation_token]
+      properties:
+        action: { $ref: '#/components/schemas/FavoriteCollectionDeleteAction' }
+        confirmation_token: { type: string, pattern: '^[0-9a-f]{64}$' }
     AlbumFavorite:
       type: object
       additionalProperties: false

@@ -1,4 +1,4 @@
-.PHONY: build test check fmt dev api e2e views-load
+.PHONY: build test check fmt dev api e2e views-load favorite-delete-load
 
 build:
 	pnpm build
@@ -39,3 +39,6 @@ e2e:
 # Host-dependent production-deadline load checks use only isolated test databases.
 views-load:
 	CGO_ENABLED=0 go test -p 1 -count=1 -timeout=5m -tags=album_views_load ./tests/integration ./cmd/gallerygo -run '^(TestAlbumViewsAccountDelete100KMeetsMetadataDeadline|TestAlbumViewsAndRatingsAccountDelete100KMeetsMetadataDeadline|TestAlbumRatingsOnlyAccountDelete100KMeetsMetadataDeadline|TestCompiledAlbumViewsAccountDelete100K)$$' -v
+
+favorite-delete-load:
+	CGO_ENABLED=0 go test -p 1 -count=1 -timeout=15m -tags=favorite_delete_load ./tests/integration ./cmd/gallerygo -run '^(TestFavoriteCollectionDelete(100KMeetsMetadataDeadline|SparseSubtreeAt100K)|TestCompiledFavoriteDelete100K)$$' -v

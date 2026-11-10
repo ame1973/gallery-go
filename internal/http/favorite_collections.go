@@ -115,3 +115,45 @@ func (a authorization) renameFavoriteCollection(w http.ResponseWriter, r *http.R
 	w.Header().Set("ETag", resourceETag("favorite_collection", personalResourceID(r, id), value.Version))
 	writeJSON(w, 200, value)
 }
+
+func (a authorization) previewFavoriteCollectionDeletion(w http.ResponseWriter, r *http.Request) {
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(query) != 1 || len(query["action"]) != 1 || query.Get("action") == "" {
+		problem(w, 400, "INVALID_FILTER", "Use exactly one explicit favorite collection deletion action.")
+		return
+	}
+	value, err := a.service.PreviewFavoriteCollectionDeletion(r.Context(), currentSession(r), r.PathValue("collection_id"), query.Get("action"))
+	if err != nil {
+		requestError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
+}
+
+func (a authorization) deleteFavoriteCollection(w http.ResponseWriter, r *http.Request) {
+	if r.URL.RawQuery != "" {
+		problem(w, 400, "INVALID_FILTER", "Deleting a personal collection does not accept query parameters.")
+		return
+	}
+	id := r.PathValue("collection_id")
+	version, ok := resourcePrecondition(w, r, "favorite_collection", personalResourceID(r, id))
+	if !ok {
+		return
+	}
+	key, ok := idempotencyKey(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Action            string `json:"action"`
+		ConfirmationToken string `json:"confirmation_token"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if err := a.service.DeleteFavoriteCollection(r.Context(), currentSession(r), id, version, input.Action, input.ConfirmationToken, key); err != nil {
+		requestError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

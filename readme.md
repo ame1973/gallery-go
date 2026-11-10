@@ -232,12 +232,14 @@ Only implemented endpoints are advertised:
   Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
-- `GET/POST /api/v2/favorite-collections` and
-  `GET/PATCH /api/v2/favorite-collections/{collection_id}`: create/list/read/rename
-  only the current account's root or nested folders, with strong personal validators,
-  private events and receipts. Direct folder album selection excludes descendants;
-  folder deletion and recursive subtree browsing remain pending. See
-  [favorite API](docs/favorites.md#create-and-rename-collections).
+- `GET/POST /api/v2/favorite-collections`,
+  `GET/PATCH/DELETE /api/v2/favorite-collections/{collection_id}`, and the
+  `/deletion-preview` child: create/list/read/rename owned root or nested folders,
+  or explicitly delete a confirmed subtree while moving favorites to default or
+  clearing them. Deletion includes previously assigned hidden albums without
+  revealing their identities. Direct folder album selection excludes descendants;
+  recursive subtree browsing and hierarchy UI remain pending. See
+  [favorite API](docs/favorites.md#confirm-and-delete-a-collection-subtree).
 - `GET/PUT/DELETE /api/v2/favorites/{album_id}`: only the current account's favorite,
   default/owned collection assignment, independent preconditions and historical
   receipts. Clear retains its revision; no shared gallery version or grant changes.
@@ -326,6 +328,7 @@ CGO_ENABLED=0 go test ./...         # Pure-Go deployment path
 pnpm exec playwright install chromium
 make e2e                           # Real Go process + temporary SQLite + production JS
 make views-load                    # Host-dependent 100k account-deletion deadline checks
+make favorite-delete-load          # Host-dependent 100k favorite-subtree deletion checks
 python3 -I tests/integration/docker_smoke.py gallerygo:local
 python3 -I tests/integration/docker_ingest.py gallerygo:local
 ```
@@ -335,6 +338,13 @@ instrumentation against fresh temporary SQLite databases, including a compiled
 server behind HTTPS, and keeps the production 10-second metadata deadline. It
 checks 100,000 affected albums, late rollback, retry and reopened outbox state; it
 does not establish performance on a real NAS or guarantee arbitrary-size deletes.
+`favorite-delete-load` separately checks both explicit subtree choices on 100,000
+personal favorites, including a late rollback and retry, plus a sparse selection
+among 100,000 favorites and 10,000 other folders, under the same metadata deadline.
+A real compiled server behind HTTPS is killed after an observed SQLite WAL spill;
+the test reopens the database, verifies full rollback and retries the same confirmed
+request, also exercising a late journal failure and subsequent reopen. It is
+host-dependent and does not establish arbitrary-scale or power-loss behavior.
 
 E2E starts an isolated HTTPS proxy on `127.0.0.1:4318` and a Go server on
 `127.0.0.1:4319`; both ports must be free, and OpenSSL must be installed. The harness
@@ -371,8 +381,9 @@ changes; clear/replay keep distinct revisions and never restore an old state. Af
 all application/worker handles close, a fresh SQLite pool verifies both retained
 clear revisions and the independently created root/child collection hierarchy.
 The same compiled HTTPS path verifies collection create/rename, direct-child pages,
-historical create replay and retained folder versions across scans. Collection
-deletion and the browsing UI remain pending. Person label commands then verify the
+historical create replay and retained folder versions across scans. Separate HTTPS
+browser tests cover confirmed folder deletion and grant changes; the browsing UI
+remains pending. Person label commands then verify the
 same invariants through another real folder move, including retained album/media IDs
 and clearing to the new indexed creator label.
 Tag catalog commands then verify versioned create/rename/no-op/delete, duplicate

@@ -211,6 +211,17 @@ test('HTTPS personal collections keep owned hierarchy, receipts and favorite ass
     expect(JSON.stringify({ root, child, renamedValue })).not.toMatch(
       /user_id|album_id|root_path|relative_path|storage_path|source_sha256/,
     );
+    const previewPath = `${path}/${root.id}/deletion-preview?action=remove_favorites`;
+    const beforeRevokePreview = await context.request.get(previewPath);
+    expect(beforeRevokePreview.status()).toBe(200);
+    const oldConfirmation =
+      (await beforeRevokePreview.json()) as components['schemas']['FavoriteCollectionDeletionPreview'];
+    expect(oldConfirmation).toMatchObject({
+      action: 'remove_favorites',
+      includes_descendants: true,
+      hidden_items_may_be_affected: true,
+    });
+    expect(JSON.stringify(oldConfirmation)).not.toMatch(/user_id|album_id|root_path|source_sha256/);
     const groupResponse = await api.get(`/api/v2/admin/groups/${group.id}`);
     expect(
       (
@@ -224,6 +235,124 @@ test('HTTPS personal collections keep owned hierarchy, receipts and favorite ass
     expect((await albums({ favorite_unfiled: 'true' })).items).toEqual([]);
     expect((await context.request.get(`${path}/${root.id}`)).status()).toBe(200);
     expect((await context.request.get(`${path}?${continued}`)).status()).toBe(400);
+    const deleteHeaders = {
+      ...ownHeaders,
+      'If-Match': renamed.headers().etag!,
+      'Idempotency-Key': randomUUID(),
+    };
+    const staleDelete = await context.request.delete(`${path}/${root.id}`, {
+      headers: deleteHeaders,
+      data: { action: 'remove_favorites', confirmation_token: oldConfirmation.confirmation_token },
+    });
+    expect(staleDelete.status()).toBe(409);
+    const hiddenPreviewResponse = await context.request.get(previewPath);
+    expect(hiddenPreviewResponse.status()).toBe(200);
+    const hiddenPreview =
+      (await hiddenPreviewResponse.json()) as components['schemas']['FavoriteCollectionDeletionPreview'];
+    expect(hiddenPreview.confirmation_token).not.toBe(oldConfirmation.confirmation_token);
+    expect(JSON.stringify(hiddenPreview)).not.toContain(album);
+    const confirmedBody = {
+      action: 'remove_favorites',
+      confirmation_token: hiddenPreview.confirmation_token,
+    };
+    const deleted = await context.request.delete(`${path}/${root.id}`, {
+      headers: deleteHeaders,
+      data: confirmedBody,
+    });
+    expect(deleted.status()).toBe(204);
+    expect(await deleted.body()).toHaveLength(0);
+    expect(deleted.headers()['cache-control']).toBe('private, no-store');
+    expect(
+      (
+        await context.request.delete(`${path}/${root.id}`, {
+          headers: deleteHeaders,
+          data: confirmedBody,
+        })
+      ).status(),
+    ).toBe(204);
+    expect((await context.request.get(`${path}/${root.id}`)).status()).toBe(404);
+    expect((await context.request.get(`${path}/${child.id}`)).status()).toBe(404);
+    expect((await context.request.get(favoritePath)).status()).toBe(404);
+
+    const replacementResponse = await api.post('/api/v2/admin/groups', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: { name: `Collection restore-${randomUUID()}` },
+    });
+    expect(replacementResponse.status()).toBe(201);
+    const replacement = (await replacementResponse.json()) as components['schemas']['Group'];
+    try {
+      for (const grant of [
+        `/api/v2/admin/libraries/${prefix}-library/access`,
+        `/api/v2/admin/users/${account.user.id}/groups`,
+      ]) {
+        const current = await api.get(grant);
+        expect(current.status()).toBe(200);
+        expect(
+          (
+            await api.put(grant, {
+              headers: { ...headers, 'If-Match': current.headers().etag! },
+              data: { group_ids: [replacement.id] },
+            })
+          ).status(),
+        ).toBe(200);
+      }
+      const restoredFavorite = await context.request.get(favoritePath);
+      expect(restoredFavorite.status()).toBe(200);
+      expect(await restoredFavorite.json()).toMatchObject({
+        favorited: false,
+        collection_id: null,
+        version: 5,
+      });
+      const moveFolderResponse = await context.request.post(path, {
+        headers: { ...ownHeaders, 'Idempotency-Key': randomUUID() },
+        data: { name: 'Move to default' },
+      });
+      expect(moveFolderResponse.status()).toBe(201);
+      const moveFolder = (await moveFolderResponse.json()) as Collection;
+      const moveFavorite = await context.request.put(favoritePath, {
+        headers: {
+          ...ownHeaders,
+          'If-Match': restoredFavorite.headers().etag!,
+          'Idempotency-Key': randomUUID(),
+        },
+        data: { collection_id: moveFolder.id },
+      });
+      expect(moveFavorite.status()).toBe(200);
+      const movePreviewResponse = await context.request.get(
+        `${path}/${moveFolder.id}/deletion-preview?action=move_to_default`,
+      );
+      expect(movePreviewResponse.status()).toBe(200);
+      const movePreview =
+        (await movePreviewResponse.json()) as components['schemas']['FavoriteCollectionDeletionPreview'];
+      expect(
+        (
+          await context.request.delete(`${path}/${moveFolder.id}`, {
+            headers: {
+              ...ownHeaders,
+              'If-Match': moveFolderResponse.headers().etag!,
+              'Idempotency-Key': randomUUID(),
+            },
+            data: { action: 'move_to_default', confirmation_token: movePreview.confirmation_token },
+          })
+        ).status(),
+      ).toBe(204);
+      expect(await (await context.request.get(favoritePath)).json()).toMatchObject({
+        favorited: true,
+        collection_id: null,
+        version: 7,
+      });
+    } finally {
+      const current = await api.get(`/api/v2/admin/groups/${replacement.id}`);
+      if (current.status() !== 404) {
+        expect(
+          (
+            await api.delete(`/api/v2/admin/groups/${replacement.id}`, {
+              headers: { ...headers, 'If-Match': current.headers().etag! },
+            })
+          ).status(),
+        ).toBe(204);
+      }
+    }
   } finally {
     const current = await api.get(`/api/v2/admin/groups/${group.id}`);
     if (current.status() !== 404) {
