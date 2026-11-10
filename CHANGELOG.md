@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Verify complete original and variant bytes against their indexed SHA-256 before
+  returning a strong ETag or evaluating conditional and Range requests. Recheck
+  access and resource pins after the bounded-concurrency read. Each request can
+  read the entire file, so large media and NAS links require capacity planning.
+
 - On Linux, detect change-time updates during protected original and variant streams,
   including common same-size rewrites with restored modification times. A detected
   in-flight change aborts the response; this does not replace source hashing or an

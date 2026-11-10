@@ -632,19 +632,29 @@ including metadata, covers, counts, originals, and variants. Originals additiona
 require both a present source entry and an available logical media object; a file
 that becomes non-media cannot retain its former original-content eligibility.
 
-Content streams do not inherit the 10-second metadata timeout. Writes have a
-30-second refreshed idle deadline, and reads/seeks check cancellation and file
-identity, size and modification time. On Linux they also check the opened file's
-change time, detecting common in-flight same-size rewrites that restore mtime. A
-detected in-flight change or broken write aborts the connection/stream; it never
-appends JSON to partially delivered media. A client must discard an incomplete body.
+Before returning a strong SHA-256 ETag or evaluating conditional headers, each
+original or variant request hashes the complete opened file using a bounded buffer
+and compares it to the indexed representation hash. This includes HEAD, 304 and
+Range requests. After hashing, the server rechecks the rooted file identity, fresh
+authorization and the relevant source/revision pins; originals also recheck the
+source root and marker. Hashing occurs outside SQLite transactions. Each media
+service allows four concurrent verifications; waiting requests honor cancellation.
 
-These signatures are not an adversarial tamper-proof NAS snapshot. A rewrite before
-the file was opened can preserve size and mtime, and remote filesystems may not
-immediately report all changes. Full source hashes belong to ingestion/publication;
-they are not recomputed for each Range request. Future offline downloads must verify
-complete length and SHA-256 before marking bytes ready. Correct immutable publication
-and trusted cache storage remain required.
+This correctness-first policy can make every Range seek, HEAD or 304 read the entire
+source or cache file. Large files, concurrent clients and slow NAS links can cause
+substantial I/O and latency; a real deployment must measure the impact. Content
+streams do not inherit the 10-second metadata timeout. Writes have a 30-second
+refreshed idle deadline, and reads/seeks check cancellation and file identity, size
+and modification time. On Linux they also check the opened file's change time,
+detecting common in-flight same-size rewrites that restore mtime. A detected
+in-flight change or broken write aborts the connection/stream; it never appends JSON
+to partially delivered media. A client must discard an incomplete body.
+
+These checks do not provide an atomic or adversarially tamper-proof NAS snapshot.
+A remote filesystem may not immediately report every change, and a file can change
+after verification. Future offline downloads must verify complete length and SHA-256
+before marking bytes ready. Correct immutable publication and trusted cache storage
+remain required.
 
 `os.Root` confines entry traversal/TOCTOU, but does not forbid privileged bind
 mounts, device files, or make stalled kernel NAS I/O cancellable. Use trusted

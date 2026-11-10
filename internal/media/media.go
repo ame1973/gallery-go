@@ -40,14 +40,17 @@ func (root SourceRoot) Signature() string {
 }
 
 type Service struct {
-	db        *sql.DB
-	auth      *auth.Service
-	cacheRoot string
-	sources   map[string]SourceRoot
+	db              *sql.DB
+	auth            *auth.Service
+	cacheRoot       string
+	sources         map[string]SourceRoot
+	contentVerifies chan struct{}
 }
 
 func New(db *sql.DB, authentication *auth.Service, cacheRoot string, sources map[string]SourceRoot) *Service {
-	return &Service{db: db, auth: authentication, cacheRoot: cacheRoot, sources: maps.Clone(sources)}
+	// ponytail: four simultaneous full hashes per service; make this configurable
+	// if deployment measurements require another bounded I/O budget.
+	return &Service{db: db, auth: authentication, cacheRoot: cacheRoot, sources: maps.Clone(sources), contentVerifies: make(chan struct{}, 4)}
 }
 
 func (s *Service) readTx(ctx context.Context, current auth.Session) (*sql.Tx, auth.User, error) {

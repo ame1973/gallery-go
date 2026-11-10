@@ -658,6 +658,9 @@ func TestCompiledCLIHTTPSNativeIngestionInEmbeddedAndStandaloneModes(t *testing.
 			if !bytes.Equal(original, input.Bytes()) || headers.Get("Content-Type") != "image/png" || headers.Get("Cache-Control") != "private, no-store" {
 				t.Fatal("actual protected original changed", headers)
 			}
+			if !scheduled {
+				verifyCompiledOriginalRejectsSameStatRewrite(t, api, name, id, input.Bytes())
+			}
 			api.request("POST", "/admin/scans", map[string]string{"mode": "incremental", "source_id": source.ID}, 202, &accepted)
 			if job := api.waitJob(accepted.ID); job.Status != "succeeded" {
 				t.Fatal(job, job.Counts)

@@ -3,7 +3,6 @@ package media
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"strings"
 	"syscall"
 
-	"gallerygo/internal/access"
 	"gallerygo/internal/auth"
 )
 
@@ -70,9 +68,9 @@ func VariantPath(revision, preset string, version int64, hash, contentType strin
 }
 
 // Content is a context-aware seekable read-only descriptor. Signature checks on
-// each read/seek abort an in-flight response instead of silently mixing revisions.
-// Linux kernel filesystem stalls are not made cancellable by a context; real NAS
-// behavior is a separate deployment gate, not a simulated guarantee.
+// each read/seek abort on detected in-flight changes rather than appending errors
+// to partial media. Filesystem signatures do not provide an atomic NAS snapshot;
+// context cannot interrupt arbitrary kernel filesystem stalls.
 type Content struct {
 	MIME       string
 	Filename   string
@@ -93,7 +91,7 @@ func (content *Content) check() error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || !os.SameFile(content.info, info) || info.Size() != content.info.Size() || !info.ModTime().Equal(content.info.ModTime()) || contentChangeTimeChanged(content.info, info) {
+	if !content.sameInfo(info) {
 		return ErrContentChanged
 	}
 	return nil
@@ -154,98 +152,152 @@ func OpenReadOnlyFile(root *os.Root, name string) (*os.File, fs.FileInfo, error)
 }
 
 func (s *Service) OpenVariant(ctx context.Context, current auth.Session, mediaID, variantID string) (*Content, error) {
-	tx, viewer, err := s.readTx(ctx, current)
+	state, err := s.variantContentState(ctx, current, mediaID, variantID)
 	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	var storage, hash, contentType, name, revision, preset string
-	var size, version int64
-	err = tx.QueryRowContext(ctx, `SELECT v.storage_path,v.sha256,v.mime,v.size_bytes,m.file_name,v.revision_id,v.preset_key,v.preset_version
-	 FROM media_variants v JOIN media_revisions r ON r.id=v.revision_id JOIN media m ON m.current_revision_id=r.id AND m.id=r.media_id
-	 JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
-	 WHERE `+access.MediaVisible+` AND m.id=? AND v.id=? AND v.status='ready'`, viewer.ID, mediaID, variantID).Scan(&storage, &hash, &contentType, &size, &name, &revision, &preset, &version)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Rollback(); err != nil {
 		return nil, err
 	}
 	// No filesystem I/O runs while holding SQLite's writer transaction.
-	canonical, err := VariantPath(revision, preset, version, hash, contentType)
-	if err != nil || storage != canonical || size < 1 || !filepath.IsAbs(s.cacheRoot) {
+	canonical, err := VariantPath(state.revision, state.preset, state.presetVersion, state.hash, state.contentType)
+	if err != nil || state.storage != canonical || state.size < 1 || !filepath.IsAbs(s.cacheRoot) {
 		return nil, ErrVariantUnavailable
+	}
+	if err := s.acquireContentVerification(ctx); err != nil {
+		return nil, err
+	}
+	defer func() { <-s.contentVerifies }()
+	if err := s.requireVariantContentState(ctx, current, mediaID, variantID, state); err != nil {
+		return nil, err
 	}
 	root, err := os.OpenRoot(s.cacheRoot)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
 	}
 	defer root.Close()
-	file, info, err := OpenReadOnlyFile(root, storage)
+	rootInfo, err := root.Stat(".")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
 	}
-	if info.Size() != size {
+	file, info, err := OpenReadOnlyFile(root, state.storage)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
+	}
+	if info.Size() != state.size {
 		file.Close()
 		return nil, ErrVariantUnavailable
 	}
-	contentType = safeMIME(contentType)
-	filename := strings.TrimSuffix(baseName(name), path.Ext(baseName(name))) + "." + mediaExtensions[contentType]
-	return &Content{MIME: contentType, Filename: filename, ETag: `"sha256-` + hash + `"`, Size: size, file: file, info: info, ctx: ctx}, nil
+	contentType := safeMIME(state.contentType)
+	filename := strings.TrimSuffix(baseName(state.name), path.Ext(baseName(state.name))) + "." + mediaExtensions[contentType]
+	content := &Content{MIME: contentType, Filename: filename, ETag: `"sha256-` + state.hash + `"`, Size: state.size, file: file, info: info, ctx: ctx}
+	if err := content.verifyDigest(state.hash); err != nil {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
+	}
+	if err := content.sameNamedFile(root, state.storage); err != nil {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
+	}
+	rootNow, err := os.Stat(s.cacheRoot)
+	if err != nil || !os.SameFile(rootInfo, rootNow) {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, ErrVariantUnavailable
+	}
+	if err := s.requireVariantContentState(ctx, current, mediaID, variantID, state); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err := content.check(); err != nil {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrVariantUnavailable, err)
+	}
+	return content, nil
 }
 
 func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaID string) (*Content, error) {
-	tx, viewer, err := s.readTx(ctx, current)
+	state, err := s.originalContentState(ctx, current, mediaID)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-	// The actual account policy applies even to administrators. A supplied user
-	// DTO, an old scope, or a ready preview is not an original-download grant.
-	if !viewer.DownloadOriginal {
-		return nil, sql.ErrNoRows
-	}
-	var sourceName, sourcePath, rootSignature, state, availability, mediaAvailability, relative, hash, entryHash, contentType, name string
-	var size, mtime, entrySize, entryMtime, sourceConfig, entryConfig int64
-	err = tx.QueryRowContext(ctx, `SELECT src.name,src.root_path,src.root_config_sha256,src.config_version,e.source_config_version,src.state,e.availability,e.relative_path,r.source_sha256,COALESCE(e.sha256,''),
-	 r.source_size,r.source_mtime_ns,e.size_bytes,e.mtime_ns,COALESCE(m.mime,''),m.file_name,m.availability
-	 FROM media m JOIN albums a ON a.id=m.album_id JOIN libraries l ON l.id=a.library_id
-	 JOIN media_revisions r ON r.id=m.current_revision_id AND r.media_id=m.id
-	 JOIN source_entries e ON e.id=m.source_entry_id AND e.source_id=a.source_id
-	 JOIN sources src ON src.id=e.source_id AND src.library_id=l.id
-	 WHERE `+access.MediaVisible+` AND m.id=?`, viewer.ID, mediaID).Scan(&sourceName, &sourcePath, &rootSignature, &sourceConfig, &entryConfig, &state, &availability, &relative, &hash, &entryHash, &size, &mtime, &entrySize, &entryMtime, &contentType, &name, &mediaAvailability)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Rollback(); err != nil {
-		return nil, err
-	}
-	configured, ok := s.sources[sourceName]
-	if !ok || configured.Path != sourcePath || rootSignature != configured.Signature() || sourceConfig != entryConfig || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(relative) || state != "healthy" || availability != "present" || mediaAvailability != "available" || size < 1 || size != entrySize || mtime != entryMtime || !validHash(hash) || hash != entryHash {
+	configured, ok := s.sources[state.sourceName]
+	if !ok || configured.Path != state.sourcePath || state.rootSignature != configured.Signature() || state.sourceConfig != state.entryConfig || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(state.relative) || state.state != "healthy" || state.availability != "present" || state.mediaAvailability != "available" || state.size < 1 || state.size != state.entrySize || state.mtime != state.entryMtime || !validHash(state.hash) || state.hash != state.entryHash {
 		return nil, ErrSourceUnavailable
+	}
+	if err := s.acquireContentVerification(ctx); err != nil {
+		return nil, err
+	}
+	defer func() { <-s.contentVerifies }()
+	if err := s.requireOriginalContentState(ctx, current, mediaID, state); err != nil {
+		return nil, err
 	}
 	root, err := os.OpenRoot(configured.Path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
 	defer root.Close()
-	marker, _, err := OpenReadOnlyFile(root, configured.Marker)
+	rootInfo, err := root.Stat(".")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
-	_, err = marker.Read(make([]byte, 1))
-	marker.Close()
-	if err != nil && !errors.Is(err, io.EOF) {
+	markerInfo, err := readContentMarker(ctx, root, configured.Marker)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
-	file, info, err := OpenReadOnlyFile(root, relative)
+	file, info, err := OpenReadOnlyFile(root, state.relative)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
 	}
-	if info.Size() != size || info.ModTime().UnixNano() != mtime {
+	if info.Size() != state.size || info.ModTime().UnixNano() != state.mtime {
 		file.Close()
 		return nil, ErrSourceUnavailable
 	}
-	contentType = originalMIME(contentType)
-	return &Content{MIME: contentType, Filename: baseName(name), ETag: `"sha256-` + hash + `"`, Size: size, Attachment: true, file: file, info: info, ctx: ctx}, nil
+	content := &Content{MIME: originalMIME(state.contentType), Filename: baseName(state.name), ETag: `"sha256-` + state.hash + `"`, Size: state.size, Attachment: true, file: file, info: info, ctx: ctx}
+	if err := content.verifyDigest(state.hash); err != nil {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+	}
+	if err := content.sameNamedFile(root, state.relative); err != nil {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+	}
+	rootNow, rootErr := os.Stat(configured.Path)
+	markerNow, markerErr := readContentMarker(ctx, root, configured.Marker)
+	if rootErr != nil || markerErr != nil || !os.SameFile(rootInfo, rootNow) || !sameContentInfo(markerInfo, markerNow) {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, ErrSourceUnavailable
+	}
+	if err := s.requireOriginalContentState(ctx, current, mediaID, state); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err := content.check(); err != nil {
+		file.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrSourceUnavailable, err)
+	}
+	return content, nil
 }

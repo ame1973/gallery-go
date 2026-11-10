@@ -282,7 +282,9 @@ Only implemented endpoints are advertised:
 - `GET/HEAD /api/v2/media/{media_id}/variants/{variant_id}/content` and
   `/media/{media_id}/original`: protected read-only bytes, single Range, strong ETags,
   and conditional requests. Originals require explicit download policy, even for
-  administrators. See [docs/media.md](docs/media.md).
+  administrators. Each request verifies the complete file hash before responding,
+  including HEAD and Range, which can be expensive on large files or a NAS. See
+  [docs/media.md](docs/media.md).
 
 HEAD is supported for these GET endpoints. API responses use
 `Cache-Control: private, no-store`. Errors use `application/problem+json` with a
