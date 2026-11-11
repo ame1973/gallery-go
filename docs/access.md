@@ -1,10 +1,31 @@
 # Groups, resource grants, and metadata API
 
 Library and album access are deny-by-default and enforced in SQL, not by hiding
-links in the frontend. The backend APIs described here are implemented; dedicated
-library-browsing and permission-management screens are not yet available. Existing
-indexed metadata can be queried through the API; inventory scanning is documented
-in [sources.md](sources.md).
+links in the frontend. A basic session-protected album and media-metadata browser is
+available at `/albums`; complete catalog and permission-management screens remain
+under development. Indexed metadata can also be queried through the APIs described
+here; inventory scanning is documented in [sources.md](sources.md).
+
+## Basic album browser
+
+After signing in, select **Albums** or open `/albums`. This view requests at most
+30 currently visible albums per page and offers the server's existing ID, indexed
+creation time, literal-name, rating and popularity orders. Open an album for its
+bounded media-metadata pages. Names use exact binary ordering, not locale-aware
+sorting. These are live pages, not frozen snapshots: an expired or changed-scope
+cursor must be restarted from the first page. The album list location is retained
+when following its detail link.
+
+Only near-viewport cards request ready preview metadata. The browser selects a
+bounded image variant and constructs the documented same-origin protected content
+route; it never opens a source path, substitutes an original download, or treats
+an unavailable preview as proof that a source is absent. With the normal renderer
+still under development most fresh installations have no ready previews. The
+browser keeps request data only in account/scope-keyed memory and hides a failed
+request's previous results; all server authorization remains authoritative. Opening
+the album detail does not yet record an explicit view. Full home recommendations, metadata
+filters, favorite/rating controls, full-size media viewing and offline mode are
+separate unfinished features.
 
 ## Authorization rules
 
@@ -318,5 +339,6 @@ No absolute source or cache path is included.
 
 These are live metadata pages, not immutable offline snapshots; concurrent edits
 can move records between pages. Full text search, alternative album orderings,
-media processing, the browsing UI, and offline synchronization are still being built.
+media processing, full browsing and management flows, and offline synchronization
+are still being built.
 All responses are private and `no-store`; no service worker globally caches the API.

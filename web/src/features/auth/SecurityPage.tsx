@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useNavigate, useOutletContext } from 'react-router';
+import { LibraryNavigation } from '../library/common';
 import { Field } from '../../components/ui/field';
 import { changePassword, errorMessage, listSessions, revokeSession, signOut } from './api';
 import type { Session, User } from './api';
@@ -26,6 +27,7 @@ export function SecurityPage() {
   });
   return (
     <main>
+      <LibraryNavigation />
       <div className="page-heading">
         <div>
           <h1>

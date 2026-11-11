@@ -1,10 +1,12 @@
 import { authMessages } from '../features/auth/messages';
+import { libraryMessages } from '../features/library/messages';
 
 export const locales = ['en', 'zh-TW', 'zh-CN'] as const;
 export type Locale = (typeof locales)[number];
 
 const en = {
   ...authMessages.en,
+  ...libraryMessages.en,
   language: 'Language',
   title: 'Service connection',
   description: 'A private place for the photographs and films you keep.',
@@ -23,7 +25,7 @@ const en = {
   version: 'Version {version}',
   development: 'Development build',
   developmentNote:
-    'Account security is available. Gallery browsing, media processing, and offline downloads are still under development.',
+    'Account security and album browsing are available. Media processing, the full viewer, and offline downloads are still under development.',
   privacy: 'Your originals stay yours.',
   privacyNote: 'Source media is read-only. This page contains no private gallery data.',
   footer: 'GalleryGo · Self-hosted, by design',
@@ -35,6 +37,7 @@ export const messages: Record<Locale, Messages> = {
   en,
   'zh-TW': {
     ...authMessages['zh-TW'],
+    ...libraryMessages['zh-TW'],
     language: '語言',
     title: '服務連線',
     description: '為你珍藏的照片與影片，留一個私密的地方。',
@@ -52,13 +55,14 @@ export const messages: Record<Locale, Messages> = {
     healthy: '已連線',
     version: '版本 {version}',
     development: '開發版本',
-    developmentNote: '已提供帳號安全功能。圖庫瀏覽、媒體處理及離線下載仍在開發中。',
+    developmentNote: '已提供帳號安全與相簿瀏覽。媒體處理、完整檢視器及離線下載仍在開發中。',
     privacy: '原始檔案，始終屬於你。',
     privacyNote: '來源媒體維持唯讀。此頁面不包含任何私人圖庫資料。',
     footer: 'GalleryGo · 為自行託管而設計',
   },
   'zh-CN': {
     ...authMessages['zh-CN'],
+    ...libraryMessages['zh-CN'],
     language: '语言',
     title: '服务连接',
     description: '为你珍藏的照片与影片，留一个私密的地方。',
@@ -76,7 +80,7 @@ export const messages: Record<Locale, Messages> = {
     healthy: '已连接',
     version: '版本 {version}',
     development: '开发版本',
-    developmentNote: '已提供账号安全功能。图库浏览、媒体处理及离线下载仍在开发中。',
+    developmentNote: '已提供账号安全与相册浏览。媒体处理、完整查看器及离线下载仍在开发中。',
     privacy: '原始文件，始终属于你。',
     privacyNote: '来源媒体保持只读。此页面不包含任何私人图库数据。',
     footer: 'GalleryGo · 为自行托管而设计',

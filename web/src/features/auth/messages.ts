@@ -56,7 +56,7 @@ const en = {
   'auth.notFound': 'This page does not exist.',
   'auth.backToAccount': 'Go to your account',
   'auth.galleryPending':
-    'Gallery browsing and offline downloads are still under development. Your originals are not exposed by this account page.',
+    'Album browsing is available. The full media viewer and offline downloads are still under development.',
 };
 
 type Messages = Record<keyof typeof en, string>;
@@ -116,7 +116,7 @@ export const authMessages: Record<'en' | 'zh-TW' | 'zh-CN', Messages> = {
     'auth.requestFailed': '無法完成請求，請再試一次。',
     'auth.notFound': '此頁面不存在。',
     'auth.backToAccount': '前往帳號頁面',
-    'auth.galleryPending': '圖庫瀏覽及離線下載仍在開發中。此帳號頁面不會公開原始媒體。',
+    'auth.galleryPending': '已提供相簿瀏覽。完整媒體檢視器及離線下載仍在開發中。',
   },
   'zh-CN': {
     'auth.signIn': '登录',
@@ -171,6 +171,6 @@ export const authMessages: Record<'en' | 'zh-TW' | 'zh-CN', Messages> = {
     'auth.requestFailed': '无法完成请求，请重试。',
     'auth.notFound': '此页面不存在。',
     'auth.backToAccount': '前往账号页面',
-    'auth.galleryPending': '图库浏览及离线下载仍在开发中。此账号页面不会公开原始媒体。',
+    'auth.galleryPending': '已提供相册浏览。完整媒体查看器及离线下载仍在开发中。',
   },
 };

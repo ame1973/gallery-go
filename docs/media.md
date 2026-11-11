@@ -9,9 +9,11 @@ metadata publication are implemented. Native JPEG/PNG/GIF/WebP dimensions,
 whitelisted image EXIF, GIF/APNG/WebP frame/cycle/loop metadata, controlled AVIF
 primary-item/sequence metadata, HEVC HEIF/HEIC primary stills, classic TIFF first-page
 dimensions/EXIF and sandboxed MP4/MOV/MKV/WebM geometry/duration/creation evidence are available.
-External image capabilities, normal variant publication, gallery/player screens,
-and offline manifests remain under development. A fresh installation has no indexed
-media until a configured source is scanned; test fixtures are not production seed
+External image capabilities, normal variant publication, the full media viewer/
+player, and offline manifests remain under development. Basic album pages can show
+already-ready protected previews and otherwise display a placeholder. A fresh
+installation has no indexed media until a configured source is scanned; test
+fixtures are not production seed
 data. Video inspection requires a trusted system FFprobe and mandatory Linux
 isolation; the current container still does not bundle external codecs. Metadata
 and original downloads do not establish full image/video decoding or playback.

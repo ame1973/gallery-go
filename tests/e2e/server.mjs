@@ -19,6 +19,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'media',
     'media-selection',
     'album-selection',
+    'browse-ui',
     'outage',
     'duplicates',
     'people',
@@ -291,6 +292,38 @@ try {
           )
           .run(variantID, revisionID, storage, stat.size, hash, Date.now());
       }
+    }
+    if (prefix.startsWith('browse-ui-')) {
+      // Pagination and permission fixtures only; no production renderer is enabled.
+      fixtureDB
+        .prepare('UPDATE albums SET cover_media_id=? WHERE id=?')
+        .run(`${prefix}-media`, album);
+      for (let index = 0; index < 32; index += 1) {
+        fixtureDB
+          .prepare(
+            'INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-extra-${String(index).padStart(2, '0')}`,
+            library,
+            `${prefix}-source`,
+            `Paged album ${index}`,
+            Date.now(),
+            Date.now(),
+          );
+      }
+      fixtureDB
+        .prepare(
+          'INSERT INTO albums(id,library_id,source_id,source_name,access_restricted,created_at,updated_at) VALUES(?,?,?,?,1,?,?)',
+        )
+        .run(
+          `${prefix}-hidden`,
+          library,
+          `${prefix}-source`,
+          'Hidden private album',
+          Date.now(),
+          Date.now(),
+        );
     }
     if (prefix.startsWith('album-selection-')) {
       // Selection-only empty/restricted cards and deterministic time ties, not

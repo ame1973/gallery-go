@@ -41,6 +41,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A basic three-language `/albums` and album-detail browser with bounded server
+  pages, supported album ordering, current-session/scope isolation, accessible
+  loading/error/empty states and near-viewport protected ready-image previews.
+  It does not download originals or record views; full viewer, home, interactions
+  and offline flows remain under development.
+
 - Two-step personal favorite-collection subtree deletion requires an explicit move
   to default or remove-favorites choice, an installation-key-protected session-bound
   snapshot confirmation, strong root precondition and actor receipt. Hidden memberships

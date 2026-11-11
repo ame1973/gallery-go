@@ -25,8 +25,10 @@ animation. GPS/raw tags
 are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Album-media pages support SQL-indexed kind/capture
 selection and ID/capture keysets; see [selection rules](docs/media.md#album-media-selection).
-Management/browsing screens, complete media processing, playback, and
-offline downloads are still being built. Do not expose this build
+A basic three-language album and media-metadata browser is available; ready image
+previews appear only when a protected variant exists. Full home/management screens,
+normal variant production, playback, and offline downloads are still being built.
+Do not expose this build
 to the Internet or connect sensitive media yet.
 
 ## Requirements
@@ -68,6 +70,16 @@ you change your password, inspect active sessions, revoke another session with a
 confirmation dialog, and sign out. A password change rotates the current session
 and signs out other sessions. The language selector supports English, Traditional
 Chinese, and Simplified Chinese. `/status` remains available without signing in.
+
+Open `/albums` or choose **Albums** from the account page to browse currently
+visible albums, select a supported order, and move through bounded server pages.
+Open an album to see its media metadata and any ready, session-protected image
+previews. An unavailable preview is not a claim that the source is absent: normal
+variant generation is not enabled yet, and the browser never substitutes the
+original download. An expired or scope-changed page offers a return to the first
+page. Opening a detail page does not yet record a view. Full-screen viewing,
+playback, favorites management, home recommendations, search, and offline downloads
+remain under development.
 
 Run bootstrap only once on a fresh installation. Subsequent launches need only
 `doctor` and `serve` after applying any new migrations.
@@ -382,8 +394,9 @@ all application/worker handles close, a fresh SQLite pool verifies both retained
 clear revisions and the independently created root/child collection hierarchy.
 The same compiled HTTPS path verifies collection create/rename, direct-child pages,
 historical create replay and retained folder versions across scans. Separate HTTPS
-browser tests cover confirmed folder deletion and grant changes; the browsing UI
-remains pending. Person label commands then verify the
+browser tests cover confirmed folder deletion and grant changes; the full collection
+management UI remains pending. Separate browser tests cover bounded album pages,
+protected previews and access revocation. Person label commands then verify the
 same invariants through another real folder move, including retained album/media IDs
 and clearing to the new indexed creator label.
 Tag catalog commands then verify versioned create/rename/no-op/delete, duplicate

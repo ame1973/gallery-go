@@ -12,6 +12,12 @@ const LoginPage = lazy(() =>
 const SecurityPage = lazy(() =>
   import('../features/auth/SecurityPage').then((module) => ({ default: module.SecurityPage })),
 );
+const AlbumsPage = lazy(() =>
+  import('../features/library/AlbumsPage').then((module) => ({ default: module.AlbumsPage })),
+);
+const AlbumPage = lazy(() =>
+  import('../features/library/AlbumPage').then((module) => ({ default: module.AlbumPage })),
+);
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(initialLocale);
@@ -42,6 +48,8 @@ export function App() {
             <Route path="/" element={<Navigate to="/settings/security" replace />} />
             <Route element={<RequireSession />}>
               <Route path="/settings/security" element={<SecurityPage />} />
+              <Route path="/albums" element={<AlbumsPage />} />
+              <Route path="/albums/:albumId" element={<AlbumPage />} />
             </Route>
             <Route
               path="*"
