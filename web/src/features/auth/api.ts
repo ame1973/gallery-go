@@ -25,9 +25,12 @@ export async function currentUser(signal?: AbortSignal) {
   return result.data;
 }
 
-async function securityHeaders() {
-  const { data, error } = await api.GET('/auth/csrf');
-  if (!data) throw failure(error);
+export async function securityHeaders(signal?: AbortSignal) {
+  const { data, error, response } = await api.GET('/auth/csrf', { ...(signal ? { signal } : {}) });
+  if (!data) {
+    if (response.status === 401) throw new APIError('UNAUTHENTICATED', error?.request_id);
+    throw failure(error);
+  }
   return { Origin: window.location.origin, 'X-CSRF-Token': data.token };
 }
 

@@ -1,8 +1,25 @@
 # Personal album ratings
 
-All paths below use `/api/v2`. These are authenticated metadata APIs; rating UI
-and offline operation replay are not enabled yet. Explicit view counters are
-documented separately in [views.md](views.md).
+All paths below use `/api/v2`. These are authenticated metadata APIs; the album
+browser also offers online personal rating controls. Offline operation replay is not
+available yet. Explicit view counters are documented separately in [views.md](views.md).
+
+## In the album browser
+
+Open an accessible album, choose one to five stars or **No rating**, then select
+**Save rating**. Your own selection and the shared average are displayed separately.
+The average is rounded to at most two decimal places for display only; server-side
+ordering still uses the full native mean. The API does not expose other accounts'
+individual ratings, but an aggregate can make a vote inferable in a small group.
+
+If another session changes your rating, the browser reports a conflict and asks you
+to reload the current value before making another choice. If a response is lost or
+times out, retry uses the same method, body, key and original personal precondition.
+The browser retains this uncertain command only in memory and offers a retry for
+at most 15 minutes; after that, or after leaving/reloading the page, reload the
+current rating instead. A successful request, including a historical receipt replay,
+is followed by fresh personal and shared reads; the historical response itself is
+not presented as current. This is an online flow, not an offline queue.
 
 ## Read your vote
 
@@ -109,6 +126,6 @@ revisions or introduce a second vote index, queue or journal. Stop consumers and
 use the normal backup/migrate/start procedure; never alter real source files to
 repair a metadata problem.
 
-This does not enable offline conflict resolution or the rating/home UI. Future sync
+This does not enable offline conflict resolution or a home UI. Future sync
 must preserve these personal versions, account scopes,
 fresh grants, idempotent outcomes and explicit conflicts instead of last-write-wins.

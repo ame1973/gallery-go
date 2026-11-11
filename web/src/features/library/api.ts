@@ -1,6 +1,6 @@
 import { api } from '../../lib/api/client';
 import type { components, operations } from '../../lib/api/schema';
-import { APIError } from '../auth/api';
+import { APIError, securityHeaders } from '../auth/api';
 
 type AlbumQuery = NonNullable<operations['listAlbums']['parameters']['query']>;
 export type AlbumSort = NonNullable<AlbumQuery['sort']>;
@@ -11,7 +11,12 @@ type Variant = components['schemas']['Variant'];
 type Failure = { response: Response; error?: components['schemas']['Problem'] };
 
 function failure(result: Failure): never {
-  const code = result.response.status === 401 ? 'UNAUTHENTICATED' : result.error?.code;
+  const code =
+    result.response.status === 401
+      ? 'UNAUTHENTICATED'
+      : result.response.status === 404
+        ? 'NOT_FOUND'
+        : result.error?.code;
   throw new APIError(code ?? 'INTERNAL_ERROR', result.error?.request_id);
 }
 
@@ -31,6 +36,46 @@ export async function getAlbum(id: string, signal: AbortSignal) {
   });
   if (!result.data) return failure(result);
   return result.data;
+}
+
+export type RatingSnapshot = { value: components['schemas']['AlbumRating']; etag: string };
+export type RatingCommand = { albumID: string; rating: number | null; etag: string; key: string };
+
+export async function getRating(albumID: string, signal: AbortSignal): Promise<RatingSnapshot> {
+  const result = await api.GET('/albums/{album_id}/rating', {
+    signal,
+    params: { path: { album_id: albumID } },
+  });
+  if (!result.data) return failure(result);
+  const etag = result.response.headers.get('ETag');
+  if (
+    !etag?.startsWith('"') ||
+    !etag.endsWith('"') ||
+    etag.indexOf('"', 1) !== etag.length - 1 ||
+    result.data.album_id !== albumID ||
+    (result.data.rating !== null &&
+      (!Number.isInteger(result.data.rating) || result.data.rating < 1 || result.data.rating > 5))
+  ) {
+    throw new APIError('INVALID_RATING_RESPONSE');
+  }
+  return { value: result.data, etag };
+}
+
+export async function saveRating(command: RatingCommand, signal: AbortSignal) {
+  const header = {
+    ...(await securityHeaders(signal)),
+    'If-Match': command.etag,
+    'Idempotency-Key': command.key,
+  };
+  const options = { signal, params: { path: { album_id: command.albumID }, header } };
+  const result =
+    command.rating === null
+      ? await api.DELETE('/albums/{album_id}/rating', options)
+      : await api.PUT('/albums/{album_id}/rating', {
+          ...options,
+          body: { rating: command.rating },
+        });
+  if (!result.data) return failure(result);
 }
 
 export async function listMedia(id: string, cursor: string | null, signal: AbortSignal) {

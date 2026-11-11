@@ -77,6 +77,13 @@ function problem(status: number, code: string) {
   );
 }
 
+function ratingResponse() {
+  return Response.json(
+    { album_id: 'album-one', rating: null, updated_at: null, version: 1 },
+    { headers: { ETag: '"rating-test"' } },
+  );
+}
+
 function installFetch(handler: (url: URL) => Response | Promise<Response>) {
   const fetch = vi.fn(async (request: Request) => handler(new URL(request.url)));
   vi.stubGlobal('fetch', fetch);
@@ -162,6 +169,7 @@ describe('album browsing', () => {
     installFetch((url) => {
       if (url.pathname.endsWith('/auth/me')) return Response.json(user);
       if (url.pathname.endsWith('/albums/album-one')) return Response.json(album);
+      if (url.pathname.endsWith('/albums/album-one/rating')) return ratingResponse();
       if (url.pathname.endsWith('/albums/album-one/media'))
         return new Promise((resolve) => {
           finishMedia = resolve;
@@ -182,6 +190,7 @@ describe('album browsing', () => {
     installFetch((url) => {
       if (url.pathname.endsWith('/auth/me')) return Response.json(user);
       if (url.pathname.endsWith('/albums/album-one')) return Response.json(album);
+      if (url.pathname.endsWith('/albums/album-one/rating')) return ratingResponse();
       if (url.pathname.endsWith('/albums/album-one/media'))
         return Response.json({ items: [media], next_cursor: null, has_more: false });
       if (url.pathname.endsWith('/variants'))
@@ -220,6 +229,7 @@ describe('album browsing', () => {
     const fetch = installFetch((url) => {
       if (url.pathname.endsWith('/auth/me')) return Response.json(user);
       if (url.pathname.endsWith('/albums/album-one')) return Response.json(album);
+      if (url.pathname.endsWith('/albums/album-one/rating')) return ratingResponse();
       return problem(404, 'NOT_FOUND');
     });
     renderPage('/albums/album-one?kind=video');

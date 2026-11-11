@@ -22,10 +22,11 @@ route; it never opens a source path, substitutes an original download, or treats
 an unavailable preview as proof that a source is absent. With the normal renderer
 still under development most fresh installations have no ready previews. The
 browser keeps request data only in account/scope-keyed memory and hides a failed
-request's previous results; all server authorization remains authoritative. Opening
-the album detail does not yet record an explicit view. Full home recommendations, metadata
-filters, favorite/rating controls, full-size media viewing and offline mode are
-separate unfinished features.
+request's previous results; all server authorization remains authoritative. On an
+album detail, the online personal rating controls and shared average use the separate
+[rating rules](ratings.md). Opening the album detail does not yet record an explicit
+view. Full home recommendations, metadata filters, favorite controls, full-size
+media viewing and offline mode are separate unfinished features.
 
 ## Authorization rules
 

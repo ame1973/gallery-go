@@ -168,6 +168,64 @@
   margin-bottom: 2rem;
 }
 
+.rating-panel {
+  max-width: 55ch;
+  margin-bottom: 2rem;
+  padding-block: 1.25rem;
+  border-block: 1px solid var(--border);
+}
+
+.rating-panel h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.rating-panel p {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.rating-fieldset {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.rating-fieldset legend {
+  margin-bottom: 0.5rem;
+  font-weight: 650;
+}
+
+.rating-choices,
+.rating-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.rating-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.rating-choice input {
+  accent-color: var(--accent);
+}
+
+.rating-recovery p {
+  flex-basis: 100%;
+}
+
 @media (min-width: 640px) {
   .gallery-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

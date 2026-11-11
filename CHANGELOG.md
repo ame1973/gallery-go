@@ -41,10 +41,16 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Online personal album rating controls for one to five stars or clearing a vote,
+  with a separately displayed shared average, personal ETag preconditions and
+  explicit conflict recovery. Uncertain requests can be retried with the identical
+  in-memory command for up to 15 minutes; successful replies are followed by fresh
+  reads. Offline rating replay and other interaction screens remain pending.
+
 - A basic three-language `/albums` and album-detail browser with bounded server
   pages, supported album ordering, current-session/scope isolation, accessible
   loading/error/empty states and near-viewport protected ready-image previews.
-  It does not download originals or record views; full viewer, home, interactions
+  It does not download originals or record views; full viewer, home, other interactions
   and offline flows remain under development.
 
 - Two-step personal favorite-collection subtree deletion requires an explicit move
@@ -116,7 +122,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   including currently hidden albums, without changing source files or preferences.
   Migration0024 preserves valid votes/times, enforces integer values, retains null
   tombstones and recreates the existing album-rating index. Source outages do not
-  block metadata votes. Rating UI, interaction ranks and offline sync remain pending.
+  block metadata votes. The API itself does not enable offline sync.
 
 - Literal album name keysets (`name_asc`/`name_desc`) using the exact public
   effective title and BINARY/ID tuples in both directions. Case/composition/numeric

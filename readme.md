@@ -77,9 +77,14 @@ Open an album to see its media metadata and any ready, session-protected image
 previews. An unavailable preview is not a claim that the source is absent: normal
 variant generation is not enabled yet, and the browser never substitutes the
 original download. An expired or scope-changed page offers a return to the first
-page. Opening a detail page does not yet record a view. Full-screen viewing,
-playback, favorites management, home recommendations, search, and offline downloads
-remain under development.
+page. On an album detail, choose one to five stars or **No rating**, then **Save
+rating**; the current personal vote and shared average refresh after the request.
+Conflicts require reloading the current value, and an uncertain response can be
+retried with the same request for up to 15 minutes while the page stays open. See
+[rating controls and privacy](docs/ratings.md#in-the-album-browser). Opening a
+detail page does not yet record a view. Full-screen viewing, playback, favorites
+management, home recommendations, search, and offline downloads remain under
+development.
 
 Run bootstrap only once on a fresh installation. Subsequent launches need only
 `doctor` and `serve` after applying any new migrations.
