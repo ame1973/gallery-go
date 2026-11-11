@@ -23,6 +23,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'outage',
     'duplicates',
     'people',
+    'people-ui',
     'album-metadata',
     'ratings',
     'rating-ui',
@@ -321,6 +322,78 @@ try {
           `${prefix}-hidden`,
           library,
           `${prefix}-source`,
+          'Hidden private album',
+          Date.now(),
+          Date.now(),
+        );
+    }
+    if (prefix.startsWith('people-ui-')) {
+      // Distinct people and empty albums exercise UI keysets and permissions only.
+      // The primary person owns real test PNGs through the primary album above.
+      fixtureDB
+        .prepare('UPDATE albums SET cover_media_id=? WHERE id=?')
+        .run(`${prefix}-media`, album);
+      for (let index = 0; index < 32; index += 1) {
+        const number = String(index).padStart(2, '0');
+        fixtureDB
+          .prepare(
+            'INSERT INTO albums(id,library_id,source_id,person_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-album-extra-${number}`,
+            library,
+            `${prefix}-source`,
+            `${prefix}-person`,
+            `Creator album ${number}`,
+            Date.now(),
+            Date.now(),
+          );
+        const id = `${prefix}-zz-person-${number}`;
+        fixtureDB
+          .prepare(
+            'INSERT INTO people(id,source_id,relative_path,source_name,created_at) VALUES(?,?,?,?,?)',
+          )
+          .run(
+            id,
+            `${prefix}-source`,
+            `Private/Person-${number}`,
+            index < 2 ? 'Same display name' : `Person ${number}`,
+            Date.now(),
+          );
+        fixtureDB
+          .prepare(
+            'INSERT INTO albums(id,library_id,source_id,person_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-zz-album-${number}`,
+            library,
+            `${prefix}-source`,
+            id,
+            `Solo album ${number}`,
+            Date.now(),
+            Date.now(),
+          );
+      }
+      fixtureDB
+        .prepare(
+          'INSERT INTO people(id,source_id,relative_path,source_name,created_at) VALUES(?,?,?,?,?)',
+        )
+        .run(
+          `${prefix}-hidden-person`,
+          `${prefix}-source`,
+          'Private/Hidden',
+          'Hidden private person',
+          Date.now(),
+        );
+      fixtureDB
+        .prepare(
+          'INSERT INTO albums(id,library_id,source_id,person_id,source_name,access_restricted,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)',
+        )
+        .run(
+          `${prefix}-hidden-album`,
+          library,
+          `${prefix}-source`,
+          `${prefix}-hidden-person`,
           'Hidden private album',
           Date.now(),
           Date.now(),

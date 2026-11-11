@@ -18,6 +18,12 @@ const AlbumsPage = lazy(() =>
 const AlbumPage = lazy(() =>
   import('../features/library/AlbumPage').then((module) => ({ default: module.AlbumPage })),
 );
+const PeoplePage = lazy(() =>
+  import('../features/library/PeoplePage').then((module) => ({ default: module.PeoplePage })),
+);
+const PersonPage = lazy(() =>
+  import('../features/library/PersonPage').then((module) => ({ default: module.PersonPage })),
+);
 
 export function App() {
   const [locale, setLocale] = useState<Locale>(initialLocale);
@@ -50,6 +56,8 @@ export function App() {
               <Route path="/settings/security" element={<SecurityPage />} />
               <Route path="/albums" element={<AlbumsPage />} />
               <Route path="/albums/:albumId" element={<AlbumPage />} />
+              <Route path="/people" element={<PeoplePage />} />
+              <Route path="/people/:personId" element={<PersonPage />} />
             </Route>
             <Route
               path="*"

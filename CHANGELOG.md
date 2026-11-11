@@ -41,6 +41,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A protected three-language people browser with bounded people and person-album
+  pages, distinct identities for equal names, authorized counts and ready-image
+  previews. Return links retain page context; changed permissions can invalidate
+  old cursors. Person management, search and offline browsing remain separate.
+
 - Online personal album rating controls for one to five stars or clearing a vote,
   with a separately displayed shared average, personal ETag preconditions and
   explicit conflict recovery. Uncertain requests can be retried with the identical

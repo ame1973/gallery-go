@@ -13,6 +13,20 @@ Full management UI, richer filters/sorting, search and offline snapshots remain
 separate work; read pages support only
 `limit` and `cursor`, not an ignored search/filter parameter.
 
+## In the gallery browser
+
+After signing in, choose **People** or open `/people` to browse people with albums
+currently shared with your account. Each card shows a name, its currently visible
+album count and, when available, a protected ready-image preview. Equal names are
+separate people; a preview is not an original download or proof of offline access.
+Open a person to browse their authorized same-source albums in bounded pages, then
+open an album for its media metadata. Back links retain the previous people and
+person-album pages while navigating in the app. If permissions change, a saved
+page link can expire; use **First page** to read the current selection.
+
+The people browser is read-only. Display-name and creator-association management,
+search, richer sorting and offline browsing are not yet available in this UI.
+
 ## Endpoints and fields
 
 All routes below are relative to `/api/v2` and require a current HTTPS session:

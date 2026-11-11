@@ -10,6 +10,8 @@ import {
   LibraryNavigation,
   PageError,
   PageNavigation,
+  peopleListBack,
+  personDetailBack,
   usePageFocus,
   useRevalidateSession,
 } from './common';
@@ -21,11 +23,18 @@ export function AlbumPage() {
   const { albumId = '' } = useParams();
   const [search] = useSearchParams();
   const location = useLocation();
-  const from: unknown = (location.state as { from?: unknown } | null)?.from;
+  const origin = location.state as { from?: unknown; peopleFrom?: unknown } | null;
+  const from = origin?.from;
+  const personBack = personDetailBack(from);
+  const peopleBack = peopleListBack(origin?.peopleFrom);
   const back =
-    typeof from === 'string' && (from === '/albums' || from.startsWith('/albums?'))
+    personBack ??
+    (typeof from === 'string' && (from === '/albums' || from.startsWith('/albums?'))
       ? from
-      : '/albums';
+      : '/albums');
+  const backLabel = personBack ? 'library.backPerson' : 'library.backAlbums';
+  const parentState = personBack ? { from: peopleBack } : undefined;
+  const albumState = { from: back, ...(personBack && { peopleFrom: peopleBack }) };
   const cursor = search.get('cursor');
   const identity = JSON.stringify([user.id, user.scope_id, albumId]);
   const [denial, setDenial] = useState<{ identity: string; error: APIError } | null>(null);
@@ -89,8 +98,8 @@ export function AlbumPage() {
   return (
     <main className="gallery-main" ref={main} tabIndex={-1} aria-labelledby="gallery-page-title">
       <LibraryNavigation />
-      <Link className="gallery-back" to={back}>
-        <FormattedMessage id="library.backAlbums" />
+      <Link className="gallery-back" to={back} state={parentState}>
+        <FormattedMessage id={backLabel} />
       </Link>
       {album.isPending || album.isFetching ? (
         <>
@@ -104,7 +113,13 @@ export function AlbumPage() {
           <h1 id="gallery-page-title">
             <FormattedMessage id="library.album" />
           </h1>
-          <PageError error={album.error} onRetry={() => void album.refetch()} first="/albums" />
+          <PageError
+            error={album.error}
+            onRetry={() => void album.refetch()}
+            first={back}
+            notFoundLabel={backLabel}
+            {...(parentState && { state: parentState })}
+          />
         </>
       ) : accessLost ? (
         <>
@@ -120,7 +135,9 @@ export function AlbumPage() {
               void rating.refetch();
               if (average.isError) void average.refetch();
             }}
-            first="/albums"
+            first={back}
+            notFoundLabel={backLabel}
+            {...(parentState && { state: parentState })}
           />
         </>
       ) : (
@@ -156,11 +173,21 @@ export function AlbumPage() {
             <FormattedMessage id="library.offlineNotice" />
           </p>
           {!valid ? (
-            <PageError error={new APIError('INVALID_CURSOR')} onRetry={() => {}} first={first} />
+            <PageError
+              error={new APIError('INVALID_CURSOR')}
+              onRetry={() => {}}
+              first={first}
+              state={albumState}
+            />
           ) : media.isPending || media.isFetching ? (
             <GalleryLoading message="library.loadingMedia" />
           ) : media.isError ? (
-            <PageError error={media.error} onRetry={() => void media.refetch()} first={first} />
+            <PageError
+              error={media.error}
+              onRetry={() => void media.refetch()}
+              first={first}
+              state={albumState}
+            />
           ) : (
             <>
               {media.data.items.length === 0 ? (
@@ -192,7 +219,7 @@ export function AlbumPage() {
                   ))}
                 </ul>
               )}
-              <PageNavigation first={first} next={next} cursor={cursor} state={{ from: back }} />
+              <PageNavigation first={first} next={next} cursor={cursor} state={albumState} />
             </>
           )}
         </>

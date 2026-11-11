@@ -38,6 +38,33 @@ export async function getAlbum(id: string, signal: AbortSignal) {
   return result.data;
 }
 
+export async function listPeople(cursor: string | null, signal: AbortSignal) {
+  const result = await api.GET('/people', {
+    signal,
+    params: { query: { limit: 30, ...(cursor && { cursor }) } },
+  });
+  if (!result.data) return failure(result);
+  return result.data;
+}
+
+export async function getPerson(id: string, signal: AbortSignal) {
+  const result = await api.GET('/people/{person_id}', {
+    signal,
+    params: { path: { person_id: id } },
+  });
+  if (!result.data) return failure(result);
+  return result.data;
+}
+
+export async function listPersonAlbums(id: string, cursor: string | null, signal: AbortSignal) {
+  const result = await api.GET('/people/{person_id}/albums', {
+    signal,
+    params: { path: { person_id: id }, query: { limit: 30, ...(cursor && { cursor }) } },
+  });
+  if (!result.data) return failure(result);
+  return result.data;
+}
+
 export type RatingSnapshot = { value: components['schemas']['AlbumRating']; etag: string };
 export type RatingCommand = { albumID: string; rating: number | null; etag: string; key: string };
 
@@ -110,7 +137,7 @@ export function choosePreview(items: Variant[]) {
   return candidates[0];
 }
 
-function safeID(id: string) {
+export function safeID(id: string) {
   return (
     id.length > 0 && id.length <= 128 && id !== '.' && id !== '..' && !/[\\/\p{Cc}\p{Cf}]/u.test(id)
   );

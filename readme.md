@@ -25,7 +25,7 @@ animation. GPS/raw tags
 are not exposed and unknown timing stays null. See
 [media metadata](docs/media.md). Album-media pages support SQL-indexed kind/capture
 selection and ID/capture keysets; see [selection rules](docs/media.md#album-media-selection).
-A basic three-language album and media-metadata browser is available; ready image
+A basic three-language album, people, and media-metadata browser is available; ready image
 previews appear only when a protected variant exists. Full home/management screens,
 normal variant production, playback, and offline downloads are still being built.
 Do not expose this build
@@ -81,10 +81,13 @@ page. On an album detail, choose one to five stars or **No rating**, then **Save
 rating**; the current personal vote and shared average refresh after the request.
 Conflicts require reloading the current value, and an uncertain response can be
 retried with the same request for up to 15 minutes while the page stays open. See
-[rating controls and privacy](docs/ratings.md#in-the-album-browser). Opening a
-detail page does not yet record a view. Full-screen viewing, playback, favorites
-management, home recommendations, search, and offline downloads remain under
-development.
+[rating controls and privacy](docs/ratings.md#in-the-album-browser). Choose **People**
+or open `/people` to browse visible indexed people and their authorized same-source
+albums, with separate bounded pages and retained back links. Equal names do not merge
+identities. See [people browsing and visibility](docs/people.md#in-the-gallery-browser).
+Opening a detail page does not yet record a view. Full-screen viewing, playback,
+favorites management, home recommendations, search, and offline downloads remain
+under development.
 
 Run bootstrap only once on a fresh installation. Subsequent launches need only
 `doctor` and `serve` after applying any new migrations.
