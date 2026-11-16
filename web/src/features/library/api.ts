@@ -111,6 +111,21 @@ export async function listMedia(id: string, cursor: string | null, signal: Abort
     params: { path: { album_id: id }, query: { limit: 30, ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  if (result.data.items.some((item) => !safeID(item.id) || item.album_id !== id)) {
+    throw new APIError('INVALID_MEDIA_RESPONSE');
+  }
+  return result.data;
+}
+
+export async function getMedia(id: string, signal: AbortSignal) {
+  const result = await api.GET('/media/{media_id}', {
+    signal,
+    params: { path: { media_id: id } },
+  });
+  if (!result.data) return failure(result);
+  if (result.data.id !== id || !safeID(result.data.album_id)) {
+    throw new APIError('INVALID_MEDIA_RESPONSE');
+  }
   return result.data;
 }
 
@@ -139,18 +154,27 @@ export function choosePreview(items: Variant[]) {
 
 export function safeID(id: string) {
   return (
-    id.length > 0 && id.length <= 128 && id !== '.' && id !== '..' && !/[\\/\p{Cc}\p{Cf}]/u.test(id)
+    typeof id === 'string' &&
+    id.length > 0 &&
+    id.length <= 128 &&
+    id !== '.' &&
+    id !== '..' &&
+    !/[\\/\p{Cc}\p{Cf}\p{Cs}]/u.test(id)
   );
 }
 
-export async function previewURL(mediaID: string, signal: AbortSignal) {
-  if (!safeID(mediaID)) return null;
+export async function previewURL(mediaID: string, signal: AbortSignal, revision?: string | null) {
+  if (!safeID(mediaID) || revision === null) return null;
   const result = await api.GET('/media/{media_id}/variants', {
     signal,
     params: { path: { media_id: mediaID }, query: { limit: 100 } },
   });
   if (!result.data) return failure(result);
-  const candidate = choosePreview(result.data.items);
+  const items =
+    revision === undefined
+      ? result.data.items
+      : result.data.items.filter((item) => item.revision_id === revision);
+  const candidate = choosePreview(items);
   if (!candidate) return null;
   // Construct only the documented same-origin route; never navigate to a server-supplied URL.
   return `/api/v2/media/${encodeURIComponent(mediaID)}/variants/${encodeURIComponent(candidate.id)}/content`;

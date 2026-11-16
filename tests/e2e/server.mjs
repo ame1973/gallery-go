@@ -20,6 +20,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'media-selection',
     'album-selection',
     'browse-ui',
+    'media-detail-ui',
     'outage',
     'duplicates',
     'people',
@@ -294,6 +295,22 @@ try {
           )
           .run(variantID, revisionID, storage, stat.size, hash, Date.now());
       }
+    }
+    if (prefix.startsWith('media-detail-ui-')) {
+      // The shared grant is never mutated by tests; each test changes its own user.
+      fixtureDB
+        .prepare('INSERT INTO permission_groups(id,name,created_at) VALUES(?,?,?)')
+        .run(`${prefix}-group`, `Media detail access ${prefix}`, Date.now());
+      fixtureDB
+        .prepare('INSERT INTO library_access(library_id,group_id) VALUES(?,?)')
+        .run(library, `${prefix}-group`);
+      // Metadata for the known static test PNG; this does not exercise the scanner.
+      fixtureDB
+        .prepare('UPDATE media SET metadata_json=? WHERE id=?')
+        .run(
+          JSON.stringify({ codec: 'png', animated: false, frame_count: 1, loop_count: 1 }),
+          `${prefix}-media`,
+        );
     }
     if (prefix.startsWith('browse-ui-')) {
       // Pagination and permission fixtures only; no production renderer is enabled.

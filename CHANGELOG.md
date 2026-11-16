@@ -41,6 +41,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A protected media-detail page showing indexed dimensions, codec, explicit UTC
+  capture time, orientation and available timing metadata. Ready previews are
+  constrained to the current revision; originals are never used as a fallback.
+  Full viewing, playback and offline downloads remain under development.
+
 - A protected three-language people browser with bounded people and person-album
   pages, distinct identities for equal names, authorized counts and ready-image
   previews. Return links retain page context; changed permissions can invalidate

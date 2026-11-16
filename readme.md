@@ -73,12 +73,14 @@ Chinese, and Simplified Chinese. `/status` remains available without signing in.
 
 Open `/albums` or choose **Albums** from the account page to browse currently
 visible albums, select a supported order, and move through bounded server pages.
-Open an album to see its media metadata and any ready, session-protected image
-previews. An unavailable preview is not a claim that the source is absent: normal
-variant generation is not enabled yet, and the browser never substitutes the
-original download. An expired or scope-changed page offers a return to the first
-page. On an album detail, choose one to five stars or **No rating**, then **Save
-rating**; the current personal vote and shared average refresh after the request.
+Open an album to see its media items and any ready, session-protected image
+previews. Choose an item to inspect its indexed dimensions, codec, capture time,
+orientation, and available timing information. Unknown values remain unknown;
+previews are limited to the current revision and never substitute an original.
+An unavailable preview is not a claim that the source is absent: normal variant
+generation is not enabled yet. An expired or scope-changed page offers a return
+to the first page. On an album detail, choose one to five stars or **No rating**,
+then **Save rating**; the current personal vote and shared average refresh after the request.
 Conflicts require reloading the current value, and an uncertain response can be
 retried with the same request for up to 15 minutes while the page stays open. See
 [rating controls and privacy](docs/ratings.md#in-the-album-browser). Choose **People**

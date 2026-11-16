@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
 import { APIError } from '../auth/api';
 import type { User } from '../auth/api';
@@ -10,6 +10,7 @@ import {
   LibraryNavigation,
   PageError,
   PageNavigation,
+  albumListBack,
   peopleListBack,
   personDetailBack,
   usePageFocus,
@@ -20,6 +21,7 @@ import { RatingEditor } from './RatingEditor';
 
 export function AlbumPage() {
   const user = useOutletContext<User>();
+  const intl = useIntl();
   const { albumId = '' } = useParams();
   const [search] = useSearchParams();
   const location = useLocation();
@@ -27,11 +29,7 @@ export function AlbumPage() {
   const from = origin?.from;
   const personBack = personDetailBack(from);
   const peopleBack = peopleListBack(origin?.peopleFrom);
-  const back =
-    personBack ??
-    (typeof from === 'string' && (from === '/albums' || from.startsWith('/albums?'))
-      ? from
-      : '/albums');
+  const back = personBack ?? albumListBack(from);
   const backLabel = personBack ? 'library.backPerson' : 'library.backAlbums';
   const parentState = personBack ? { from: peopleBack } : undefined;
   const albumState = { from: back, ...(personBack && { peopleFrom: peopleBack }) };
@@ -200,21 +198,31 @@ export function AlbumPage() {
                 <ul className="gallery-grid">
                   {media.data.items.map((item) => (
                     <li key={item.id}>
-                      <figure className="gallery-card gallery-media">
+                      <Link
+                        className="gallery-card gallery-media"
+                        to={`/inspect/${encodeURIComponent(item.id)}/details`}
+                        state={{
+                          from: location.pathname + location.search,
+                          albumFrom: back,
+                          ...(personBack && { peopleFrom: peopleBack }),
+                        }}
+                        aria-label={intl.formatMessage(
+                          { id: 'media.open' },
+                          { name: item.file_name },
+                        )}
+                      >
                         <Preview
                           key={`${user.scope_id}:${item.id}`}
                           mediaID={item.id}
                           user={user}
                         />
-                        <figcaption>
-                          <strong>{item.file_name}</strong>
-                          <span>
-                            <FormattedMessage
-                              id={item.kind === 'video' ? 'library.video' : 'library.image'}
-                            />
-                          </span>
-                        </figcaption>
-                      </figure>
+                        <strong>{item.file_name}</strong>
+                        <span>
+                          <FormattedMessage
+                            id={item.kind === 'video' ? 'library.video' : 'library.image'}
+                          />
+                        </span>
+                      </Link>
                     </li>
                   ))}
                 </ul>

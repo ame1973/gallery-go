@@ -38,6 +38,41 @@ export function personDetailBack(from: unknown) {
   return validCursorSearch(search) ? from : null;
 }
 
+export function albumDetailBack(from: unknown) {
+  if (typeof from !== 'string' || from.includes('#')) return null;
+  const question = from.indexOf('?');
+  const path = question < 0 ? from : from.slice(0, question);
+  const segment = /^\/albums\/([^/]+)$/.exec(path)?.[1];
+  if (!segment) return null;
+  try {
+    const id = decodeURIComponent(segment);
+    const search = new URLSearchParams(question < 0 ? '' : from.slice(question + 1));
+    return safeID(id) && encodeURIComponent(id) === segment && validCursorSearch(search)
+      ? { id, path: from }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function albumListBack(from: unknown) {
+  if (typeof from !== 'string' || from.includes('#')) return '/albums';
+  const question = from.indexOf('?');
+  const path = question < 0 ? from : from.slice(0, question);
+  const search = new URLSearchParams(question < 0 ? '' : from.slice(question + 1));
+  const sort = search.get('sort');
+  const cursor = search.get('cursor');
+  const valid =
+    path === '/albums' &&
+    [...search.keys()].every((key) => key === 'sort' || key === 'cursor') &&
+    search.getAll('sort').length <= 1 &&
+    (sort === null ||
+      ['latest', 'oldest', 'name_asc', 'name_desc', 'popular', 'top_rated'].includes(sort)) &&
+    search.getAll('cursor').length <= 1 &&
+    (cursor === null || (cursor.length > 0 && cursor.length <= 8192));
+  return valid ? from : '/albums';
+}
+
 export function LibraryNavigation() {
   const intl = useIntl();
   return (
@@ -101,7 +136,7 @@ export function PageError({
   error: unknown;
   onRetry: () => void;
   first: string;
-  state?: { from: string; peopleFrom?: string };
+  state?: { from: string; peopleFrom?: string; albumFrom?: string };
   notFoundMessage?: string;
   notFoundLabel?: string;
 }) {

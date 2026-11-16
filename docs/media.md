@@ -24,6 +24,24 @@ Original download also requires the actual account's `download_original:true`,
 is hidden as 404. Anonymous, expired, disabled, and revoked sessions receive 401.
 The server rechecks these conditions before GET, HEAD, Range, or a conditional 304.
 
+## In the gallery browser
+
+Choose a media item from an album, or open `/inspect/{media_id}/details` while signed in, to
+inspect its current authorized metadata. Encoded dimensions do not incorporate the
+orientation transform. Capture times are shown in UTC; unknown fields stay unknown.
+For animated images the cycle duration is not multiplied by the total playthroughs,
+and an infinite loop is identified explicitly. Video duration describes the indexed
+primary track, not a promise that the browser can play it.
+
+The page requests a bounded same-origin ready image preview only for the revision
+in its metadata response. A missing preview does not prove the source is absent.
+After a preview load fails, the page rechecks media access without endlessly
+retrying a broken image. The browser does not use an original as a preview
+fallback and does not grant an original download, record a view, play media, or
+provide offline access. Full viewer and playback functionality remain under
+development. Back links retain a validated album page and, when present, the
+person and people-page context.
+
 ## Metadata and variants
 
 - `GET /albums/{album_id}/media` lists visible media with indexed kind/capture

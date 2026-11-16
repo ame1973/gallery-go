@@ -235,7 +235,7 @@ func TestUnknownRoutesAndMethods(t *testing.T) {
 
 func TestAssetsAndSPAFallback(t *testing.T) {
 	_, h := newTestServer(t)
-	for _, path := range []string{"/", "/albums/example", "/assets/app-abc.js", "/icons/logo.svg"} {
+	for _, path := range []string{"/", "/albums/example", "/inspect/item.with.dot/details", "/assets/app-abc.js", "/icons/logo.svg"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 {
