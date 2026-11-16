@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -14,13 +15,27 @@ import (
 	"gallerygo/internal/auth"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
+	"gallerygo/tests/testutil"
 )
 
 const testPassword = "a private access policy test passphrase"
 
+// Reuse only the bootstrapped image; every fixture opens and logs into its own DB.
+var fixtureImage = sync.OnceValues(func() ([]byte, error) {
+	return testutil.BootstrapImage(context.Background(), "owner", testPassword)
+})
+
 func fixture(t *testing.T) (*Service, auth.Session) {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "access.db"))
+	image, err := fixtureImage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "access.db")
+	if err := testutil.CopyImage(path, image); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,9 +45,6 @@ func fixture(t *testing.T) (*Service, auth.Session) {
 	}
 	a, err := auth.New(db, auth.DefaultPolicy())
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := a.Bootstrap(t.Context(), "owner", testPassword); err != nil {
 		t.Fatal(err)
 	}
 	owner, err := a.Login(t.Context(), "owner", testPassword, "192.0.2.1", "access test", "")

@@ -23,13 +23,25 @@ import (
 	"gallerygo/internal/scanner"
 	"gallerygo/internal/store"
 	"gallerygo/migrations"
+	"gallerygo/tests/testutil"
 
 	"go.yaml.in/yaml/v3"
 )
 
 func newTestServer(t *testing.T) (*sql.DB, http.Handler) {
 	t.Helper()
-	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "test.db"))
+	return newTestServerWithImage(t, nil)
+}
+
+func newTestServerWithImage(t *testing.T, image []byte) (*sql.DB, http.Handler) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "test.db")
+	if image != nil {
+		if err := testutil.CopyImage(path, image); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db, err := store.Open(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}

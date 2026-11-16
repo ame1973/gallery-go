@@ -2,32 +2,36 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"gallerygo/internal/auth"
+	"gallerygo/tests/testutil"
 )
 
 const testOrigin = "https://gallery.test"
 const testPassword = "a safely chosen gallery passphrase"
 
+// Reuse only the bootstrapped image; each HTTP fixture has an independent DB.
+var fixtureImage = sync.OnceValues(func() ([]byte, error) {
+	return testutil.BootstrapImage(context.Background(), "owner", testPassword)
+})
+
 func authFixture(t *testing.T) (*sql.DB, http.Handler) {
 	t.Helper()
-	db, h := newTestServer(t)
-	service, err := auth.New(db, auth.DefaultPolicy())
+	image, err := fixtureImage()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Bootstrap(t.Context(), "owner", testPassword); err != nil {
-		t.Fatal(err)
-	}
-	return db, h
+	return newTestServerWithImage(t, image)
 }
 
 func requestAuth(h http.Handler, method, path, body, origin, csrf string, cookie *http.Cookie) *httptest.ResponseRecorder {
