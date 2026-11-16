@@ -4,7 +4,8 @@ Administrators can register declared source roots, configure folder mapping and
 safety policies, and inspect root reachability through the HTTPS API. They can
 also [enqueue durable scan intents](jobs.md), which the embedded or standalone
 [native worker](workers.md) can execute. Enabled consumers also schedule active
-registrations automatically. Management screens are **not available yet**.
+registrations automatically. A read-only administrator browser shows the existing
+registrations; source changes and checks remain API-only.
 Registration and reachability endpoints do no synchronous scanning; background
 policy dispatch is separate. A fresh installation has no indexed media until
 healthy scan publication.
@@ -14,6 +15,18 @@ configured `Origin`, and session-bound `X-CSRF-Token` as described in
 [authentication.md](authentication.md). Responses are private and `no-store`.
 Ordinary users receive `403 ADMIN_REQUIRED`; missing, disabled, revoked, or expired
 sessions receive `401 UNAUTHENTICATED`. Authorization is rechecked in transactions.
+
+## In the browser
+
+Administrators can choose **Sources** or open `/admin/sources` to browse live,
+30-item source pages and inspect one source's recorded state, configuration match,
+mapping, schedule and inventory generation. **Refresh** reads current metadata;
+it does not run a reachability check or scan. List and detail reads are separate,
+not an atomic snapshot. Old details are hidden while a request is pending or has
+failed; revocation is not detected instantly without another request. An expired or
+scope-changed cursor requires returning to the first page. Physical root paths,
+marker names and private configuration pins are not shown. Source creation, editing,
+checking and deletion remain available through the API, not this interface.
 
 ## Declare storage outside the API
 

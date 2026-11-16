@@ -92,9 +92,14 @@ export function LibraryNavigation() {
         <FormattedMessage id="library.account" />
       </NavLink>
       {user.role === 'admin' && (
-        <NavLink to="/admin/jobs">
-          <FormattedMessage id="jobs.navigation" />
-        </NavLink>
+        <>
+          <NavLink to="/admin/jobs">
+            <FormattedMessage id="jobs.navigation" />
+          </NavLink>
+          <NavLink to="/admin/sources">
+            <FormattedMessage id="source.navigation" />
+          </NavLink>
+        </>
       )}
     </nav>
   );

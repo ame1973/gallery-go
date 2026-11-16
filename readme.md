@@ -114,7 +114,10 @@ library grants, and the last active administrator cannot be removed or disabled.
 scan enqueue, durable history, truthful attempt counts, versioned cancellation, and
 safe retries. Administrators can choose **Jobs** or open `/admin/jobs` for a
 read-only, manually refreshed job/attempt/diagnostic browser; scan creation and
-job controls remain API-only. Enqueue returns durable queued acceptance, not ingestion.
+job controls remain API-only. Choose **Sources** or open `/admin/sources` to inspect
+registered sources and their last recorded state; changes and checks remain API-only.
+A healthy source observation is not proof of a completed inventory. Enqueue returns
+durable queued acceptance, not ingestion.
 `serve` starts a scan consumer by default; [worker operation](docs/workers.md) describes
 standalone execution, validated limits, real status, and the remaining codec gates.
 

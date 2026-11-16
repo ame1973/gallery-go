@@ -41,6 +41,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An administrator-only, read-only source browser for bounded live pages, recorded
+  reachability, runtime configuration, scan generation and source policies. Source
+  registration, editing, checks and scans remain API-only.
+
 - An administrator-only, read-only job history browser with live status-filtered
   pages, cumulative work counts, per-attempt counts and paginated scan diagnostics.
   The separate reads are not an atomic snapshot; scan creation and job controls
