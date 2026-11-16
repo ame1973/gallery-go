@@ -112,8 +112,10 @@ see [docs/administration.md](docs/administration.md). New regular accounts have 
 library grants, and the last active administrator cannot be removed or disabled.
 [Job controls](docs/jobs.md) describe administrator-only source/all-source/album
 scan enqueue, durable history, truthful attempt counts, versioned cancellation, and
-safe retries. Enqueue returns durable queued acceptance, not ingestion. `serve`
-starts a scan consumer by default; [worker operation](docs/workers.md) describes
+safe retries. Administrators can choose **Jobs** or open `/admin/jobs` for a
+read-only, manually refreshed job/attempt/diagnostic browser; scan creation and
+job controls remain API-only. Enqueue returns durable queued acceptance, not ingestion.
+`serve` starts a scan consumer by default; [worker operation](docs/workers.md) describes
 standalone execution, validated limits, real status, and the remaining codec gates.
 
 For frontend development, keep the Go server running and run `pnpm dev` in another

@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { FormattedMessage, useIntl } from 'react-intl';
-import { Link, NavLink } from 'react-router';
+import { Link, NavLink, useOutletContext } from 'react-router';
 import { APIError } from '../auth/api';
+import type { User } from '../auth/api';
 import { safeID } from './api';
 
 export function validCursorSearch(search: URLSearchParams) {
@@ -75,6 +76,7 @@ export function albumListBack(from: unknown) {
 
 export function LibraryNavigation() {
   const intl = useIntl();
+  const user = useOutletContext<User>();
   return (
     <nav
       className="library-navigation"
@@ -89,6 +91,11 @@ export function LibraryNavigation() {
       <NavLink to="/settings/security">
         <FormattedMessage id="library.account" />
       </NavLink>
+      {user.role === 'admin' && (
+        <NavLink to="/admin/jobs">
+          <FormattedMessage id="jobs.navigation" />
+        </NavLink>
+      )}
     </nav>
   );
 }

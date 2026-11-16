@@ -12,6 +12,12 @@ const LoginPage = lazy(() =>
 const SecurityPage = lazy(() =>
   import('../features/auth/SecurityPage').then((module) => ({ default: module.SecurityPage })),
 );
+const JobsPage = lazy(() =>
+  import('../features/jobs/JobsPage').then((module) => ({ default: module.JobsPage })),
+);
+const JobPage = lazy(() =>
+  import('../features/jobs/JobPage').then((module) => ({ default: module.JobPage })),
+);
 const AlbumsPage = lazy(() =>
   import('../features/library/AlbumsPage').then((module) => ({ default: module.AlbumsPage })),
 );
@@ -57,6 +63,8 @@ export function App() {
             <Route path="/" element={<Navigate to="/settings/security" replace />} />
             <Route element={<RequireSession />}>
               <Route path="/settings/security" element={<SecurityPage />} />
+              <Route path="/admin/jobs" element={<JobsPage />} />
+              <Route path="/admin/jobs/:jobId/details" element={<JobPage />} />
               <Route path="/albums" element={<AlbumsPage />} />
               <Route path="/albums/:albumId" element={<AlbumPage />} />
               <Route path="/inspect/:mediaId/details" element={<MediaPage />} />

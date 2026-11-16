@@ -41,6 +41,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An administrator-only, read-only job history browser with live status-filtered
+  pages, cumulative work counts, per-attempt counts and paginated scan diagnostics.
+  The separate reads are not an atomic snapshot; scan creation and job controls
+  remain API-only.
+
 - A protected media-detail page showing indexed dimensions, codec, explicit UTC
   capture time, orientation and available timing metadata. Ready previews are
   constrained to the current revision; originals are never used as a fallback.

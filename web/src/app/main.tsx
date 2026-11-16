@@ -8,6 +8,7 @@ import '../styles/tokens.css';
 import '../styles/app.css';
 import '../styles/auth.css';
 import '../styles/library.css';
+import '../styles/jobs.css';
 import { App } from './App';
 
 // Radix's scroll-lock stylesheet uses the same response-specific CSP nonce.

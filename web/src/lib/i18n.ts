@@ -1,4 +1,5 @@
 import { authMessages } from '../features/auth/messages';
+import { jobMessages } from '../features/jobs/messages';
 import { libraryMessages } from '../features/library/messages';
 
 export const locales = ['en', 'zh-TW', 'zh-CN'] as const;
@@ -6,6 +7,7 @@ export type Locale = (typeof locales)[number];
 
 const en = {
   ...authMessages.en,
+  ...jobMessages.en,
   ...libraryMessages.en,
   language: 'Language',
   title: 'Service connection',
@@ -37,6 +39,7 @@ export const messages: Record<Locale, Messages> = {
   en,
   'zh-TW': {
     ...authMessages['zh-TW'],
+    ...jobMessages['zh-TW'],
     ...libraryMessages['zh-TW'],
     language: '語言',
     title: '服務連線',
@@ -62,6 +65,7 @@ export const messages: Record<Locale, Messages> = {
   },
   'zh-CN': {
     ...authMessages['zh-CN'],
+    ...jobMessages['zh-CN'],
     ...libraryMessages['zh-CN'],
     language: '语言',
     title: '服务连接',

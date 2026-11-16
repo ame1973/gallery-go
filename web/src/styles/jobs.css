@@ -1,0 +1,134 @@
+.job-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.job-list,
+.job-history {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.job-list > li,
+.job-history > li {
+  padding-block: 1.25rem;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.job-list > li:last-child,
+.job-history > li:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.job-list p {
+  margin: 0.35rem 0 0;
+}
+
+.job-entry-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+.job-entry-link {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+.job-entry-link span,
+.job-id {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.job-status {
+  flex-shrink: 0;
+  padding-block: 0.5rem;
+}
+
+.job-section {
+  margin-block: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.job-section h2,
+.job-section h3 {
+  overflow-wrap: anywhere;
+}
+
+.job-section h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
+}
+
+.job-section h3 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.job-section p {
+  max-width: 65ch;
+}
+
+.job-facts,
+.job-counts {
+  margin: 0;
+}
+
+.job-facts > div,
+.job-counts > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr);
+  gap: 0.75rem;
+  padding-block: 0.4rem;
+}
+
+.job-facts dt,
+.job-counts dt {
+  color: var(--muted);
+}
+
+.job-facts dd,
+.job-counts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.job-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0 1.5rem;
+}
+
+.job-history h3 {
+  margin: 0 0 0.75rem;
+}
+
+.job-pagination {
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 480px) {
+  .job-entry-heading {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .job-status {
+    padding-block: 0.25rem;
+  }
+}

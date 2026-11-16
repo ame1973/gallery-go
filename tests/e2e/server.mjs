@@ -138,6 +138,101 @@ try {
           now,
         );
     }
+    // Immutable, project-namespaced history is test setup only. The worker is
+    // disabled; these records do not claim actual scanning or lease execution.
+    const historyTime = Date.parse('2026-11-10T01:02:03.000Z');
+    const historyPrefix = `history-${project}`;
+    const insertHistoryJob = fixtureDB.prepare(
+      "INSERT INTO jobs(id,kind,resource_key,dedupe_token,payload_json,status,max_attempts,next_run_at,total_known,created_at,updated_at) VALUES(?,'scan',?,?,?,'dead',3,?,1,?,?)",
+    );
+    for (let index = 0; index < 33; index += 1) {
+      const id = `${historyPrefix}-${String(index).padStart(2, '0')}`;
+      insertHistoryJob.run(
+        id,
+        `source:${historyPrefix}`,
+        `scan:${id}`,
+        JSON.stringify({ private_path: directory }),
+        historyTime,
+        historyTime,
+        historyTime,
+      );
+    }
+    const historyJob = `${historyPrefix}-zz.with.dot`;
+    fixtureDB
+      .prepare(
+        "INSERT INTO jobs(id,kind,resource_key,dedupe_token,payload_json,status,priority,attempts,max_attempts,next_run_at,total,done,succeeded,failed,skipped,cancelled,total_known,error_code,last_error,created_at,updated_at,started_at,finished_at) VALUES(?,'scan',?,?,?,'dead',2,31,31,?,93,93,31,31,31,0,1,'INVALID_MEDIA','The input media could not be validated.',?,?,?,?)",
+      )
+      .run(
+        historyJob,
+        `source:${historyPrefix}`,
+        `scan:${historyJob}`,
+        JSON.stringify({ private_path: directory }),
+        historyTime,
+        historyTime,
+        historyTime + 120_000,
+        historyTime,
+        historyTime + 120_000,
+      );
+    const insertAttempt = fixtureDB.prepare(
+      "INSERT INTO job_attempts(job_id,attempt,started_at,finished_at,status,error_code,message,base_counts_json,counts_json) VALUES(?,?,?,?,'failed','INVALID_MEDIA','The input media could not be validated.',?,?)",
+    );
+    for (let attempt = 1; attempt <= 31; attempt += 1) {
+      const previous = attempt - 1;
+      insertAttempt.run(
+        historyJob,
+        attempt,
+        historyTime + attempt * 1_000,
+        historyTime + attempt * 1_000 + 500,
+        JSON.stringify({
+          total: previous * 3,
+          done: previous * 3,
+          succeeded: previous,
+          failed: previous,
+          skipped: previous,
+          cancelled: 0,
+        }),
+        JSON.stringify({ total: 3, done: 3, succeeded: 1, failed: 1, skipped: 1, cancelled: 0 }),
+      );
+    }
+    const insertIssue = fixtureDB.prepare(
+      "INSERT INTO job_issues(id,job_id,attempt,source_id,source_config_version,generation_id,relative_path,error_code,created_at) VALUES(?,?,?,?,5,?,?,'INVALID_MEDIA',?)",
+    );
+    for (let index = 0; index < 33; index += 1) {
+      const number = String(index).padStart(2, '0');
+      insertIssue.run(
+        `${historyPrefix}-issue-${number}`,
+        historyJob,
+        (index % 31) + 1,
+        `${historyPrefix}-source`,
+        index % 2 ? '' : `${historyPrefix}-generation`,
+        index === 32 ? '../outside-private-path' : `Album/entry-${number}.png`,
+        historyTime + index * 1_000,
+      );
+    }
+    const runningJob = `${historyPrefix}-running`;
+    fixtureDB
+      .prepare(
+        "INSERT INTO jobs(id,kind,resource_key,dedupe_token,payload_json,status,cancel_requested,attempts,max_attempts,next_run_at,total,done,succeeded,failed,skipped,cancelled,total_known,created_at,updated_at,started_at) VALUES(?,'scan',?,?,?,'running',1,1,3,?,10,4,1,1,1,1,0,?,?,?)",
+      )
+      .run(
+        runningJob,
+        `source:${historyPrefix}`,
+        `scan:${runningJob}`,
+        JSON.stringify({ private_path: directory }),
+        historyTime,
+        historyTime,
+        historyTime,
+        historyTime,
+      );
+    fixtureDB
+      .prepare(
+        "INSERT INTO job_attempts(job_id,attempt,started_at,status,counts_json) VALUES(?,1,?,'running',?)",
+      )
+      .run(
+        runningJob,
+        historyTime,
+        JSON.stringify({ total: 10, done: 4, succeeded: 1, failed: 1, skipped: 1, cancelled: 1 }),
+      );
     const library = `acl-${project}-library`;
     fixtureDB
       .prepare('INSERT INTO libraries(id,name,created_at,updated_at) VALUES(?,?,?,?)')

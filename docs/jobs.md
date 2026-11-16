@@ -2,8 +2,8 @@
 
 Durable scan enqueue, history, and online-only controls are available through the
 HTTPS API. Embedded and standalone [native workers](workers.md) can consume accepted
-scan intents and schedule active sources by policy. Job UI is **not available yet**.
-A `202` response is
+scan intents and schedule active sources by policy. Administrators can also browse
+job, attempt, and diagnostic history in a read-only interface. A `202` response is
 not successful ingestion or codec processing. Source registration, folder
 mapping, and separate reachability checks are in [sources.md](sources.md).
 [Tag batches](tag-batches.md) and [cover batches](cover-batches.md) freeze explicit
@@ -16,6 +16,21 @@ explained in [authentication.md](authentication.md). Responses use
 `Cache-Control: private, no-store`. Ordinary users receive `403 ADMIN_REQUIRED`;
 missing, revoked, expired, or disabled sessions receive `401 UNAUTHENTICATED`.
 The service rechecks the current account and session inside its transaction.
+
+## In the browser
+
+After signing in as an administrator, choose **Jobs** or open `/admin/jobs`.
+Filter by status, follow the live 30-item pages, and open a job for its cumulative
+counts, separate attempt pages, and historical scan diagnostics. Use **Refresh**
+to fetch current data. The job, attempt, and diagnostic reads are separate live
+requests, not one atomic snapshot. The interface hides prior details while refreshing
+and when a read fails; it does not automatically poll or guarantee immediate
+revocation detection without another request. An invalid or scope-changed cursor
+requires returning to the first page. Counts and diagnostics have the meanings
+explained below and must not be treated as unique media counts or source health.
+
+This browser is read-only. Scan creation, cancellation, retry, and batch-result
+management remain available through the API, not this interface.
 
 ## Enqueue a scan intent
 
