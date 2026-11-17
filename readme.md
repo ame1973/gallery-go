@@ -294,6 +294,9 @@ Only implemented endpoints are advertised:
   revision, current original-admin and resource/lease fences, shared outcome pages
   and sticky clear behavior. Rewrites/moves/changed fallbacks are rejected, never
   guessed. Metadata only, no READY/pixel/content grant. See [docs/cover-batches.md](docs/cover-batches.md).
+- `GET /api/v2/admin/metrics`: administrator-only current counts of retained jobs by
+  status, read in one database snapshot. Counts are job rows, not attempts or media;
+  the status-index scan grows with job history. See [job metrics](docs/jobs.md#job-status-metrics).
 - `GET /api/v2/admin/jobs`, `/admin/jobs/{job_id}`, `/admin/jobs/{job_id}/attempts`
   and `POST /admin/jobs/{job_id}/cancel`, `/retry`: administrator-only durable controls.
 - `GET /api/v2/admin/duplicates/exact` and `/admin/duplicates/exact/{group_id}/media`:

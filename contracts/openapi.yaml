@@ -856,6 +856,20 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TagBatchResultPage' }
         default: { $ref: '#/components/responses/Problem' }
+  /admin/metrics:
+    get:
+      operationId: getAdminMetrics
+      summary: Read current administrative job-status counts
+      description: Current administrator only. Counts are job rows in one SQLite read snapshot, not attempts, work units, unique media, ingestion success or source health. The status index is scanned over retained job history. No filters are supported; this is not a historical or complete system metrics service.
+      tags: [Jobs]
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Current counts by job status, including zero counts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminMetrics' }
+        default: { $ref: '#/components/responses/Problem' }
   /admin/jobs:
     get:
       operationId: listJobs
@@ -2446,6 +2460,24 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/TagBatchResult' } }
         next_cursor: { type: [string, 'null'] }
         has_more: { type: boolean }
+    AdminMetrics:
+      type: object
+      additionalProperties: false
+      required: [jobs]
+      properties:
+        jobs: { $ref: '#/components/schemas/JobStatusCounts' }
+    JobStatusCounts:
+      type: object
+      additionalProperties: false
+      description: Number of retained job rows currently in each status, not attempts or work units.
+      required: [queued, running, succeeded, failed, cancelled, dead]
+      properties:
+        queued: { type: integer, format: int64, minimum: 0 }
+        running: { type: integer, format: int64, minimum: 0 }
+        succeeded: { type: integer, format: int64, minimum: 0 }
+        failed: { type: integer, format: int64, minimum: 0 }
+        cancelled: { type: integer, format: int64, minimum: 0 }
+        dead: { type: integer, format: int64, minimum: 0 }
     JobStatus:
       type: string
       enum: [queued, running, succeeded, failed, cancelled, dead]

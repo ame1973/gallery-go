@@ -41,6 +41,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An administrator-only metrics API reporting current durable job counts by status
+  from one authorized SQLite snapshot. Counts are not attempts or unique media;
+  other system and historical metrics remain under development.
+
 - An administrator-only, read-only source browser for bounded live pages, recorded
   reachability, runtime configuration, scan generation and source policies. Source
   registration, editing, checks and scans remain API-only.

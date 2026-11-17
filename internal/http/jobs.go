@@ -9,6 +9,19 @@ import (
 
 type jobHandler struct{ service *jobs.Admin }
 
+func (h jobHandler) metrics(w http.ResponseWriter, r *http.Request) {
+	if r.URL.RawQuery != "" {
+		problem(w, 400, "INVALID_FILTER", "Metrics do not accept query parameters.")
+		return
+	}
+	metrics, err := h.service.Metrics(r.Context(), currentSession(r))
+	if err != nil {
+		requestError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
+}
+
 func (h jobHandler) list(w http.ResponseWriter, r *http.Request) {
 	page, ok := readPage(w, r)
 	if !ok {

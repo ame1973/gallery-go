@@ -742,6 +742,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read current administrative job-status counts
+         * @description Current administrator only. Counts are job rows in one SQLite read snapshot, not attempts, work units, unique media, ingestion success or source health. The status index is scanned over retained job history. No filters are supported; this is not a historical or complete system metrics service.
+         */
+        get: operations["getAdminMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/jobs": {
         parameters: {
             query?: never;
@@ -1627,6 +1647,24 @@ export interface components {
             items: components["schemas"]["TagBatchResult"][];
             next_cursor: string | null;
             has_more: boolean;
+        };
+        AdminMetrics: {
+            jobs: components["schemas"]["JobStatusCounts"];
+        };
+        /** @description Number of retained job rows currently in each status, not attempts or work units. */
+        JobStatusCounts: {
+            /** Format: int64 */
+            queued: number;
+            /** Format: int64 */
+            running: number;
+            /** Format: int64 */
+            succeeded: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            cancelled: number;
+            /** Format: int64 */
+            dead: number;
         };
         /** @enum {string} */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "dead";
@@ -3726,6 +3764,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagBatchResultPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdminMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current counts by job status, including zero counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMetrics"];
                 };
             };
             default: components["responses"]["Problem"];

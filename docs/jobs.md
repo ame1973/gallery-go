@@ -92,6 +92,24 @@ nonterminal publication, close all old DB connections, and verify reopened recov
 failed lease-expired history, a live successor fencing the old owner, stable logical
 IDs/revisions, and no duplicate versioned changes or missing outbox events.
 
+## Job-status metrics
+
+`GET /admin/metrics` returns the current number of retained job rows in each of
+`queued`, `running`, `succeeded`, `failed`, `cancelled`, and `dead` as a `jobs`
+object. Every field is present, including zero counts. It accepts no query parameters.
+The current administrator session and all six counts are read in the same SQLite
+snapshot. A later request rechecks the session; a revocation that commits after an
+already-authorized snapshot began does not retroactively change that response.
+
+A job contributes exactly once according to its current status, regardless of how
+many attempts it has made or work units it has processed. These counts are not unique
+media, attempt totals, throughput, source health, or evidence of successful ingestion.
+Retries move a job between status counts without erasing its attempt history. The
+aggregate scans retained job-status index entries, so cost grows with job history;
+requests retain the standard metadata timeout. The response does not include worker
+capabilities, payloads, filesystem paths, or source bytes. This endpoint currently
+reports job counts only; it is not a complete system metrics or historical dashboard.
+
 ## Inspect history
 
 | Method | Path                            | Result                                                           |
