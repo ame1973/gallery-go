@@ -5,7 +5,7 @@ Source files stay on your storage; GalleryGo keeps its metadata and generated
 media separately.
 
 **Development status:** this is not yet a production-ready private gallery.
-Database migrations, health checks, one-time administrator bootstrap, secure login,
+Database migrations, health checks, one-time administrator bootstrap, session-based login,
 password changes, session management, and three-language account pages work.
 Administrative account/session/audit, group grants, authorized metadata, source
 configuration/reachability, protected media GET/HEAD/Range, durable scan enqueue,
@@ -30,6 +30,12 @@ previews appear only when a protected variant exists. Full home/management scree
 normal variant production, playback, and offline downloads are still being built.
 Do not expose this build
 to the Internet or connect sensitive media yet.
+
+**Known authentication issues:** Delayed authentication responses can replace or
+clear a newer session, and stale pages can act against a different current account in
+the same browser. In controlled clock tests, an expired session could also become
+valid again after a clock rollback. These issues are unresolved; do not use sensitive
+accounts or media. See [authentication limitations](docs/authentication.md#known-limitations).
 
 ## Requirements
 

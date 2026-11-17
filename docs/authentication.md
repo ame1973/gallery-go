@@ -6,6 +6,22 @@ with the same `--config` file. The CLI reads and confirms the password without
 terminal echo. `--password-stdin` is an explicit automation option; pass secrets
 through a private pipe, never a command argument.
 
+## Known limitations
+
+This development build has unresolved authentication-ordering defects. When
+accounts are switched in the same browser, a delayed login or password-change
+response can replace the newer account's session cookie; a delayed logout response
+can clear it. A stale page can also perform an action against a different current
+account. These behaviors were reproduced with isolated accounts over HTTPS; they do
+not by themselves demonstrate remote intrusion. Do not use this build with sensitive
+accounts or media, or expose it to the Internet.
+
+Controlled-clock tests also showed that a session rejected at its idle or absolute
+expiry can be accepted again after the server clock moves backward by one
+millisecond. Expiration is therefore not yet guaranteed to remain irreversible
+across clock rollback. These limitations are not fixed by the cookie flags or CSRF
+requirements described below.
+
 ## Passwords and usernames
 
 Passwords use bcrypt cost 12. New passwords require at least 15 Unicode characters
