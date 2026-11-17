@@ -1346,6 +1346,25 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Library' }
         default: { $ref: '#/components/responses/Problem' }
+  /home/random-albums:
+    get:
+      operationId: sampleRandomAlbums
+      summary: Sample visible albums for the home screen
+      description: Requires a current session and applies the same library, album and active-source visibility as album detail before sampling. Returns at most 100 ordinary authorized album cards; it never exposes a total, cursor, source path or content grant. Each call is an independent SQLite random ordering, so it may repeat a previous result and is not a cryptographic or fairness guarantee. It scans candidate album rows and uses temporary ordering before materializing the bounded cards; it is not an indexed shuffle or offline snapshot. No source filesystem I/O or view event occurs.
+      tags: [Library]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of cards in this one unpaginated sample. No other query parameters are accepted.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+      responses:
+        '200':
+          description: Bounded authorized album sample, with no continuation or total.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumSample' }
+        default: { $ref: '#/components/responses/Problem' }
   /albums:
     get:
       operationId: listAlbums
@@ -3287,6 +3306,12 @@ components:
           format: date-time
           description: Immutable server first-indexed instant, UTC with millisecond precision and years 0001..9999. Not capture time, NAS mtime or a metadata-edit timestamp.
         version: { type: integer, minimum: 1 }
+    AlbumSample:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/Album' } }
     AlbumPage:
       type: object
       additionalProperties: false

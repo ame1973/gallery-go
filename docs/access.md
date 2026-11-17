@@ -166,6 +166,31 @@ CSRF tokens, session capabilities, or source filesystem paths.
   disabled, expired, and revoked sessions receive 401. Administration requires the
   administrator role.
 
+### Random home sample
+
+`GET /home/random-albums` returns `{"items":[...]}` with up to 100 current,
+visible album cards. `limit` is the only optional query parameter, from 1 to 100
+(default 30); there is no cursor, total count or pagination claim. An empty visible
+corpus returns
+`{"items":[]}`. Each request draws a new SQLite random ordering, but consecutive
+samples may repeat; this is neither a fairness nor a cryptographic guarantee.
+
+The session, album visibility and cards use one deferred SQLite read snapshot.
+Library grants and album restrictions are applied **before** the bounded sample;
+covers and media counts are the same authorized projections as album detail. A
+revocation committed after a snapshot begins does not retroactively change that
+sample; the next request rechecks. Authentication middleware can update session
+activity before this read, so an entire HTTP request is not guaranteed to avoid
+waiting for a concurrent writer.
+
+Sampling scans candidate album rows to check visibility and uses temporary random
+ordering. The server materializes at most 100 selected IDs before computing their
+cards, rather than loading the full corpus into application memory. Its cost still
+grows with the indexed library; it is not an indexed shuffle, stable cursor or
+offline snapshot. Reading a sample performs no source filesystem I/O, records no
+view and grants no media or original-download permission. The complete home screen
+and its other rails remain separate work.
+
 ### Album collection selection
 
 `GET /albums` accepts these optional **single exact IDs**, combined by AND with

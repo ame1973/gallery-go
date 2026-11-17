@@ -44,6 +44,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A bounded current-account random album sample for the future home screen, applying
+  shared visibility before selection and returning ordinary authorized cards. Sampling
+  scans candidate albums and is not cursor pagination, content access or a view event.
+
 - An administrator-only metrics API reporting current durable job counts by status
   from one authorized SQLite snapshot. Counts are not attempts or unique media;
   other system and historical metrics remain under development.

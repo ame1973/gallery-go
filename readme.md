@@ -259,6 +259,10 @@ Only implemented endpoints are advertised:
   Public `indexed_at` is server publication time, not capture/NAS mtime
   or an edit timestamp; title order is BINARY, not normalized/locale search. Hidden/
   unknown selectors return empty authorized pages, not private global labels. See [selection rules](docs/access.md#album-collection-selection).
+- `GET /api/v2/home/random-albums`: sample up to 100 freshly authorized album cards
+  (default 30) without a cursor or total. Sampling scans candidate albums and may
+  repeat; it does not probe sources, record views or grant content access. The complete
+  home screen remains pending. See [random home sample](docs/access.md#random-home-sample).
 - `GET/POST /api/v2/favorite-collections`,
   `GET/PATCH/DELETE /api/v2/favorite-collections/{collection_id}`, and the
   `/deletion-preview` child: create/list/read/rename owned root or nested folders,

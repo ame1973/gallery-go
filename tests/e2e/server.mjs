@@ -20,6 +20,7 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     'media-selection',
     'album-selection',
     'browse-ui',
+    'random-home',
     'media-detail-ui',
     'outage',
     'duplicates',
@@ -405,6 +406,44 @@ try {
         .run(
           JSON.stringify({ codec: 'png', animated: false, frame_count: 1, loop_count: 1 }),
           `${prefix}-media`,
+        );
+    }
+    if (prefix.startsWith('random-home-')) {
+      // The grant is immutable; each test changes only its own user membership.
+      fixtureDB
+        .prepare('INSERT INTO permission_groups(id,name,created_at) VALUES(?,?,?)')
+        .run(`${prefix}-group`, `Random home access ${prefix}`, Date.now());
+      fixtureDB
+        .prepare('INSERT INTO library_access(library_id,group_id) VALUES(?,?)')
+        .run(library, `${prefix}-group`);
+      fixtureDB
+        .prepare('UPDATE albums SET cover_media_id=? WHERE id=?')
+        .run(`${prefix}-media`, album);
+      for (let index = 0; index < 33; index += 1) {
+        fixtureDB
+          .prepare(
+            'INSERT INTO albums(id,library_id,source_id,source_name,created_at,updated_at) VALUES(?,?,?,?,?,?)',
+          )
+          .run(
+            `${prefix}-extra-${String(index).padStart(2, '0')}`,
+            library,
+            `${prefix}-source`,
+            `Random album ${index}`,
+            Date.now(),
+            Date.now(),
+          );
+      }
+      fixtureDB
+        .prepare(
+          'INSERT INTO albums(id,library_id,source_id,source_name,access_restricted,created_at,updated_at) VALUES(?,?,?,?,1,?,?)',
+        )
+        .run(
+          `${prefix}-hidden`,
+          library,
+          `${prefix}-source`,
+          'Hidden random album',
+          Date.now(),
+          Date.now(),
         );
     }
     if (prefix.startsWith('browse-ui-')) {

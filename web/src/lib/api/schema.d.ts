@@ -1127,6 +1127,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/home/random-albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sample visible albums for the home screen
+         * @description Requires a current session and applies the same library, album and active-source visibility as album detail before sampling. Returns at most 100 ordinary authorized album cards; it never exposes a total, cursor, source path or content grant. Each call is an independent SQLite random ordering, so it may repeat a previous result and is not a cryptographic or fairness guarantee. It scans candidate album rows and uses temporary ordering before materializing the bounded cards; it is not an indexed shuffle or offline snapshot. No source filesystem I/O or view event occurs.
+         */
+        get: operations["sampleRandomAlbums"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/albums": {
         parameters: {
             query?: never;
@@ -2147,6 +2167,9 @@ export interface components {
              */
             indexed_at: string;
             version: number;
+        };
+        AlbumSample: {
+            items: components["schemas"]["Album"][];
         };
         AlbumPage: {
             items: components["schemas"]["Album"][];
@@ -4474,6 +4497,30 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Library"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    sampleRandomAlbums: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of cards in this one unpaginated sample. No other query parameters are accepted. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded authorized album sample, with no continuation or total. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumSample"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
