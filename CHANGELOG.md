@@ -6,6 +6,9 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Reject future-dated worker heartbeats as readiness evidence after a wall-clock
+  rollback; a different current worker can still satisfy the required-worker check.
+
 - Restrict Tailwind utility discovery to the application source and entry HTML so
   source-archive builds do not turn neighboring local files into public CSS.
   An isolated real-build regression checks included and excluded inputs.

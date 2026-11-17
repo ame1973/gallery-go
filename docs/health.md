@@ -19,10 +19,11 @@ All responses use `Cache-Control: private, no-store`.
 - `database: ok`: the local SQLite connection is reachable and dependency queries
   completed. Startup separately requires exact current migrations.
 - `worker: ok`: at least one running embedded or standalone worker has a committed
-  heartbeat newer than the configured lease window. Stopped/stale records do not
-  qualify. This is shared processing dependency evidence, not proof of a particular
-  PID, free slots, job progress, compatible codecs, or every process's root registry.
-  Keep all processes configured consistently.
+  heartbeat newer than the configured lease window and not later than the current
+  server clock. A future-dated heartbeat alone does not establish readiness.
+  Stopped or stale records do not qualify. This is shared processing dependency
+  evidence, not proof of a particular PID, free slots, job progress, compatible
+  codecs, or every process's root registry. Keep all processes configured consistently.
 - `worker: optional`: the operator explicitly selected metadata-only server mode;
   no healthy worker is being claimed. This setting does not start or stop consumers.
 - `sources: ok`: every active registered source matches this server's private root
@@ -37,6 +38,12 @@ All responses use `Cache-Control: private, no-store`.
 A missing required worker or failed dependency query returns HTTP **503** with the
 standard private `NOT_READY` Problem response, not a partially successful status.
 Clients cannot make a worker optional through request parameters or headers.
+
+A backward wall-clock adjustment can leave a live worker's monotonic recorded
+heartbeat in the future; readiness then fails closed until the clock catches up or
+that worker is restarted and registers a new heartbeat. This condition alone does
+not prove the process has stopped. Correct the clock or use the normal supervisor;
+never edit worker records to force readiness.
 
 Source readiness is a **recent observation**, not an on-demand NAS probe or fixed
 snapshot. A source can fail after its last successful check; original requests

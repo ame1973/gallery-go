@@ -45,7 +45,8 @@ func (q *Queue) StopWorker(ctx context.Context, id string) error {
 
 func (q *Queue) Available(ctx context.Context) (bool, error) {
 	var available bool
-	err := q.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM workers WHERE state='running' AND last_seen_at>?)`, q.clock().Add(-q.policy.Lease).UnixMilli()).Scan(&available)
+	now := q.clock()
+	err := q.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM workers WHERE state='running' AND last_seen_at>? AND last_seen_at<=?)`, now.Add(-q.policy.Lease).UnixMilli(), now.UnixMilli()).Scan(&available)
 	return available, err
 }
 
