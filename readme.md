@@ -167,7 +167,9 @@ the configuration file's directory.
 
 `auth.session_idle_timeout` defaults to `24h` and can be shortened to at least
 `1m`. `auth.session_absolute_timeout` defaults to `720h`, must not exceed that
-maximum, and must be at least the idle timeout. Sessions never outlive either limit.
+maximum, and must be at least the idle timeout. Requests are checked against both
+limits using the current server clock. A previously expired session can be accepted
+again if that clock moves backward; see [known limitations](docs/authentication.md#known-limitations).
 
 Database storage, cache, web assets, and source roots must not overlap, including
 through symlinks. Private artifact staging currently requires Linux ext-family,
@@ -521,9 +523,11 @@ Read [SECURITY.md](SECURITY.md) before deploying. In particular:
   moderate) remains in OpenAPI/ESLint tooling. Do not feed untrusted glob patterns
   to development tools. No high/critical npm advisory was reported in the initial
   audit; rerun `pnpm audit` because advisories change.
-- Go vulnerability scanning must pass before release. The development environment
-  requires explicit approval to execute or integrate the official Go vulnerability
-  scanner. It is not currently enabled in CI and remains an unverified release gate.
+- A preliminary `govulncheck` run on 2026-11-17 with Go 1.26.2 reported 24
+  standard-library vulnerabilities at the symbol level, plus findings in imported
+  packages and required modules without identified calls. Symbol-level reachability
+  does not by itself establish exploitability. Remediation and a successful rescan
+  are required before release; the scanner is not yet enabled in CI.
 
 ## Repository layout
 
