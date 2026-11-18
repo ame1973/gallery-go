@@ -18,7 +18,8 @@
     "api:lint": "redocly lint contracts/openapi.yaml",
     "api:generate": "openapi-typescript contracts/openapi.yaml -o web/src/lib/api/schema.d.ts",
     "api:check": "pnpm api:lint && pnpm api:generate && git diff --exit-code -- web/src/lib/api/schema.d.ts",
-    "test:e2e": "playwright test",
+    "test:e2e:fixtures": "node --test --test-concurrency=1 tests/integration/e2e-server-lifecycle.test.mjs tests/integration/isolated-fixture-failure.test.mjs",
+    "test:e2e": "pnpm test:e2e:fixtures && playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

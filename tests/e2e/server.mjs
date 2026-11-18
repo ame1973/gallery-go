@@ -1,19 +1,55 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { request as proxyRequest } from 'node:http';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 
+function loopbackPort(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  if (!/^[1-9][0-9]{0,4}$/.test(raw) || Number(raw) > 65535) {
+    throw new Error(`Invalid test port: ${name}`);
+  }
+  return Number(raw);
+}
+
+const httpsPort = loopbackPort('GALLERYGO_E2E_HTTPS_PORT', 4318);
+const httpPort = loopbackPort('GALLERYGO_E2E_HTTP_PORT', 4319);
+if (httpsPort === httpPort) throw new Error('Test HTTP and HTTPS ports must differ');
+
+const requestedParent = process.env.GALLERYGO_E2E_TEMP_PARENT;
+let temporaryParent = tmpdir();
+if (requestedParent !== undefined) {
+  temporaryParent = realpathSync(requestedParent);
+  if (
+    dirname(temporaryParent) !== realpathSync(tmpdir()) ||
+    !basename(temporaryParent).startsWith('gallerygo-isolated-e2e-')
+  ) {
+    throw new Error('Invalid isolated test temporary parent');
+  }
+}
+
+const password = process.env.GALLERYGO_TEST_PASSWORD;
+if (!password) throw new Error('The Playwright harness must supply its generated test password');
+
 // Only this process's freshly allocated test directory is removed on shutdown.
-const directory = mkdtempSync(join(tmpdir(), 'gallerygo-e2e-'));
+const directory = mkdtempSync(join(temporaryParent, 'gallerygo-e2e-'));
 const binary = join(directory, 'gallerygo');
 const config = join(directory, 'config.yaml');
 const key = join(directory, 'tls.key');
 const certificate = join(directory, 'tls.pem');
-const password = process.env.GALLERYGO_TEST_PASSWORD;
 const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
   [
     'media',
@@ -52,12 +88,11 @@ const managementRoots = ['chromium', 'mobile-chromium'].flatMap((project) =>
     marker: '.marker',
   })),
 );
-if (!password) throw new Error('The Playwright harness must supply its generated test password');
 writeFileSync(
   config,
   JSON.stringify({
-    listen: '127.0.0.1:4319',
-    base_url: 'https://127.0.0.1:4318',
+    listen: `127.0.0.1:${httpPort}`,
+    base_url: `https://127.0.0.1:${httpsPort}`,
     database: join(directory, 'data/gallerygo.db'),
     cache_root: join(directory, 'cache'),
     web_root: resolve('web/dist'),
@@ -620,7 +655,7 @@ const proxy = createServer(
     const upstream = proxyRequest(
       {
         hostname: '127.0.0.1',
-        port: 4319,
+        port: httpPort,
         path: request.url,
         method: request.method,
         headers: request.headers,
@@ -638,9 +673,40 @@ const proxy = createServer(
     request.pipe(upstream);
   },
 );
-proxy.listen(4318, '127.0.0.1');
-const child = spawn(binary, ['serve', '--config', config], { stdio: 'inherit' });
+const child = spawn(binary, ['serve', '--config', config], {
+  stdio: ['ignore', 'inherit', 'pipe'],
+});
 let stopping = false;
+let proxyFailed = false;
+let proxyStarted = false;
+// Do not proxy to an unrelated process if the Go listener's port is occupied.
+// The compiled server logs this line only after its own listener has bound.
+createInterface({ input: child.stderr }).on('line', (line) => {
+  console.error(line);
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (
+    !stopping &&
+    !proxyStarted &&
+    event.msg === 'HTTP server listening' &&
+    event.address === `127.0.0.1:${httpPort}`
+  ) {
+    proxyStarted = true;
+    proxy.listen(httpsPort, '127.0.0.1');
+  }
+});
+proxy.on('listening', () => {
+  process.stdout.write(`GALLERYGO_E2E_READY https://127.0.0.1:${httpsPort}\n`);
+});
+proxy.on('error', (error) => {
+  proxyFailed = true;
+  console.error(error);
+  child.kill('SIGTERM');
+});
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     stopping = true;
@@ -650,11 +716,14 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 child.on('error', (error) => {
   console.error(error);
-  process.exitCode = 1;
+  proxy.closeAllConnections();
+  proxy.close();
+  rmSync(directory, { recursive: true, force: true });
+  process.exit(1);
 });
 child.on('exit', (code) => {
   proxy.closeAllConnections();
   proxy.close();
   rmSync(directory, { recursive: true, force: true });
-  process.exit(stopping ? 0 : (code ?? 1));
+  process.exit(proxyFailed ? 1 : stopping ? 0 : (code ?? 1));
 });

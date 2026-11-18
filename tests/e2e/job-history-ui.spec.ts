@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
-import { expect, signIn, test } from './fixtures';
+import { expect, signIn } from './fixtures';
+import { isolatedTest as test } from './isolated-fixtures';
 import type { Account, Administrator } from './fixtures';
 import type { components } from '../../web/src/lib/api/schema';
 
@@ -257,7 +258,7 @@ test('administrators browse live job and history pages over HTTPS', async ({
     await expect(page.getByText('Album/entry-30.png')).toHaveCount(0);
   } finally {
     release();
-    await page.unroute(isIssues);
+    await page.unrouteAll({ behavior: 'wait' });
   }
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(issues.getByText('Album/entry-30.png')).toBeVisible();
@@ -334,7 +335,7 @@ test('role revocation hides held history and invalidates old scoped cursors', as
     await expect(page.getByText(`${prefix}-source`)).toHaveCount(0);
   } finally {
     release();
-    await page.unroute(isIssues);
+    await page.unrouteAll({ behavior: 'wait' });
   }
   await signIn(page, account);
   const jobRequests: string[] = [];
