@@ -6,6 +6,12 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Persist confirmed idle/absolute session expiry with its change/outbox/audit records,
+  after rolling back any pending business transaction. Later clock rollback or database
+  reopen cannot revive that revoked token. Newer legitimate activity is rechecked;
+  failed persistence denies the request without claiming confirmed expiry. Unobserved
+  clock rollback and browser-wide authentication ordering remain unresolved.
+
 - Reject future-dated worker heartbeats as readiness evidence after a wall-clock
   rollback; a different current worker can still satisfy the required-worker check.
 

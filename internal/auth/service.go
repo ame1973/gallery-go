@@ -201,7 +201,7 @@ func (s *Service) Login(ctx context.Context, username, password, ip, userAgent, 
 const sessionSelect = `SELECT s.id,s.created_at,s.last_seen_at,s.expires_at,s.user_agent,s.ip_address,s.csrf_hash,
  u.id,u.username,u.role,u.active,u.scope_id,u.version,u.download_original
  FROM sessions s JOIN users u ON u.id=s.user_id
- WHERE s.id_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND s.last_seen_at>? AND u.active=1`
+ WHERE s.id_hash=? AND s.revoked_at IS NULL AND u.active=1`
 
 func scanSession(row *sql.Row, token string) (Session, error) {
 	var session Session
@@ -226,9 +226,12 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 		return Session{}, ErrUnauthenticated
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
-	session, err := scanSession(s.db.QueryRowContext(ctx, sessionSelect, digest(token), now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli()), token)
+	session, err := scanSession(s.db.QueryRowContext(ctx, sessionSelect, digest(token)), token)
 	if err != nil {
 		return Session{}, err
+	}
+	if s.expiredAt(session, now) {
+		return Session{}, s.confirmExpiry(ctx, token, now)
 	}
 	if now.After(session.LastSeenAt) {
 		result, err := s.db.ExecContext(ctx, `UPDATE sessions SET last_seen_at=max(last_seen_at,?) WHERE id_hash=? AND revoked_at IS NULL AND expires_at>? AND last_seen_at>? AND EXISTS(SELECT 1 FROM users WHERE users.id=sessions.user_id AND active=1)`, now.UnixMilli(), digest(token), now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli())
@@ -249,9 +252,69 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 
 // SessionInTx validates the actual session and current account within the same
 // snapshot as a resource query or mutation. It never trusts the supplied user DTO.
+// Observed expiry aborts the caller's transaction before separately confirming
+// durable revocation. Callers must return on error and must not reuse that tx.
 func (s *Service) SessionInTx(ctx context.Context, tx *sql.Tx, current Session) (Session, error) {
 	now := s.now().UTC().Truncate(time.Millisecond)
-	return scanSession(tx.QueryRowContext(ctx, sessionSelect, digest(current.Token), now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli()), current.Token)
+	session, err := scanSession(tx.QueryRowContext(ctx, sessionSelect, digest(current.Token)), current.Token)
+	if err != nil {
+		return Session{}, err
+	}
+	if !s.expiredAt(session, now) {
+		return session, nil
+	}
+	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		return Session{}, err
+	}
+	return Session{}, s.confirmExpiry(ctx, current.Token, now)
+}
+
+func (s *Service) expiredAt(session Session, now time.Time) bool {
+	return !session.ExpiresAt.After(now) || !session.LastSeenAt.After(now.Add(-s.policy.Idle))
+}
+
+// confirmExpiry runs only after an expired read and outside any caller transaction.
+// A fresh writer snapshot must still confirm expiry at the observed time: newer
+// legitimate activity may have extended the idle deadline. Never commit business
+// work to retain this marker, or report confirmed expiry before its journal commits.
+func (s *Service) confirmExpiry(ctx context.Context, token string, observed time.Time) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	session, err := scanSession(tx.QueryRowContext(ctx, sessionSelect, digest(token)), token)
+	if err != nil {
+		return err
+	}
+	if !s.expiredAt(session, observed) {
+		return ErrConflict
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=? WHERE id_hash=? AND revoked_at IS NULL`, observed.UnixMilli(), digest(token))
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrConflict
+	}
+	if err := store.Change(ctx, tx, session.User.ScopeID, "session", session.ID, "delete", 1, map[string]string{"user_id": session.User.ID}, observed); err != nil {
+		return err
+	}
+	reason := "idle"
+	if !session.ExpiresAt.After(observed) {
+		reason = "absolute"
+	}
+	if err := store.Audit(ctx, tx, session.User.ID, "session_expired", "session", session.ID, map[string]string{"reason": reason}, observed); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return ErrUnauthenticated
 }
 
 func (s *Service) Revoke(ctx context.Context, current Session, id string) error {

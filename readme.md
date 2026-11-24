@@ -33,9 +33,10 @@ to the Internet or connect sensitive media yet.
 
 **Known authentication issues:** Delayed authentication responses can replace or
 clear a newer session, and stale pages can act against a different current account in
-the same browser. In controlled clock tests, an expired session could also become
-valid again after a clock rollback. These issues are unresolved; do not use sensitive
-accounts or media. See [authentication limitations](docs/authentication.md#known-limitations).
+the same browser. These ordering issues remain unresolved; do not use sensitive
+accounts or media. Confirmed expiry now persists revocation, but deadlines still
+depend on the server clock and cannot cover unobserved rollback or failed persistence.
+See [authentication limitations](docs/authentication.md#known-limitations).
 
 ## Requirements
 
@@ -173,8 +174,11 @@ the configuration file's directory.
 `auth.session_idle_timeout` defaults to `24h` and can be shortened to at least
 `1m`. `auth.session_absolute_timeout` defaults to `720h`, must not exceed that
 maximum, and must be at least the idle timeout. Requests are checked against both
-limits using the current server clock. A previously expired session can be accepted
-again if that clock moves backward; see [known limitations](docs/authentication.md#known-limitations).
+limits using the current server clock. An observed expiry is confirmed by persisting
+revocation, so that token remains rejected after a later clock rollback or database
+reopen. Persistence failures reject the request without confirming durable expiry;
+unobserved clock rollback remains a limitation. See
+[observed expiry](docs/authentication.md#observed-expiry).
 
 Database storage, cache, web assets, and source roots must not overlap, including
 through symlinks. Private artifact staging currently requires Linux ext-family,

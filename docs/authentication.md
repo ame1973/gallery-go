@@ -16,11 +16,12 @@ account. These behaviors were reproduced with isolated accounts over HTTPS; they
 not by themselves demonstrate remote intrusion. Do not use this build with sensitive
 accounts or media, or expose it to the Internet.
 
-Controlled-clock tests also showed that a session rejected at its idle or absolute
-expiry can be accepted again after the server clock moves backward by one
-millisecond. Expiration is therefore not yet guaranteed to remain irreversible
-across clock rollback. These limitations are not fixed by the cookie flags or CSRF
-requirements described below.
+Session deadlines still depend on the server clock. A successfully persisted
+expiry observation now revokes that token across a later clock rollback or database
+reopen, but the server cannot infer unobserved elapsed time across arbitrary clock
+rollback or downtime. Failed persistence cannot promise durable expiry. See
+[observed expiry](#observed-expiry) for the bounded guarantee. This does not fix the
+authentication-ordering defects above; cookie flags and CSRF do not fix them either.
 
 ## Passwords and usernames
 
@@ -51,6 +52,31 @@ expiry. Defaults are a rolling 24-hour idle limit and a 30-day absolute limit.
 Administrators may shorten them with `auth.session_idle_timeout` and
 `auth.session_absolute_timeout`; neither can exceed the default maximum.
 
+## Observed expiry
+
+An authentication check that observes an idle or absolute deadline first aborts any
+pending business transaction, then rechecks the token and current account in a
+separate SQLite writer transaction. If still expired at the observed instant, it
+atomically revokes the session and records a session-delete change, durable outbox
+entry, and `session_expired` audit with the reason `idle` or `absolute`. It returns
+401 only after that revocation commits. Existing invalid or revoked tokens also
+return 401, without creating another expiry journal.
+
+Concurrent activity can extend the idle deadline after an older read snapshot was
+opened. If the fresh check sees that extension, it leaves the valid session alone
+and returns 409 `VERSION_CONFLICT`; the interrupted request does not continue with
+stale authorization. Refresh current state before deciding whether to repeat an
+operation. Business writes from the aborted transaction are never committed just
+to preserve an expiry marker.
+
+Database failures return a private 500 error, and context cancellation/deadline
+failures return 503, rather than reporting successful expiry persistence or allowing
+the requested action. No response in this expiry path sets or clears the browser's
+session cookie. A successfully committed revocation survives a later clock rollback
+and database reopen; a failed write has no such guarantee. This does not infer real
+elapsed time that was never observed, change the configured limits, or solve delayed
+authentication-response ordering across browser accounts.
+
 ## Password changes and sessions
 
 - `POST /api/v2/auth/password` accepts `{old_password,new_password}`. It rotates
@@ -79,9 +105,9 @@ Forwarded IP headers are not trusted. Behind a reverse proxy, the peer-IP budget
 is shared by its clients; per-username limits still apply. Configure trusted-proxy
 support only when its explicit boundary is implemented, not by spoofable headers.
 
-Bootstrap, login, logout/session revocation, and password changes have transactional
-audit records. Business changes and durable outbox records share the same SQLite
-transaction. Passwords, raw cookies, and CSRF values are not audit payloads.
+Bootstrap, login, logout/session revocation, confirmed expiry, and password changes
+have transactional audit records. Business changes and durable outbox records share
+the same SQLite transaction. Passwords, raw cookies, and CSRF values are not audit payloads.
 
 Active administrators can create, inspect, update, disable, delete, and reset
 accounts, inspect and revoke another account's sessions, and read the audit API.
