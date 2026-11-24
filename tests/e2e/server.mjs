@@ -43,6 +43,10 @@ if (requestedParent !== undefined) {
 
 const password = process.env.GALLERYGO_TEST_PASSWORD;
 if (!password) throw new Error('The Playwright harness must supply its generated test password');
+const realScan = process.env.GALLERYGO_E2E_REAL_SCAN === '1';
+if (realScan && requestedParent === undefined) {
+  throw new Error('Real scan tests require an isolated temporary parent');
+}
 
 // Only this process's freshly allocated test directory is removed on shutdown.
 const directory = mkdtempSync(join(temporaryParent, 'gallerygo-e2e-'));
@@ -50,7 +54,12 @@ const binary = join(directory, 'gallerygo');
 const config = join(directory, 'config.yaml');
 const key = join(directory, 'tls.key');
 const certificate = join(directory, 'tls.pem');
-const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
+const projects = realScan ? [] : ['chromium', 'mobile-chromium'];
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGKSq9gCCAAA//8CCgFNa0v7mgAAAABJRU5ErkJggg==',
+  'base64',
+);
+const fixtureSources = projects.flatMap((project) =>
   [
     'media',
     'media-selection',
@@ -81,13 +90,15 @@ const fixtureSources = ['chromium', 'mobile-chromium'].flatMap((project) =>
     marker: '.marker',
   })),
 );
-const managementRoots = ['chromium', 'mobile-chromium'].flatMap((project) =>
-  ['managed', 'unmounted'].map((kind) => ({
-    name: `${kind}-${project}`,
-    root: join(directory, 'sources', `${kind}-${project}`),
-    marker: '.marker',
-  })),
-);
+const managementRoots = realScan
+  ? [{ name: 'minimum-flow', root: join(directory, 'sources', 'minimum-flow'), marker: '.marker' }]
+  : projects.flatMap((project) =>
+      ['managed', 'unmounted'].map((kind) => ({
+        name: `${kind}-${project}`,
+        root: join(directory, 'sources', `${kind}-${project}`),
+        marker: '.marker',
+      })),
+    );
 writeFileSync(
   config,
   JSON.stringify({
@@ -97,9 +108,18 @@ writeFileSync(
     cache_root: join(directory, 'cache'),
     web_root: resolve('web/dist'),
     sources: [...fixtureSources, ...managementRoots],
-    // These control/seeded-content cases deliberately do not consume their jobs.
-    // Actual ingestion uses the separate compiled CLI integration test.
-    worker: { embedded: false, required: false },
+    // Synthetic control fixtures must not consume jobs. The separate real-scan
+    // mode uses an empty database and a private embedded worker.
+    worker: realScan
+      ? {
+          embedded: true,
+          concurrency: 1,
+          poll: '100ms',
+          max_attempts: 2,
+          retry_base: '100ms',
+          retry_max: '200ms',
+        }
+      : { embedded: false, required: false },
     scheduler: { enabled: false },
   }),
   { mode: 0o600 },
@@ -147,13 +167,19 @@ let fixturesReady = false;
 try {
   // These roots are registered through real administrative APIs by the test.
   // Intentionally missing roots must remain missing; Go must not create them.
-  for (const root of managementRoots.filter((root) => root.name.startsWith('managed-'))) {
+  for (const root of managementRoots.filter(
+    (root) => realScan || root.name.startsWith('managed-'),
+  )) {
     mkdirSync(root.root, { recursive: true, mode: 0o700 });
     writeFileSync(join(root.root, root.marker), 'isolated management marker', { mode: 0o400 });
+    if (realScan) {
+      mkdirSync(join(root.root, 'Album'), { mode: 0o700 });
+      writeFileSync(join(root.root, 'Album', 'photo.png'), png, { mode: 0o400 });
+    }
   }
   fixtureDB = new DatabaseSync(join(directory, 'data/gallerygo.db'));
   fixtureDB.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
-  for (const project of ['chromium', 'mobile-chromium']) {
+  for (const project of projects) {
     // Synthetic queued jobs exercise HTTPS controls only; no scanner or worker
     // execution is implied by these fresh, project-isolated setup records.
     for (const suffix of ['queued', 'stable']) {
@@ -287,12 +313,7 @@ try {
       .prepare('INSERT INTO album_tags(album_id,tag_id) VALUES(?,?)')
       .run(`acl-${project}-restricted`, `tags-${project}-assigned`);
   }
-  // A real one-pixel PNG encoded with Go's image/png, not a codec mock. These
-  // ready records are test setup only; the production scanner/publisher is separate.
-  const png = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGKSq9gCCAAA//8CCgFNa0v7mgAAAABJRU5ErkJggg==',
-    'base64',
-  );
+  // Synthetic ready records are test setup only; the real-scan mode creates none.
   const hash = createHash('sha256').update(png).digest('hex');
   for (const source of fixtureSources) {
     const prefix = source.name;

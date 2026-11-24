@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -8,13 +8,17 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { APIRequestContext } from '@playwright/test';
 import { expect, test as base } from './fixtures';
 
-type IsolatedServer = { origin: string; password: string };
+type IsolatedServer = { origin: string; password: string; scanSource: string | null };
 
 // Only tests that need a private database use this worker-local server. Other
 // projects keep their existing shared two-worker concurrency and default ports.
-export const isolatedTest = base.extend<object, { isolatedServer: IsolatedServer }>({
+export const isolatedTest = base.extend<
+  object,
+  { isolatedServer: IsolatedServer; realScan: boolean }
+>({
+  realScan: [false, { scope: 'worker', option: true }],
   isolatedServer: [
-    async ({ playwright }, use, workerInfo) => {
+    async ({ playwright, realScan }, use, workerInfo) => {
       const parent = await mkdtemp(join(tmpdir(), 'gallerygo-isolated-e2e-'));
       const httpsPort = 4420 + workerInfo.parallelIndex * 2;
       const httpPort = httpsPort + 1;
@@ -29,6 +33,7 @@ export const isolatedTest = base.extend<object, { isolatedServer: IsolatedServer
           GALLERYGO_E2E_HTTPS_PORT: String(httpsPort),
           GALLERYGO_E2E_HTTP_PORT: String(httpPort),
           GALLERYGO_E2E_TEMP_PARENT: parent,
+          GALLERYGO_E2E_REAL_SCAN: realScan ? '1' : '0',
           GOTOOLCHAIN: 'local',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -83,7 +88,22 @@ export const isolatedTest = base.extend<object, { isolatedServer: IsolatedServer
             { timeout: 120_000, intervals: [100, 250, 500] },
           )
           .toBe(200);
-        await use({ origin, password });
+        let scanSource: string | null = null;
+        if (realScan) {
+          const directories = (await readdir(parent, { withFileTypes: true })).filter(
+            (entry) => entry.isDirectory() && entry.name.startsWith('gallerygo-e2e-'),
+          );
+          if (directories.length !== 1) throw new Error('Expected one owned test directory');
+          scanSource = join(
+            parent,
+            directories[0]!.name,
+            'sources',
+            'minimum-flow',
+            'Album',
+            'photo.png',
+          );
+        }
+        await use({ origin, password, scanSource });
       } finally {
         try {
           await probe?.dispose();
