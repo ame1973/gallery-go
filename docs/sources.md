@@ -16,6 +16,59 @@ configured `Origin`, and session-bound `X-CSRF-Token` as described in
 Ordinary users receive `403 ADMIN_REQUIRED`; missing, disabled, revoked, or expired
 sessions receive `401 UNAUTHENTICATED`. Authorization is rechecked in transactions.
 
+## First source: isolated local demonstration
+
+This development build has unresolved authentication limitations and does not yet
+produce normal previews. Use only a disposable local test image and account; do not
+expose the server to the Internet or connect sensitive media. The source-registration
+and scan controls are currently API-only.
+
+1. Prepare a disposable source directory containing a readable regular marker and at
+   least one supported test PNG in a subdirectory such as `Album/`. The application
+   does not create the source, marker, or media. Mount or grant the GalleryGo process
+   read-only access. Use a path separate from its SQLite database, cache, and web
+   assets; never use a real NAS for this local demonstration.
+2. In the private YAML configuration, [declare the absolute source root and marker](#declare-storage-outside-the-api)
+   with the name `demo`, then set `scheduler.enabled: false` in every consumer for
+   this manual-only example. Leave both `worker.embedded` and `worker.required` set
+   to `true`, migrate, bootstrap an administrator once, and start `serve` behind a
+   trusted HTTPS reverse proxy matching `base_url`. See [deployment](../deploy/readme.md).
+3. Sign in as the bootstrap administrator using an HTTPS client with a cookie jar;
+   read `/auth/csrf` and send the exact configured `Origin` and `X-CSRF-Token` on
+   subsequent mutations. The API paths below are relative to `/api/v2`. Do not place
+   passwords, cookies, or CSRF values in command arguments, URLs, or shell history.
+   See [authentication](authentication.md).
+4. Create a library using `POST /admin/libraries`, JSON `{ "name": "Demo" }` and a
+   new `Idempotency-Key`; retain the response `id`. The active library starts with no
+   regular-user grants. `GET /admin/source-roots` should list the declared `demo`
+   label, never the private filesystem path.
+5. Register the root using `POST /admin/sources`, another new `Idempotency-Key`, and
+   JSON `{ "library_id": "<library-id>", "root_name": "demo", "minimum_files": 1 }`.
+   Retain the returned source `id`. Omitting `mapping` uses album depth 1 and person
+   depth 0; see [folder mapping](#folder-mapping). Registration alone does not scan.
+6. Send `POST /admin/scans` with a new `Idempotency-Key` and JSON
+   `{ "mode": "full", "source_id": "<source-id>" }`. The `202` response is a queued
+   acceptance, not a completed scan. Take the job ID from the response body or
+   `Location` header, then follow `GET /admin/jobs/{job_id}` until it reaches a
+   terminal state; check `status` and the individual work counts, not just `done`.
+   A failed or dead job needs inspection, not an assumed success. See [job controls](jobs.md).
+7. Once the scan succeeds and publishes the sample, sign in as the administrator and
+   open `/albums`, then the generated album and media detail. No group grant is needed
+   for this administrator's active, consistent source. If its actual account has
+   `download_original: true`, the detail page offers **Download original**; otherwise
+   the policy must be changed explicitly, which revokes the changed account's sessions.
+   Normal preview generation is not enabled, so a missing preview is expected and is
+   not proof that the original is absent. See [protected media](media.md).
+8. To test a regular account, create a group, grant it to the library, add the account
+   to the group with fresh ETags, and separately enable original-download permission if
+   appropriate. A library grant alone does not allow original downloads. See
+   [configure access safely](access.md#configure-access-safely) and
+   [account policy](administration.md#versioned-policy-changes).
+
+For each intended POST use a distinct idempotency key, and use the same original key
+and body only to retry a lost response. The server preserves indexed data when a root
+or marker becomes unavailable; never use a failed check as permission to purge files.
+
 ## In the browser
 
 Administrators can choose **Sources** or open `/admin/sources` to browse live,

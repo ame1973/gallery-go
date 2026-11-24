@@ -187,7 +187,9 @@ control characters; mount markers are normalized root-relative paths. GalleryGo
 does not create source roots or mount markers.
 Declare roots in YAML, then use the [source API](docs/sources.md) to register a
 library/mapping, inspect reachability, or deactivate a source. These operations do
-not scan or purge files synchronously. Enabled consumers automatically schedule
+not scan or purge files synchronously. For a first run with a disposable test image,
+see the [isolated source demonstration](docs/sources.md#first-source-isolated-local-demonstration).
+Enabled consumers automatically schedule
 active registered sources for initial/periodic full scans and intervening polls.
 Publication still requires healthy manifest/metadata/configuration/lease
 validation. Set `scheduler.enabled: false` in every consumer for manual-only operation.
