@@ -1,0 +1,123 @@
+{
+  "profile": "gallerygo-search-v2-u15",
+  "cases": [
+    {
+      "name": "empty",
+      "input": "  ",
+      "normalized": "",
+      "words": [],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "compatibility-and-full-fold",
+      "input": " ＦＯＯ　Straße ",
+      "normalized": "foo strasse",
+      "words": ["foo", "strasse"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "greek-final-sigma",
+      "input": "Σς",
+      "normalized": "σσ",
+      "words": ["σσ"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "dotted-i",
+      "input": "İ",
+      "normalized": "i̇",
+      "words": ["i̇"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "ligature-and-symbol",
+      "input": "Kﬁ",
+      "normalized": "kfi",
+      "words": ["kfi"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "canonical-composition",
+      "input": "Å",
+      "normalized": "å",
+      "words": ["å"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "unicode-15-unassigned-boundary",
+      "input": "A꟱B",
+      "normalized": "a꟱b",
+      "words": ["a", "b"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "unicode-space-u0085",
+      "input": "\u0085A\u0085",
+      "normalized": "a",
+      "words": ["a"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "preserve-feff",
+      "input": "﻿A﻿",
+      "normalized": "﻿a﻿",
+      "words": ["a"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "repeated-han-terms",
+      "input": "汉字汉",
+      "normalized": "汉字汉",
+      "words": [],
+      "cjk_single": ["汉", "字"],
+      "cjk_bigram": ["汉字", "字汉"]
+    },
+    {
+      "name": "punctuation-does-not-join-han",
+      "input": "甲/乙",
+      "normalized": "甲/乙",
+      "words": [],
+      "cjk_single": ["甲", "乙"],
+      "cjk_bigram": []
+    },
+    {
+      "name": "mixed-han-and-compatibility-latin",
+      "input": "中Ａ文",
+      "normalized": "中a文",
+      "words": ["a"],
+      "cjk_single": ["中", "文"],
+      "cjk_bigram": []
+    },
+    {
+      "name": "punctuation-remains-literal",
+      "input": "the—END #1",
+      "normalized": "the—end #1",
+      "words": ["the", "end", "1"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    },
+    {
+      "name": "leading-combining-mark",
+      "input": "́A",
+      "normalized": "́a",
+      "words": ["́a"],
+      "cjk_single": [],
+      "cjk_bigram": []
+    }
+  ],
+  "invalid": [
+    {
+      "name": "nul",
+      "input": "prefix\u0000suffix"
+    }
+  ]
+}

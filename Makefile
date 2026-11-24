@@ -1,4 +1,4 @@
-.PHONY: build test check fmt dev api e2e views-load favorite-delete-load
+.PHONY: build test check fmt dev api e2e views-load favorite-delete-load search-conformance
 
 build:
 	pnpm build
@@ -35,6 +35,9 @@ api:
 e2e:
 	pnpm build
 	pnpm test:e2e
+
+search-conformance:
+	python3 -I tests/searchconformance/run.py
 
 # Host-dependent production-deadline load checks use only isolated test databases.
 views-load:

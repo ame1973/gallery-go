@@ -6,6 +6,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/package.json
 RUN pnpm install --frozen-lockfile
 COPY web web
+COPY contracts/search-fixtures.json contracts/search-normalization-tables.json ./contracts/
 RUN pnpm build
 
 FROM golang:1.26.2-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19 AS backend
@@ -24,6 +25,7 @@ FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde
 RUN mkdir -p /data /cache /app/web /app/config && chown -R 65532:65532 /data /cache /app
 COPY --from=backend /gallerygo /usr/local/bin/gallerygo
 COPY --from=web /build/web/dist /app/web
+COPY docs/licenses /app/licenses
 COPY deploy/config.container.yaml /app/config/config.yaml
 USER 65532:65532
 WORKDIR /app

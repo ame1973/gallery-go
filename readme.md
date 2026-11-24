@@ -99,7 +99,8 @@ albums, with separate bounded pages and retained back links. Equal names do not 
 identities. See [people browsing and visibility](docs/people.md#in-the-gallery-browser).
 Opening a detail page does not yet record a view. Full-screen viewing, playback,
 favorites management, home recommendations, search, and offline downloads remain
-under development.
+under development. A [versioned shared search text profile](docs/search-normalization.md)
+is available to future index implementations; it does not provide search access.
 
 Run bootstrap only once on a fresh installation. Subsequent launches need only
 `doctor` and `serve` after applying any new migrations.

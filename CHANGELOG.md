@@ -44,6 +44,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A versioned Unicode 15 text normalization and tokenization profile shared by Go
+  and browser code, with bounded inputs and a cross-runtime conformance runner.
+  Search APIs, indexes, authorization filtering and offline search are not yet available.
+
 - An explicit original attachment link on the media-detail page for accounts with
   original-download permission. Optional account and revision comparisons reject
   stale links without granting access or recording download statistics. Normal
