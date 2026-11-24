@@ -83,6 +83,10 @@ Open an album to see its media items and any ready, session-protected image
 previews. Choose an item to inspect its indexed dimensions, codec, capture time,
 orientation, and available timing information. Unknown values remain unknown;
 previews are limited to the current revision and never substitute an original.
+With explicit original-download permission, choose **Download original** on the
+media details page to request the displayed revision as a protected attachment;
+the original may contain private metadata such as location. This does not create a
+download statistic.
 An unavailable preview is not a claim that the source is absent: normal variant
 generation is not enabled yet. An expired or scope-changed page offers a return
 to the first page. On an album detail, choose one to five stars or **No rating**,

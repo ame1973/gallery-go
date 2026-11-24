@@ -60,8 +60,9 @@ func (s *Service) originalContentState(ctx context.Context, current auth.Session
 		return originalContentState{}, err
 	}
 	defer tx.Rollback()
-	// The actual account policy applies even to administrators.
-	if !viewer.DownloadOriginal {
+	// Pin the account established for this request. The supplied DTO only
+	// restricts access; current policy and visibility still come from SQLite.
+	if viewer.ID != current.User.ID || !viewer.DownloadOriginal {
 		return originalContentState{}, sql.ErrNoRows
 	}
 	var state originalContentState

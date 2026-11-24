@@ -428,6 +428,43 @@ try {
       }
     }
     if (prefix.startsWith('media-detail-ui-')) {
+      // An indexed original without a READY variant exercises the pre-rendering flow.
+      const unprocessed = join(source.root, 'unprocessed.png');
+      writeFileSync(unprocessed, png, { mode: 0o400 });
+      const originalStat = statSync(unprocessed, { bigint: true });
+      const originalEntry = `${prefix}-unprocessed-entry`;
+      const originalMedia = `${prefix}-unprocessed-media`;
+      const originalRevision = `${prefix}-unprocessed-revision`;
+      fixtureDB
+        .prepare(
+          'INSERT INTO source_entries(id,source_id,relative_path,size_bytes,mtime_ns,sha256,source_config_version,updated_at) VALUES(?,?,?,?,?,?,1,?)',
+        )
+        .run(
+          originalEntry,
+          `${prefix}-source`,
+          'unprocessed.png',
+          originalStat.size,
+          originalStat.mtimeNs,
+          hash,
+          Date.now(),
+        );
+      fixtureDB
+        .prepare(
+          "INSERT INTO media(id,album_id,source_entry_id,kind,file_name,mime,width,height,current_revision_id,created_at,updated_at) VALUES(?,?,?,'image','unprocessed.png','image/png',1,1,?,?,?)",
+        )
+        .run(originalMedia, album, originalEntry, originalRevision, Date.now(), Date.now());
+      fixtureDB
+        .prepare(
+          'INSERT INTO media_revisions(id,media_id,source_sha256,source_size,source_mtime_ns,version,created_at) VALUES(?,?,?,?,?,1,?)',
+        )
+        .run(
+          originalRevision,
+          originalMedia,
+          hash,
+          originalStat.size,
+          originalStat.mtimeNs,
+          Date.now(),
+        );
       // The shared grant is never mutated by tests; each test changes its own user.
       fixtureDB
         .prepare('INSERT INTO permission_groups(id,name,created_at) VALUES(?,?,?)')

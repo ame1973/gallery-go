@@ -91,6 +91,115 @@ function value(label: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('protected media detail', () => {
+  it('offers an explicit account-bound original download without fetching it automatically', async () => {
+    const fetch = installFetch((url) => {
+      if (url.pathname.endsWith('/auth/me'))
+        return Response.json({ ...user, download_original: true });
+      if (url.pathname === '/api/v2/media/media-one') return Response.json(media);
+      if (url.pathname.endsWith('/variants')) return Response.json(emptyPage);
+      return problem(404, 'NOT_FOUND');
+    });
+    renderPage('/inspect/media-one/details');
+    const link = await screen.findByRole('link', { name: 'Download original' });
+    expect(link).toHaveAttribute(
+      'href',
+      '/api/v2/media/media-one/original?expected_user_id=account-a&expected_revision_id=revision-one',
+    );
+    expect(
+      screen.getByText('Original files may contain private metadata, including location.'),
+    ).toBeInTheDocument();
+    expect(link).toHaveAccessibleDescription(
+      'Original files may contain private metadata, including location.',
+    );
+    expect(fetch.mock.calls.every(([request]) => !request.url.includes('/original'))).toBe(true);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'zh-TW');
+    expect(screen.getByRole('link', { name: '下載原檔' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '語言' }), 'zh-CN');
+    expect(screen.getByRole('link', { name: '下载原文件' })).toBeInTheDocument();
+  });
+
+  it('hides the original link while the current revision is unavailable', async () => {
+    installFetch((url) => {
+      if (url.pathname.endsWith('/auth/me'))
+        return Response.json({ ...user, download_original: true });
+      if (url.pathname === '/api/v2/media/media-one') {
+        return Response.json({ ...media, revision: null });
+      }
+      return problem(404, 'NOT_FOUND');
+    });
+    renderPage('/inspect/media-one/details');
+    expect(await screen.findByRole('heading', { name: 'photo.png' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+  });
+
+  it.each(['../private', '\ud800', 'r'.repeat(129)])(
+    'hides the original link for an unsafe revision',
+    async (revision) => {
+      installFetch((url) => {
+        if (url.pathname.endsWith('/auth/me'))
+          return Response.json({ ...user, download_original: true });
+        if (url.pathname.endsWith('/variants')) return Response.json(emptyPage);
+        return Response.json({ ...media, revision });
+      });
+      renderPage('/inspect/media-one/details');
+      expect(await screen.findByRole('heading', { name: 'photo.png' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+    },
+  );
+
+  it('hides the original link when the media is denied', async () => {
+    installFetch((url) =>
+      url.pathname.endsWith('/auth/me')
+        ? Response.json({ ...user, download_original: true })
+        : problem(404, 'NOT_FOUND'),
+    );
+    renderPage('/inspect/media-one/details');
+    expect(
+      await screen.findByText('This media item is unavailable or you no longer have access.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+  });
+
+  it('hides the original link during metadata revalidation and after access is revoked', async () => {
+    let pending = false;
+    let release!: (response: Response) => void;
+    installFetch((url) => {
+      if (url.pathname.endsWith('/auth/me'))
+        return Response.json({ ...user, download_original: true });
+      if (url.pathname.endsWith('/variants')) return Response.json(emptyPage);
+      if (!pending) return Response.json(media);
+      return new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+    });
+    const client = renderPage('/inspect/media-one/details');
+    expect(await screen.findByRole('link', { name: 'Download original' })).toBeInTheDocument();
+    pending = true;
+    act(() => {
+      void client.invalidateQueries({ queryKey: [user.id, user.scope_id, 'media', media.id] });
+    });
+    expect(await screen.findByText('Loading media details…')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+    await act(async () => release(problem(404, 'NOT_FOUND')));
+    expect(
+      await screen.findByText('This media item is unavailable or you no longer have access.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+  });
+
+  it('hides the original link when the page account ID is unsafe', async () => {
+    installFetch((url) => {
+      if (url.pathname.endsWith('/auth/me')) {
+        return Response.json({ ...user, id: '\ud800', download_original: true });
+      }
+      if (url.pathname.endsWith('/variants')) return Response.json(emptyPage);
+      return Response.json(media);
+    });
+    renderPage('/inspect/media-one/details');
+    expect(await screen.findByRole('heading', { name: 'photo.png' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+  });
+
   it('requires the real session before requesting a media item', async () => {
     const fetch = installFetch(() => problem(401, 'UNAUTHENTICATED'));
     renderPage('/inspect/media-one/details');
@@ -132,6 +241,7 @@ describe('protected media detail', () => {
     );
     expect(calls.every((url) => url.origin !== 'https://untrusted.example')).toBe(true);
     expect(calls.every((url) => !url.pathname.endsWith('/original'))).toBe(true);
+    expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
   });
 
   it('opens an album item and preserves media, person and people page context on return', async () => {

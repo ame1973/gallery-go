@@ -8,9 +8,12 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"gallerygo/internal/media"
 )
@@ -50,7 +53,30 @@ func (h mediaHandler) variantContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h mediaHandler) original(w http.ResponseWriter, r *http.Request) {
-	content, err := h.service.OpenOriginal(r.Context(), currentSession(r), r.PathValue("media_id"))
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		problem(w, 400, "INVALID_FILTER", "Use valid expected user and revision IDs, if provided.")
+		return
+	}
+	for _, name := range []string{"expected_user_id", "expected_revision_id"} {
+		if values, present := query[name]; present && (len(values) != 1 || values[0] == "" || len(values[0]) > 128 || !utf8.ValidString(values[0]) || strings.ContainsFunc(values[0], unicode.IsControl)) {
+			problem(w, 400, "INVALID_FILTER", "Use valid expected user and revision IDs, if provided.")
+			return
+		}
+	}
+	session := currentSession(r)
+	if expected, present := query["expected_user_id"]; present && expected[0] != session.User.ID {
+		// This comparison cannot grant access. OpenOriginal still rechecks the
+		// session, account policy and resource visibility against the database.
+		problem(w, 404, "NOT_FOUND", "The resource does not exist.")
+		return
+	}
+	var content *media.Content
+	if expected, present := query["expected_revision_id"]; present {
+		content, err = h.service.OpenOriginalForRevision(r.Context(), session, r.PathValue("media_id"), expected[0])
+	} else {
+		content, err = h.service.OpenOriginal(r.Context(), session, r.PathValue("media_id"))
+	}
 	if err != nil {
 		requestError(w, err)
 		return

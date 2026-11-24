@@ -163,6 +163,23 @@ function MediaPageContent({ user, mediaId }: { user: User; mediaId: string }) {
               <p>
                 <FormattedMessage id="media.previewNotice" />
               </p>
+              {user.download_original &&
+                safeID(user.id) &&
+                typeof query.data.revision === 'string' &&
+                safeID(query.data.revision) && (
+                  <>
+                    <a
+                      className="gallery-back"
+                      href={`/api/v2/media/${encodeURIComponent(mediaId)}/original?expected_user_id=${encodeURIComponent(user.id)}&expected_revision_id=${encodeURIComponent(query.data.revision)}`}
+                      aria-describedby="media-original-notice"
+                    >
+                      <FormattedMessage id="media.downloadOriginal" />
+                    </a>
+                    <p id="media-original-notice">
+                      <FormattedMessage id="media.originalNotice" />
+                    </p>
+                  </>
+                )}
             </section>
             <MediaDetails media={query.data} />
           </div>

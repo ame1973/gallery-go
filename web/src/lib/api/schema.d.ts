@@ -1432,7 +1432,12 @@ export interface paths {
     };
     "/media/{media_id}/original": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional nonsecret page-account comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the authenticated account; a mismatch returns 404. This is not a credential and does not replace the original-download policy or fresh resource authorization. */
+                expected_user_id?: string;
+                /** @description Optional nonsecret page-revision comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the currently authorized revision; an initial mismatch returns 404. A change during verification fails without returning bytes. This does not grant access. */
+                expected_revision_id?: string;
+            };
             header?: never;
             path: {
                 media_id: components["parameters"]["MediaID"];
@@ -5050,7 +5055,12 @@ export interface operations {
     };
     getOriginal: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional nonsecret page-account comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the authenticated account; a mismatch returns 404. This is not a credential and does not replace the original-download policy or fresh resource authorization. */
+                expected_user_id?: string;
+                /** @description Optional nonsecret page-revision comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the currently authorized revision; an initial mismatch returns 404. A change during verification fails without returning bytes. This does not grant access. */
+                expected_revision_id?: string;
+            };
             header?: {
                 /** @description A single bytes range, open-ended range, or nonzero suffix range. Multipart, malformed, overflowing, and unsatisfiable ranges return 416 when Range applies. */
                 Range?: components["parameters"]["Range"];
@@ -5071,6 +5081,7 @@ export interface operations {
             200: components["responses"]["MediaContent"];
             206: components["responses"]["PartialMediaContent"];
             304: components["responses"]["NotModifiedContent"];
+            400: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
             416: components["responses"]["InvalidRange"];
             503: components["responses"]["Problem"];
@@ -5079,7 +5090,12 @@ export interface operations {
     };
     headOriginal: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional nonsecret page-account comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the authenticated account; a mismatch returns 404. This is not a credential and does not replace the original-download policy or fresh resource authorization. */
+                expected_user_id?: string;
+                /** @description Optional nonsecret page-revision comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the currently authorized revision; an initial mismatch returns 404. A change during verification fails without returning bytes. This does not grant access. */
+                expected_revision_id?: string;
+            };
             header?: {
                 /** @description Standard conditional GET/HEAD validator, evaluated only after current authorization and file checks. */
                 "If-None-Match"?: components["parameters"]["IfNoneMatch"];
@@ -5095,6 +5111,7 @@ export interface operations {
         responses: {
             200: components["responses"]["MediaContentHead"];
             304: components["responses"]["NotModifiedContent"];
+            400: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
             default: components["responses"]["Problem"];

@@ -36,11 +36,24 @@ primary track, not a promise that the browser can play it.
 The page requests a bounded same-origin ready image preview only for the revision
 in its metadata response. A missing preview does not prove the source is absent.
 After a preview load fails, the page rechecks media access without endlessly
-retrying a broken image. The browser does not use an original as a preview
-fallback and does not grant an original download, record a view, play media, or
-provide offline access. Full viewer and playback functionality remain under
-development. Back links retain a validated album page and, when present, the
-person and people-page context.
+retrying a broken image. An account with original-download permission can choose
+**Download original** explicitly when the current revision is available. This uses
+the existing protected attachment endpoint and does not automatically fetch an
+original as a preview. Original files may contain private metadata, including GPS.
+The link does not create a download statistic or prove that a file was saved.
+Full viewer, playback, and offline functionality remain under development. Back
+links retain a validated album page and, when present, the person and people-page
+context.
+
+The browser's download link includes nonsecret `expected_user_id` and
+`expected_revision_id` values from its current page. If the request presents a
+different account or the indexed revision has changed, the server returns 404
+before opening the original; matching these values never grants access. A revision
+change during file verification fails without returning bytes. The handler still
+rechecks the actual session, account policy, visibility and source integrity. The
+comparisons do not solve delayed cookie responses or guarantee browser-wide account
+ordering; see [authentication limitations](authentication.md#known-limitations).
+Account and revision IDs in URLs may appear in reverse-proxy access logs.
 
 ## Metadata and variants
 

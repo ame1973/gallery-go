@@ -100,12 +100,19 @@ func TestContentDigestRejectsInFlightSameStatRewrite(t *testing.T) {
 }
 
 func TestContentHashReleasesWriterAndRechecksFreshAuthorization(t *testing.T) {
-	for _, variant := range []bool{false, true} {
-		name := "original"
-		if variant {
-			name = "variant"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		variant        bool
+		expected       bool
+		changeRevision bool
+	}{
+		{name: "original"},
+		{name: "variant", variant: true},
+		{name: "expected-revision-revoked", expected: true},
+		{name: "expected-revision-replaced", expected: true, changeRevision: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			variant := tc.variant
 			f := fixture(t)
 			filename := f.original
 			if variant {
@@ -171,6 +178,8 @@ func TestContentHashReleasesWriterAndRechecksFreshAuthorization(t *testing.T) {
 				var err error
 				if variant {
 					content, err = f.svc.OpenVariant(t.Context(), f.reader, f.mediaID, "variant")
+				} else if tc.expected {
+					content, err = f.svc.OpenOriginalForRevision(t.Context(), f.reader, f.mediaID, "revision")
 				} else {
 					content, err = f.svc.OpenOriginal(t.Context(), f.reader, f.mediaID)
 				}
@@ -227,6 +236,11 @@ func TestContentHashReleasesWriterAndRechecksFreshAuthorization(t *testing.T) {
 			}
 			if variant {
 				_, err = tx.ExecContext(ctx, `DELETE FROM user_groups WHERE user_id=?`, f.reader.User.ID)
+			} else if tc.changeRevision {
+				_, err = tx.ExecContext(ctx, `INSERT INTO media_revisions(id,media_id,source_sha256,source_size,source_mtime_ns,version,created_at) SELECT 'revision-new',media_id,source_sha256,source_size,source_mtime_ns,version+1,created_at FROM media_revisions WHERE id='revision'`)
+				if err == nil {
+					_, err = tx.ExecContext(ctx, `UPDATE media SET current_revision_id='revision-new',version=version+1 WHERE id=?`, f.mediaID)
+				}
 			} else {
 				_, err = tx.ExecContext(ctx, `UPDATE users SET download_original=0 WHERE id=?`, f.reader.User.ID)
 			}
@@ -242,8 +256,12 @@ func TestContentHashReleasesWriterAndRechecksFreshAuthorization(t *testing.T) {
 				if result.content != nil {
 					result.content.Close()
 				}
-				if !errors.Is(result.err, sql.ErrNoRows) || len(f.svc.contentVerifies) != 0 {
-					t.Fatal("revoked access survived the post-hash check or leaked a slot", result.err)
+				want := error(sql.ErrNoRows)
+				if tc.changeRevision {
+					want = ErrSourceUnavailable
+				}
+				if !errors.Is(result.err, want) || len(f.svc.contentVerifies) != 0 {
+					t.Fatal("revoked access or changed revision survived the post-hash check or leaked a slot", result.err)
 				}
 			case <-deadline.C:
 				t.Fatal("streamed verification did not return")

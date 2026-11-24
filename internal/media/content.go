@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -225,9 +226,25 @@ func (s *Service) OpenVariant(ctx context.Context, current auth.Session, mediaID
 }
 
 func (s *Service) OpenOriginal(ctx context.Context, current auth.Session, mediaID string) (*Content, error) {
+	return s.openOriginal(ctx, current, mediaID, "")
+}
+
+// OpenOriginalForRevision restricts an otherwise authorized original to the
+// revision requested by the page; the revision ID is not a content capability.
+func (s *Service) OpenOriginalForRevision(ctx context.Context, current auth.Session, mediaID, revisionID string) (*Content, error) {
+	if revisionID == "" {
+		return nil, sql.ErrNoRows
+	}
+	return s.openOriginal(ctx, current, mediaID, revisionID)
+}
+
+func (s *Service) openOriginal(ctx context.Context, current auth.Session, mediaID, revisionID string) (*Content, error) {
 	state, err := s.originalContentState(ctx, current, mediaID)
 	if err != nil {
 		return nil, err
+	}
+	if revisionID != "" && state.revisionID != revisionID {
+		return nil, sql.ErrNoRows
 	}
 	configured, ok := s.sources[state.sourceName]
 	if !ok || configured.Path != state.sourcePath || state.rootSignature != configured.Signature() || state.sourceConfig != state.entryConfig || !filepath.IsAbs(configured.Path) || !localPath(configured.Marker) || !localPath(state.relative) || state.state != "healthy" || state.availability != "present" || state.mediaAvailability != "available" || state.size < 1 || state.size != state.entrySize || state.mtime != state.entryMtime || !validHash(state.hash) || state.hash != state.entryHash {

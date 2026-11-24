@@ -1774,6 +1774,16 @@ paths:
   /media/{media_id}/original:
     parameters:
       - { $ref: '#/components/parameters/MediaID' }
+      - name: expected_user_id
+        in: query
+        required: false
+        description: Optional nonsecret page-account comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the authenticated account; a mismatch returns 404. This is not a credential and does not replace the original-download policy or fresh resource authorization.
+        schema: { type: string, minLength: 1, maxLength: 128 }
+      - name: expected_revision_id
+        in: query
+        required: false
+        description: Optional nonsecret page-revision comparison fence. If present, the single nonempty UTF-8 value is limited to 128 bytes and must match the currently authorized revision; an initial mismatch returns 404. A change during verification fails without returning bytes. This does not grant access.
+        schema: { type: string, minLength: 1, maxLength: 128 }
     get:
       operationId: getOriginal
       summary: Download an authorized original from a healthy configured read-only source
@@ -1789,6 +1799,7 @@ paths:
         '200': { $ref: '#/components/responses/MediaContent' }
         '206': { $ref: '#/components/responses/PartialMediaContent' }
         '304': { $ref: '#/components/responses/NotModifiedContent' }
+        '400': { $ref: '#/components/responses/Problem' }
         '412': { $ref: '#/components/responses/Problem' }
         '416': { $ref: '#/components/responses/InvalidRange' }
         '503': { $ref: '#/components/responses/Problem' }
@@ -1805,6 +1816,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/MediaContentHead' }
         '304': { $ref: '#/components/responses/NotModifiedContent' }
+        '400': { $ref: '#/components/responses/Problem' }
         '412': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
         default: { $ref: '#/components/responses/Problem' }

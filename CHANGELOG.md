@@ -44,6 +44,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An explicit original attachment link on the media-detail page for accounts with
+  original-download permission. Optional account and revision comparisons reject
+  stale links without granting access or recording download statistics. Normal
+  preview generation, the full viewer and browser-wide session ordering remain open.
+
 - A bounded current-account random album sample for the future home screen, applying
   shared visibility before selection and returning ordinary authorized cards. Sampling
   scans candidate albums and is not cursor pagination, content access or a view event.
@@ -80,7 +85,7 @@ All notable public changes are recorded here. This project uses Conventional Com
 - A basic three-language `/albums` and album-detail browser with bounded server
   pages, supported album ordering, current-session/scope isolation, accessible
   loading/error/empty states and near-viewport protected ready-image previews.
-  It does not download originals or record views; full viewer, home, other interactions
+  It does not automatically download originals or record views; full viewer, home, other interactions
   and offline flows remain under development.
 
 - Two-step personal favorite-collection subtree deletion requires an explicit move
