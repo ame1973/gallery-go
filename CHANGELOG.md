@@ -72,6 +72,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A read-only administrator account list and detail screen, using scoped response
+  checks and bounded pagination. Account changes, group management, session
+  administration and audit screens remain pending.
+
 - Optional account and scope expectations on protected GET/HEAD requests, with a
   matching response-header echo so clients can reject stripped or mismatched read
   contexts. These are not credentials or mutation fences and do not fix delayed

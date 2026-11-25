@@ -24,6 +24,12 @@ const SourcesPage = lazy(() =>
 const SourcePage = lazy(() =>
   import('../features/sources/SourcesPage').then((module) => ({ default: module.SourcePage })),
 );
+const UserPage = lazy(() =>
+  import('../features/users/UsersPage').then((module) => ({ default: module.UserPage })),
+);
+const UsersPage = lazy(() =>
+  import('../features/users/UsersPage').then((module) => ({ default: module.UsersPage })),
+);
 const AlbumsPage = lazy(() =>
   import('../features/library/AlbumsPage').then((module) => ({ default: module.AlbumsPage })),
 );
@@ -73,6 +79,8 @@ export function App() {
               <Route path="/admin/jobs/:jobId/details" element={<JobPage />} />
               <Route path="/admin/sources" element={<SourcesPage />} />
               <Route path="/admin/sources/:sourceId/details" element={<SourcePage />} />
+              <Route path="/admin/users" element={<UsersPage />} />
+              <Route path="/admin/users/:userId/details" element={<UserPage />} />
               <Route path="/albums" element={<AlbumsPage />} />
               <Route path="/albums/:albumId" element={<AlbumPage />} />
               <Route path="/inspect/:mediaId/details" element={<MediaPage />} />

@@ -1,12 +1,13 @@
 # Administrative account API
 
-Account administration is currently available through the HTTPS API. The dedicated
-user-management and audit screens are not implemented yet. Group grants and
-resource ACLs are described in [access.md](access.md), and protected content serving
-is described in [media.md](media.md). Durable job history and cancellation/retry
-controls are described in [jobs.md](jobs.md); registry-selected source configuration
-and reachability checks are in [sources.md](sources.md). Creating a regular account
-does not grant access to a library.
+The Accounts screen provides a read-only account directory for active administrators.
+Account changes, group management, and audit history are currently available through
+the HTTPS API; dedicated screens for those operations are not implemented yet. Group
+grants and resource ACLs are described in [access.md](access.md), and protected
+content serving is described in [media.md](media.md). Durable job history and
+cancellation/retry controls are described in [jobs.md](jobs.md); registry-selected
+source configuration and reachability checks are in [sources.md](sources.md).
+Creating a regular account does not grant access to a library.
 
 Use an HTTPS client with cookie support. Sign in as an active administrator and
 obtain the session-bound CSRF token as described in [authentication.md](authentication.md).
@@ -18,6 +19,23 @@ Only active administrators can use these endpoints. An ordinary user receives
 `403 ADMIN_REQUIRED`; a missing, expired, revoked, or disabled session receives
 `401 UNAUTHENTICATED`. Write transactions recheck the administrator's session and
 role before changing data.
+
+## Accounts screen
+
+Sign in as an active administrator and choose **Accounts** from the gallery
+navigation. The list shows each account's role, active status, and original-download
+policy. Select an account to inspect its public account metadata; passwords and
+session tokens are never displayed. Use **Next page** or **First page** to navigate
+bounded, live pages, and **Refresh** to fetch the current page again. If the account
+or scope changes, refresh the session and restart pagination. A cursor belongs to
+one account and scope, and does not represent a synchronized snapshot.
+
+The screen does not create, edit, disable or delete accounts, reset passwords,
+manage groups, revoke sessions, or display audit events. Use the API below for those
+operations until their dedicated screens are available. The screen uses the optional
+[read identity expectations](authentication.md#optional-read-identity-expectations)
+to reject responses with missing or changed account/scope echoes. This is not a
+mutation fence and does not fix delayed authentication-cookie ordering.
 
 ## Create an account
 
