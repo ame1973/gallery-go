@@ -48,7 +48,10 @@ The scope identifies an authorization epoch; it is not a login capability.
   collection URL. Do not edit them or reuse them for another account or collection.
 
 There are no unbounded list responses or offset-based pages. These live keyset
-pages are not an offline synchronization snapshot.
+pages are not an offline synchronization snapshot. If the caller's scope changes
+between authentication and the transactional page read, the request returns
+`409 VERSION_CONFLICT` rather than issuing a cursor for the earlier scope. Refresh
+the session and restart pagination.
 
 ## Versioned policy changes
 

@@ -264,6 +264,21 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	return session, nil
 }
 
+type readSnapshotKey struct{}
+
+type readSnapshot struct {
+	sessionID string
+	userID    string
+	scopeID   string
+}
+
+// WithReadSnapshot binds a request's earlier authentication to later transactional
+// reads. The context is not an authorization capability: SessionInTx still checks
+// the token, account and expiry against the database before comparing this binding.
+func WithReadSnapshot(ctx context.Context, session Session) context.Context {
+	return context.WithValue(ctx, readSnapshotKey{}, readSnapshot{session.ID, session.User.ID, session.User.ScopeID})
+}
+
 // SessionInTx validates the actual session and current account within the same
 // snapshot as a resource query or mutation. It never trusts the supplied user DTO.
 // Observed expiry aborts the caller's transaction before separately confirming
@@ -275,6 +290,9 @@ func (s *Service) SessionInTx(ctx context.Context, tx *sql.Tx, current Session) 
 		return Session{}, err
 	}
 	if !s.expiredAt(session, now) {
+		if expected, ok := ctx.Value(readSnapshotKey{}).(readSnapshot); ok && (expected.sessionID != session.ID || expected.userID != session.User.ID || expected.scopeID != session.User.ScopeID) {
+			return Session{}, ErrConflict
+		}
 		return session, nil
 	}
 	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {

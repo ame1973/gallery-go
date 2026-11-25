@@ -69,6 +69,17 @@ expiry. Defaults are a rolling 24-hour idle limit and a 30-day absolute limit.
 Administrators may shorten them with `auth.session_idle_timeout` and
 `auth.session_absolute_timeout`; neither can exceed the default maximum.
 
+For protected GET and HEAD requests that recheck authorization inside a SQLite
+transaction, the session ID, account ID, and scope captured by middleware must match
+that transaction's current session. If they differ, the request returns
+`409 VERSION_CONFLICT`; refresh the session and restart the read or pagination. An
+already established older committed snapshot can finish after a later change. Media
+authorization is rechecked before content is served, but not continuously during an
+already started stream; file-integrity or transport errors can still abort it.
+The `/auth/me` and `/auth/csrf` endpoints return the middleware result and do not
+perform an additional transactional read. These checks do not resolve delayed
+cookie response ordering.
+
 ## Observed expiry
 
 An authentication check that observes an idle or absolute deadline first aborts any

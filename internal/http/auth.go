@@ -48,7 +48,11 @@ func (a authentication) protect(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), sessionContextKey{}, session)))
+		ctx := context.WithValue(r.Context(), sessionContextKey{}, session)
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			ctx = auth.WithReadSnapshot(ctx, session)
+		}
+		next(w, r.WithContext(ctx))
 	}
 }
 

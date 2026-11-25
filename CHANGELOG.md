@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Bind protected transactional GET/HEAD authorization to the session and scope
+  captured by middleware, rejecting a changed scope instead of issuing a page
+  cursor for an earlier authorization context. Earlier committed read snapshots
+  may still finish after a later change; delayed cookie ordering remains unresolved.
+
 - Recheck the caller and cursor scope in the same SQLite snapshot as the account's
   session list, rather than relying on a previously authenticated session snapshot.
 
