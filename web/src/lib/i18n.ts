@@ -3,6 +3,7 @@ import { jobMessages } from '../features/jobs/messages';
 import { libraryMessages } from '../features/library/messages';
 import { sourceMessages } from '../features/sources/messages';
 import { userMessages } from '../features/users/messages';
+import { groupMessages } from '../features/groups/messages';
 
 export const locales = ['en', 'zh-TW', 'zh-CN'] as const;
 export type Locale = (typeof locales)[number];
@@ -13,6 +14,7 @@ const en = {
   ...libraryMessages.en,
   ...sourceMessages.en,
   ...userMessages.en,
+  ...groupMessages.en,
   language: 'Language',
   title: 'Service connection',
   description: 'A private place for the photographs and films you keep.',
@@ -47,6 +49,7 @@ export const messages: Record<Locale, Messages> = {
     ...libraryMessages['zh-TW'],
     ...sourceMessages['zh-TW'],
     ...userMessages['zh-TW'],
+    ...groupMessages['zh-TW'],
     language: '語言',
     title: '服務連線',
     description: '為你珍藏的照片與影片，留一個私密的地方。',
@@ -75,6 +78,7 @@ export const messages: Record<Locale, Messages> = {
     ...libraryMessages['zh-CN'],
     ...sourceMessages['zh-CN'],
     ...userMessages['zh-CN'],
+    ...groupMessages['zh-CN'],
     language: '语言',
     title: '服务连接',
     description: '为你珍藏的照片与影片，留一个私密的地方。',

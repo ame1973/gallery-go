@@ -1,8 +1,9 @@
 # Administrative account API
 
 The Accounts screen provides a read-only account directory for active administrators.
+The Groups screen provides read-only group metadata; see [access.md](access.md).
 Account changes, group management, and audit history are currently available through
-the HTTPS API; dedicated screens for those operations are not implemented yet. Group
+the HTTPS API; dedicated mutation and audit screens are not implemented yet. Group
 grants and resource ACLs are described in [access.md](access.md), and protected
 content serving is described in [media.md](media.md). Durable job history and
 cancellation/retry controls are described in [jobs.md](jobs.md); registry-selected

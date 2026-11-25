@@ -84,6 +84,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- A read-only administrator group list and detail screen, using account/scope
+  response checks and bounded pagination. Group changes and access grants remain
+  API-only; this does not resolve delayed authentication-cookie ordering.
+
 - A read-only administrator account list and detail screen, using scoped response
   checks and bounded pagination. Account changes, group management, session
   administration and audit screens remain pending.

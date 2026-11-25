@@ -129,6 +129,9 @@ safe retries. Administrators can choose **Jobs** or open `/admin/jobs` for a
 read-only, manually refreshed job/attempt/diagnostic browser; scan creation and
 job controls remain API-only. Choose **Sources** or open `/admin/sources` to inspect
 registered sources and their last recorded state; changes and checks remain API-only.
+Choose **Groups** or open `/admin/groups` to inspect permission-group metadata;
+changes to groups, memberships and access grants remain API-only. See
+[docs/access.md](docs/access.md) for the access rules and group screen.
 A healthy source observation is not proof of a completed inventory. Enqueue returns
 durable queued acceptance, not ingestion.
 `serve` starts a scan consumer by default; [worker operation](docs/workers.md) describes

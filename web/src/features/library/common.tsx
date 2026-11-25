@@ -102,6 +102,9 @@ export function LibraryNavigation() {
           <NavLink to="/admin/users">
             <FormattedMessage id="users.navigation" />
           </NavLink>
+          <NavLink to="/admin/groups">
+            <FormattedMessage id="groups.navigation" />
+          </NavLink>
         </>
       )}
     </nav>

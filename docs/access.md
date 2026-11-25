@@ -28,6 +28,21 @@ album detail, the online personal rating controls and shared average use the sep
 view. Full home recommendations, metadata filters, favorite controls, full-size
 media viewing and offline mode are separate unfinished features.
 
+## Permission groups screen
+
+An active administrator can choose **Groups** or open `/admin/groups` to view a
+bounded, live list of permission groups and inspect each group's ID, version and
+creation time. Pagination cursors belong to the current account and scope; after a
+scope change, refresh the session and return to the first page. The list is not a
+synchronized snapshot. Reads use the optional
+[account and scope expectations](authentication.md#optional-read-identity-expectations)
+and reject missing or mismatched response echoes before displaying group data.
+
+The screen does not create, rename or delete groups or change memberships and
+resource grants. Use the management API described below for those operations.
+Read identity checks are not mutation fences and do not resolve delayed
+authentication-cookie ordering.
+
 ## Authorization rules
 
 Every request requires a valid server-side session and an active account. Resource
