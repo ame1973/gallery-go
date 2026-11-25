@@ -12,9 +12,16 @@ This development build has unresolved authentication-ordering defects. When
 accounts are switched in the same browser, a delayed login or password-change
 response can replace the newer account's session cookie; a delayed logout response
 can clear it. A stale page can also perform an action against a different current
-account. These behaviors were reproduced with isolated accounts over HTTPS; they do
-not by themselves demonstrate remote intrusion. Do not use this build with sensitive
-accounts or media, or expose it to the Internet.
+account. The problem is not limited to account switches: after signing in again to
+the same account, a delayed login response can replace the newer session with a
+different session, and a delayed logout response can sign out the browser while the
+newer server-side session remains valid. Account and scope identifiers alone do not
+distinguish two sessions of the same account.
+
+These behaviors were reproduced with isolated accounts over HTTPS; delayed login and
+logout were also tested with native browser `fetch`. They do not by themselves
+demonstrate remote intrusion. Do not use this build with sensitive accounts or media,
+or expose it to the Internet.
 
 Session deadlines still depend on the server clock. A successfully persisted
 expiry observation now revokes that token across a later clock rollback or database

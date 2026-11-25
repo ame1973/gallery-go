@@ -93,10 +93,12 @@ All notable public changes are recorded here. This project uses Conventional Com
   reads. Offline rating replay and other interaction screens remain pending.
 
 - A basic three-language `/albums` and album-detail browser with bounded server
-  pages, supported album ordering, current-session/scope isolation, accessible
+  pages, supported album ordering, account/scope-scoped query keys, accessible
   loading/error/empty states and near-viewport protected ready-image previews.
-  It does not automatically download originals or record views; full viewer, home, other interactions
-  and offline flows remain under development.
+  The query keys do not distinguish two sessions of the same account; browser-wide
+  authentication ordering remains unresolved. It does not automatically download
+  originals or record views; full viewer, home, other interactions and offline flows
+  remain under development.
 
 - Two-step personal favorite-collection subtree deletion requires an explicit move
   to default or remove-favorites choice, an installation-key-protected session-bound

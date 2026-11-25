@@ -32,11 +32,12 @@ Do not expose this build
 to the Internet or connect sensitive media yet.
 
 **Known authentication issues:** Delayed authentication responses can replace or
-clear a newer session, and stale pages can act against a different current account in
-the same browser. These ordering issues remain unresolved; do not use sensitive
-accounts or media. Confirmed expiry now persists revocation, but deadlines still
-depend on the server clock and cannot cover unobserved rollback or failed persistence.
-See [authentication limitations](docs/authentication.md#known-limitations).
+clear a newer session, including when both sessions belong to the same account.
+Stale pages can also act against a different current account in the same browser.
+These ordering issues remain unresolved; do not use sensitive accounts or media.
+Confirmed expiry now persists revocation, but deadlines still depend on the server
+clock and cannot cover unobserved rollback or failed persistence. See
+[authentication limitations](docs/authentication.md#known-limitations).
 
 ## Requirements
 
