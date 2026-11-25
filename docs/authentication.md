@@ -80,6 +80,34 @@ The `/auth/me` and `/auth/csrf` endpoints return the middleware result and do no
 perform an additional transactional read. These checks do not resolve delayed
 cookie response ordering.
 
+## Optional read identity expectations
+
+A client displaying account-scoped data can send both `X-GalleryGo-Expected-User`
+and `X-GalleryGo-Expected-Scope` on a protected GET or HEAD. Use the account `id`
+and `scope_id` returned by `/auth/me`; do not send a session cookie, password, CSRF
+value or other credential in these headers. Each value must contain 1..128 printable
+non-space ASCII bytes. The server first authenticates the session, then rejects a
+missing, duplicate or invalid half with 400 `INVALID_READ_CONTEXT`, or a different
+account/scope with 409 `VERSION_CONFLICT`. It does not return the actual account in
+that mismatch response. The ordinary transactional authorization and scope checks
+still apply afterward.
+
+When the middleware matches both values, it echoes them in response headers with the
+same names. A client using this option must require a successful 2xx or expected 304
+response and compare both echoed values before using its data. If a proxy strips both
+request headers, the request is processed as an unbound read and
+no echo is added; missing or mismatched response headers must therefore be treated as
+a failed read. Use a trusted TLS proxy. Requests without either header keep their
+existing behavior, including ordinary browser media requests. A protected unsafe
+request carrying either header is rejected after the usual Origin/CSRF checks; these
+read-only expectations do not bind mutations.
+
+These IDs are not credentials or authorization grants, and do not identify a
+particular same-account session. They do not solve delayed cookie response ordering,
+protect against same-origin script compromise, or continuously reauthorize a stream.
+Authentication can still update the session's last-activity timestamp before a
+mismatched expected identity is rejected.
+
 ## Observed expiry
 
 An authentication check that observes an idle or absolute deadline first aborts any

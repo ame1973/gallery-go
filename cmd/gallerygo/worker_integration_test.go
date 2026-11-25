@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"gallerygo/internal/auth"
 	"gallerygo/internal/health"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
@@ -77,7 +78,8 @@ func startCLIProcess(t *testing.T, binary, config, command string) func() {
 }
 
 // Let the server's unchanged 10s metadata deadline report first, with bounded TLS
-// overhead. Health probes keep their independent 1s budgets; no retry hides errors.
+// overhead. Health probes keep their independent 1s budgets; failures are not retried
+// except a verified account-scope transition during read-only job polling.
 const scanHTTPSRequestTimeout = 12 * time.Second
 
 func TestScanHTTPSClientBudgetCoversMetadataDeadline(t *testing.T) {
@@ -164,23 +166,193 @@ func (c *scanHTTPSClient) request(method, path string, body any, want int, resul
 	return response.Header
 }
 
+func confirmedScopeTransition(before, after auth.User) bool {
+	return before.ID != "" && before.ID == after.ID && before.Active && after.Active &&
+		before.Role == "admin" && after.Role == "admin" && before.ScopeID != "" &&
+		after.ScopeID != "" && before.ScopeID != after.ScopeID && after.Version > before.Version
+}
+
+func validScopeConflict(response *http.Response, data []byte) bool {
+	var problem struct {
+		Status    int    `json:"status"`
+		Code      string `json:"code"`
+		RequestID string `json:"request_id"`
+	}
+	return response.StatusCode == http.StatusConflict && json.Unmarshal(data, &problem) == nil &&
+		problem.Status == http.StatusConflict && problem.Code == "VERSION_CONFLICT" &&
+		problem.RequestID != "" && response.Header.Get("X-Request-ID") == problem.RequestID &&
+		response.Header.Get("Content-Type") == "application/problem+json" &&
+		response.Header.Get("Cache-Control") == "private, no-store" &&
+		len(response.Header.Values("Set-Cookie")) == 0
+}
+
 func (c *scanHTTPSClient) waitJob(id string) jobs.Job {
 	c.t.Helper()
 	deadline := time.NewTimer(30 * time.Second)
 	defer deadline.Stop()
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
+	var actor auth.User
+	c.request("GET", "/auth/me", nil, 200, &actor)
+	var job jobs.Job
 	for {
-		var job jobs.Job
-		c.request("GET", "/admin/jobs/"+id, nil, 200, &job)
-		if job.Status != "queued" && job.Status != "running" {
-			return job
+		path := "/admin/jobs/" + id
+		request, err := http.NewRequestWithContext(c.t.Context(), http.MethodGet, c.origin+"/api/v2"+path, nil)
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		request.Header.Set("X-GalleryGo-Expected-User", actor.ID)
+		request.Header.Set("X-GalleryGo-Expected-Scope", actor.ScopeID)
+		response, err := c.client.Do(request)
+		if err != nil {
+			c.t.Fatal("job poll request failed", err)
+		}
+		data, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		response.Body.Close()
+		if readErr != nil {
+			c.t.Fatal("job poll response failed", readErr)
+		}
+		switch response.StatusCode {
+		case http.StatusOK:
+			if response.Header.Get("X-GalleryGo-Expected-User") != actor.ID || response.Header.Get("X-GalleryGo-Expected-Scope") != actor.ScopeID {
+				c.t.Fatal("job poll did not echo the validated account and scope")
+			}
+			if err := json.Unmarshal(data, &job); err != nil || job.ID != id {
+				c.t.Fatal("invalid job poll response", err)
+			}
+			if job.Status != "queued" && job.Status != "running" {
+				return job
+			}
+		case http.StatusConflict:
+			if !validScopeConflict(response, data) {
+				c.t.Fatal("unexpected job poll conflict", response.StatusCode, string(data))
+			}
+			var fresh auth.User
+			c.request("GET", "/auth/me", nil, 200, &fresh)
+			if !confirmedScopeTransition(actor, fresh) {
+				c.t.Fatal("job poll conflict did not correspond to a same-account scope transition")
+			}
+			c.t.Log("job poll observed a verified scope transition")
+			actor = fresh
+		default:
+			c.t.Fatalf("GET %s: status=%d want=200 or verified scope conflict body=%s", path, response.StatusCode, data)
 		}
 		select {
 		case <-deadline.C:
 			c.t.Fatal("compiled scan did not settle", job, job.Counts)
 		case <-tick.C:
 		}
+	}
+}
+
+func TestConfirmedScopeTransition(t *testing.T) {
+	before := auth.User{ID: "admin", ScopeID: "scope-before", Role: "admin", Active: true, Version: 1}
+	after := before
+	after.ScopeID, after.Version = "scope-after", 2
+	for _, test := range []struct {
+		name string
+		user auth.User
+		want bool
+	}{
+		{"same account with new scope", after, true},
+		{"unchanged scope", before, false},
+		{"different account", func() auth.User { u := after; u.ID = "other"; return u }(), false},
+		{"disabled", func() auth.User { u := after; u.Active = false; return u }(), false},
+		{"demoted", func() auth.User { u := after; u.Role = "user"; return u }(), false},
+		{"missing scope", func() auth.User { u := after; u.ScopeID = ""; return u }(), false},
+		{"stale version", func() auth.User { u := after; u.Version = 1; return u }(), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := confirmedScopeTransition(before, test.user); got != test.want {
+				t.Fatalf("transition acceptance=%t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidScopeConflict(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*http.Response, *string)
+		want   bool
+	}{
+		{"valid", nil, true},
+		{"wrong-status", func(r *http.Response, _ *string) { r.StatusCode = 400 }, false},
+		{"wrong-code", func(_ *http.Response, d *string) { *d = `{"status":409,"code":"RESOURCE_BUSY","request_id":"test"}` }, false},
+		{"missing-request-id", func(_ *http.Response, d *string) { *d = `{"status":409,"code":"VERSION_CONFLICT"}` }, false},
+		{"mismatched-request-id", func(r *http.Response, _ *string) { r.Header.Set("X-Request-ID", "other") }, false},
+		{"invalid-json", func(_ *http.Response, d *string) { *d = `not json` }, false},
+		{"wrong-content-type", func(r *http.Response, _ *string) { r.Header.Set("Content-Type", "text/plain") }, false},
+		{"cacheable", func(r *http.Response, _ *string) { r.Header.Del("Cache-Control") }, false},
+		{"any-cookie-header", func(r *http.Response, _ *string) { r.Header.Set("Set-Cookie", "invalid") }, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := &http.Response{StatusCode: http.StatusConflict, Header: make(http.Header)}
+			response.Header.Set("Content-Type", "application/problem+json")
+			response.Header.Set("Cache-Control", "private, no-store")
+			response.Header.Set("X-Request-ID", "test")
+			body := `{"status":409,"code":"VERSION_CONFLICT","request_id":"test"}`
+			if test.change != nil {
+				test.change(response, &body)
+			}
+			if got := validScopeConflict(response, []byte(body)); got != test.want {
+				t.Fatalf("conflict acceptance=%t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestScanHTTPSJobPollChecksScopeTransition(t *testing.T) {
+	var mu sync.Mutex
+	actor := auth.User{ID: "admin", ScopeID: "scope-before", Role: "admin", Active: true, Version: 1}
+	meReads, jobReads := 0, 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method %s", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v2/auth/me":
+			meReads++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(actor)
+		case "/api/v2/admin/jobs/job-test":
+			jobReads++
+			if r.Header.Get("X-GalleryGo-Expected-User") != actor.ID || r.Header.Get("X-GalleryGo-Expected-Scope") != actor.ScopeID {
+				t.Error("job poll used an unexpected identity")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if jobReads == 1 {
+				actor.ScopeID, actor.Version = "scope-after", 2
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.Header().Set("Cache-Control", "private, no-store")
+				w.Header().Set("X-Request-ID", "test")
+				w.WriteHeader(http.StatusConflict)
+				_, _ = io.WriteString(w, `{"status":409,"code":"VERSION_CONFLICT","request_id":"test"}`)
+				return
+			}
+			w.Header().Set("X-GalleryGo-Expected-User", actor.ID)
+			w.Header().Set("X-GalleryGo-Expected-Scope", actor.ScopeID)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(jobs.Job{ID: "job-test", Status: "succeeded"})
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	client := &scanHTTPSClient{t: t, client: server.Client(), origin: server.URL}
+	if job := client.waitJob("job-test"); job.Status != "succeeded" {
+		t.Fatal("job poll did not recover the verified scope transition", job)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if meReads != 2 || jobReads != 2 {
+		t.Fatalf("unexpected identity or job request count: me=%d jobs=%d", meReads, jobReads)
 	}
 }
 

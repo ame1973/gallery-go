@@ -48,6 +48,9 @@ func (a authentication) protect(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		if !readIdentity(w, r, session) {
+			return
+		}
 		ctx := context.WithValue(r.Context(), sessionContextKey{}, session)
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			ctx = auth.WithReadSnapshot(ctx, session)

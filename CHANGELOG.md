@@ -72,6 +72,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- Optional account and scope expectations on protected GET/HEAD requests, with a
+  matching response-header echo so clients can reject stripped or mismatched read
+  contexts. These are not credentials or mutation fences and do not fix delayed
+  authentication-cookie ordering.
+
 - An optional descendant selector for live favorite-collection album pages. It
   includes an owned root and its descendants under current authorization and
   existing keyset orders; direct-only remains the default. Large or sparse trees

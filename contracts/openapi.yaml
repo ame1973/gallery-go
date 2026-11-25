@@ -2,7 +2,17 @@ openapi: 3.1.0
 info:
   title: GalleryGo API
   version: 2.0.0-dev.0
-  description: Implemented API operations for the GalleryGo foundation. Private gallery features are under development.
+  description: >-
+    Implemented API operations for the GalleryGo foundation. Private gallery features are under development.
+    Protected GET and HEAD requests may send both X-GalleryGo-Expected-User and
+    X-GalleryGo-Expected-Scope, using the id and scope_id from /auth/me. After authentication,
+    a matching pair is echoed in response headers of the same names; clients must require a
+    successful 2xx or expected 304 response and verify both echoes before using data. A partial,
+    duplicate, invalid, or protected unsafe-method expectation is rejected, and a changed
+    account or scope returns 409. If an
+    intermediary strips both request headers, the read is unbound and no echo is returned.
+    These optional identifiers do not replace the session or authorization and do not bind
+    mutations, identify a same-account session, or fix delayed authentication-cookie ordering.
   license:
     name: MIT
     identifier: MIT

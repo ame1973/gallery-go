@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"gallerygo/internal/access"
+	"gallerygo/internal/auth"
 	"gallerygo/internal/jobs"
 	"gallerygo/internal/library"
 	"gallerygo/internal/media"
@@ -22,6 +23,8 @@ import (
 // an isolated registered source through the real versioned administrative API.
 func verifyCompiledPersonMapping(t *testing.T, api *scanHTTPSClient, source library.Source, marker string, workUnits int64) {
 	t.Helper()
+	var beforeScope auth.User
+	api.request("GET", "/auth/me", nil, 200, &beforeScope)
 	headers := api.request("GET", "/admin/sources/"+source.ID, nil, 200, &source)
 	body, err := json.Marshal(map[string]any{"mapping": map[string]int{"album_depth": 1, "person_depth": 1}})
 	if err != nil {
@@ -49,6 +52,11 @@ func verifyCompiledPersonMapping(t *testing.T, api *scanHTTPSClient, source libr
 	api.request("POST", "/admin/scans", map[string]string{"mode": "full", "source_id": source.ID}, 202, &accepted)
 	if job := api.waitJob(accepted.ID); job.Status != "succeeded" || job.Done != workUnits+3 || job.Failed != 0 {
 		t.Fatal("compiled source mapping did not publish indexed people", job, job.Counts)
+	}
+	var afterScope auth.User
+	api.request("GET", "/auth/me", nil, 200, &afterScope)
+	if !confirmedScopeTransition(beforeScope, afterScope) || afterScope.Version < beforeScope.Version+2 {
+		t.Fatal("source mapping and indexed person publication did not both rotate the administrator scope")
 	}
 	var people struct {
 		Items []access.Person `json:"items"`
