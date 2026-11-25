@@ -54,6 +54,16 @@ The CSRF token is session-bound, stable until session rotation, and never saved 
 localStorage. Session IDs returned by the management API are separate from cookie
 tokens and cannot authenticate a request. Duplicate session cookies are rejected.
 
+A successful login revokes the unrevoked session matching its supplied previous
+session cookie, even when it belongs to another account or has already expired.
+That revocation, the previous account's session-delete change and outbox entry,
+the `login_session_replaced` audit, and the new session commit together. The audit
+attributes the login to the new account and identifies the previous account without
+recording either credential. Unknown, malformed or already revoked tokens create no
+replacement event. A journal failure rolls back the new session and revocation; the
+separately recorded login-attempt rate limit is not rolled back. This does not resolve
+the delayed-cookie ordering limitations described above.
+
 Every request rechecks active status, role, revocation, idle expiry, and absolute
 expiry. Defaults are a rolling 24-hour idle limit and a 30-day absolute limit.
 Administrators may shorten them with `auth.session_idle_timeout` and

@@ -182,8 +182,22 @@ func (s *Service) Login(ctx context.Context, username, password, ip, userAgent, 
 	}
 	if validToken(oldToken) {
 		// Logging into another account rotates the browser's previous session too.
-		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=? WHERE id_hash=? AND revoked_at IS NULL`, now.UnixMilli(), digest(oldToken)); err != nil {
+		var previousID, previousUser string
+		err := tx.QueryRowContext(ctx, `UPDATE sessions SET revoked_at=? WHERE id_hash=? AND revoked_at IS NULL RETURNING id,user_id`, now.UnixMilli(), digest(oldToken)).Scan(&previousID, &previousUser)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return Session{}, err
+		}
+		if err == nil {
+			var previousScope string
+			if err := tx.QueryRowContext(ctx, `SELECT scope_id FROM users WHERE id=?`, previousUser).Scan(&previousScope); err != nil {
+				return Session{}, err
+			}
+			if err := store.Change(ctx, tx, previousScope, "session", previousID, "delete", 1, map[string]string{"user_id": previousUser}, now); err != nil {
+				return Session{}, err
+			}
+			if err := store.Audit(ctx, tx, user.ID, "login_session_replaced", "session", previousID, map[string]string{"user_id": previousUser}, now); err != nil {
+				return Session{}, err
+			}
 		}
 	}
 	if err := s.successfulLogin(ctx, tx, username, ip, now); err != nil {

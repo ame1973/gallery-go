@@ -6,6 +6,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Journal and audit the previous session revoked by a successful login in the same
+  transaction as its replacement. Journal failures roll back both session changes;
+  this does not fix delayed authentication-cookie response ordering.
+
 - Reject represented aliases between the cache root and configured sources before
   private artifact staging, and prevent nested mount or symlink crossings during
   staging and reconciliation. Unobservable sources fail closed; hidden/network
