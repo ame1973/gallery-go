@@ -366,12 +366,25 @@ func (s *Service) Sessions(ctx context.Context, current Session, after string, l
 	if limit < 1 || limit > 101 {
 		return nil, errors.New("invalid session page limit")
 	}
-	now := s.now().UTC().Truncate(time.Millisecond)
-	rows, err := s.db.QueryContext(ctx, sessionList, current.User.ID, now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli(), after, limit)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	return scanSessions(rows, current.ID)
+	defer tx.Rollback()
+	fresh, err := s.SessionInTx(ctx, tx, current)
+	if err != nil {
+		return nil, err
+	}
+	// The HTTP cursor was bound to the originally authenticated identity and scope.
+	if fresh.ID != current.ID || fresh.User.ID != current.User.ID || fresh.User.ScopeID != current.User.ScopeID {
+		return nil, ErrConflict
+	}
+	now := s.now().UTC().Truncate(time.Millisecond)
+	rows, err := tx.QueryContext(ctx, sessionList, fresh.User.ID, now.UnixMilli(), now.Add(-s.policy.Idle).UnixMilli(), after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanSessions(rows, fresh.ID)
 }
 
 const sessionList = `SELECT id,created_at,last_seen_at,expires_at,user_agent,ip_address FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>? AND last_seen_at>? AND id>? ORDER BY id LIMIT ?`

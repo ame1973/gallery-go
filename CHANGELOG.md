@@ -6,6 +6,9 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Recheck the caller and cursor scope in the same SQLite snapshot as the account's
+  session list, rather than relying on a previously authenticated session snapshot.
+
 - Journal and audit the previous session revoked by a successful login in the same
   transaction as its replacement. Journal failures roll back both session changes;
   this does not fix delayed authentication-cookie response ordering.

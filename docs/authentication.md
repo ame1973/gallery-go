@@ -102,7 +102,12 @@ authentication-response ordering across browser accounts.
   lost, sign in with the new password to recover.
 - `GET /api/v2/auth/sessions?limit=30` returns only this account's active sessions.
   Follow `next_cursor` for subsequent pages. Limits are 1..100; cursors are bound
-  to the account and its current scope.
+  to the account and its current scope. The session and account are rechecked in
+  the same SQLite snapshot as the list. A revoked or disabled session returns 401.
+  If a still-valid session's captured identity or scope no longer matches that
+  snapshot, the request returns 409; refresh the session and restart pagination.
+  A read already using an earlier committed snapshot can complete while a later
+  revocation commits; subsequent reads recheck it.
 - `DELETE /api/v2/auth/sessions/{session_id}` revokes one owned session. Hidden or
   nonexistent sessions return 404; revoking the current session expires its cookie.
 
