@@ -40,7 +40,7 @@ func validFavoriteDeleteAction(action string) bool {
 // UNION makes the recursive walk terminate even if stored parent links are corrupt.
 // Keep the current parent as the outer loop to seek its owned children, rather
 // than rescanning all of an account's folders at every level.
-const favoriteDeleteSubtreeSQL = `WITH RECURSIVE subtree(id) AS (
+const favoriteSubtreeSQL = `WITH RECURSIVE subtree(id) AS (
  SELECT id FROM favorite_collections WHERE user_id=? AND id=?
  UNION
  SELECT child.id FROM subtree parent CROSS JOIN favorite_collections child INDEXED BY idx_collection_owner_parent_page
@@ -48,7 +48,7 @@ const favoriteDeleteSubtreeSQL = `WITH RECURSIVE subtree(id) AS (
 )`
 
 // Folder and favorite IDs are length-delimited in the MAC and never returned.
-const favoriteCollectionDeleteSnapshotSQL = favoriteDeleteSubtreeSQL + `
+const favoriteCollectionDeleteSnapshotSQL = favoriteSubtreeSQL + `
 SELECT 'collection' AS kind,c.id AS object_id,COALESCE(c.parent_id,'') AS relation,c.version AS version
  FROM subtree s CROSS JOIN favorite_collections c INDEXED BY uq_collection_owner_id
  WHERE c.user_id=? AND c.id=s.id

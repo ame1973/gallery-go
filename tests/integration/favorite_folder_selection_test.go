@@ -22,6 +22,10 @@ func TestFavoriteFolderSelectionUsesFreshSessionAndOwnedMembership(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	grandchild, err := f.service.CreateFavoriteCollection(ctx, f.owner, "Grandchild", &child.ID, store.NewID())
+	if err != nil {
+		t.Fatal(err)
+	}
 	other, err := f.service.CreateFavoriteCollection(ctx, f.other, "Same", nil, store.NewID())
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +34,7 @@ func TestFavoriteFolderSelectionUsesFreshSessionAndOwnedMembership(t *testing.T)
  INSERT INTO permission_groups(id,name,created_at) VALUES('folder-group','Folder readers',0);
  INSERT INTO library_access(library_id,group_id) VALUES('folder-library','folder-group');
  INSERT INTO albums(id,library_id,source_name,created_at,updated_at) VALUES
- ('folder-a','folder-library','A',0,0),('folder-b','folder-library','B',0,0),('folder-c','folder-library','C',0,0),('folder-d','folder-library','D',0,0)`); err != nil {
+ ('folder-a','folder-library','A',0,0),('folder-b','folder-library','B',0,0),('folder-c','folder-library','C',0,0),('folder-d','folder-library','D',0,0),('folder-e','folder-library','E',0,0)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.db.Exec(`INSERT INTO user_groups(user_id,group_id) VALUES(?,'folder-group')`, f.other.User.ID); err != nil {
@@ -42,7 +46,7 @@ func TestFavoriteFolderSelectionUsesFreshSessionAndOwnedMembership(t *testing.T)
 		collection *string
 	}{
 		{f.owner, "folder-a", &root.ID}, {f.owner, "folder-b", &child.ID},
-		{f.owner, "folder-c", nil}, {f.other, "folder-d", &other.ID},
+		{f.owner, "folder-c", nil}, {f.owner, "folder-e", &grandchild.ID}, {f.other, "folder-d", &other.ID},
 	} {
 		if _, err := f.service.SetAlbumFavorite(ctx, input.viewer, input.album, 1, true, input.collection, store.NewID()); err != nil {
 			t.Fatal(err)
@@ -61,15 +65,26 @@ func TestFavoriteFolderSelectionUsesFreshSessionAndOwnedMembership(t *testing.T)
 	}
 	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: root.ID}, "folder-a")
 	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: child.ID}, "folder-b")
+	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: root.ID, FavoriteIncludeDescendants: true}, "folder-a", "folder-b", "folder-e")
+	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: child.ID, FavoriteIncludeDescendants: true}, "folder-b", "folder-e")
+	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: grandchild.ID, FavoriteIncludeDescendants: true}, "folder-e")
 	assert(f.owner, access.AlbumFilter{FavoriteUnfiled: true}, "folder-c")
 	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: other.ID})
+	assert(f.owner, access.AlbumFilter{FavoriteCollectionID: other.ID, FavoriteIncludeDescendants: true})
 	assert(f.other, access.AlbumFilter{FavoriteCollectionID: other.ID}, "folder-d")
+	assert(f.other, access.AlbumFilter{FavoriteCollectionID: other.ID, FavoriteIncludeDescendants: true}, "folder-d")
 	forged := f.other
 	forged.User = f.owner.User
 	assert(forged, access.AlbumFilter{FavoriteCollectionID: root.ID})
+	assert(forged, access.AlbumFilter{FavoriteCollectionID: root.ID, FavoriteIncludeDescendants: true})
 	assert(forged, access.AlbumFilter{FavoriteCollectionID: other.ID}, "folder-d")
+	assert(forged, access.AlbumFilter{FavoriteCollectionID: other.ID, FavoriteIncludeDescendants: true}, "folder-d")
 	assert(forged, access.AlbumFilter{FavoriteUnfiled: true})
 	for _, filter := range []access.AlbumFilter{
+		{FavoriteIncludeDescendants: true},
+		{FavoriteIncludeDescendants: true, FavoriteUnfiled: true},
+		{FavoriteCollectionID: root.ID, FavoriteIncludeDescendants: true, FavoriteUnfiled: true},
+		{Favorite: "false", FavoriteCollectionID: root.ID, FavoriteIncludeDescendants: true},
 		{FavoriteCollectionID: root.ID, FavoriteUnfiled: true},
 		{Favorite: "false", FavoriteCollectionID: root.ID},
 		{Favorite: "false", FavoriteUnfiled: true},
@@ -88,5 +103,8 @@ func TestFavoriteFolderSelectionUsesFreshSessionAndOwnedMembership(t *testing.T)
 	cancel()
 	if _, err := f.service.Albums(cancelled, f.owner, access.AlbumFilter{FavoriteUnfiled: true}, access.AlbumPosition{}, 30); !errors.Is(err, context.Canceled) {
 		t.Fatal("folder selection ignored cancellation", err)
+	}
+	if _, err := f.service.Albums(cancelled, f.owner, access.AlbumFilter{FavoriteCollectionID: root.ID, FavoriteIncludeDescendants: true}, access.AlbumPosition{}, 30); !errors.Is(err, context.Canceled) {
+		t.Fatal("subtree selection ignored cancellation", err)
 	}
 }

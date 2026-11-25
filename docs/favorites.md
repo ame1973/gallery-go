@@ -3,9 +3,9 @@
 All paths below use `/api/v2`. These authenticated metadata endpoints manage only
 the calling account's favorite membership and collection assignment. `GET /albums`
 can filter the calling account's favorites across collections, within one direct
-collection or in default/unfiled. Personal collections can be created, listed,
-renamed and explicitly deleted with a two-step choice. Recursive subtree browsing,
-hierarchy UI and offline operation replay remain separate required features.
+collection, across an owned collection subtree or in default/unfiled. Personal
+collections can be created, listed, renamed and explicitly deleted with a two-step
+choice. Hierarchy UI and offline operation replay remain separate required features.
 
 ## Read your state
 
@@ -70,7 +70,7 @@ subsequently removed folder or parent. Rename retries require current ownership 
 return their historical result without restoring an obsolete name. Use GET to
 refresh state. Real creation/rename co-commits private folder change/outbox, audit
 and actor receipt; no album, favorite, grant or scope is changed. Reparenting via API
-and recursive subtree album listing are not yet implemented.
+is not yet implemented.
 
 ## Confirm and delete a collection subtree
 
@@ -141,25 +141,31 @@ albums never favorited or subsequently cleared. Omit all favorite filters for al
 visible albums; use exactly lowercase `true` or `false` once. No account ID is accepted.
 
 `GET /albums?favorite_collection_id=<id>` selects only live favorites assigned
-directly to that owned collection; it does **not** include child collections. A
-missing or another account's collection ID returns the same empty authorized page.
-`GET /albums?favorite_unfiled=true` selects live favorites assigned to the default,
-not cleared or never-favorited albums. Use exactly `true` once. The two selectors
-are mutually exclusive and cannot be combined with `favorite=false`; either may
-be combined with `favorite=true`.
+directly to that owned collection by default. Add `favorite_include_descendants=true`
+to include that collection **and all its owned descendants**. The descendant flag
+requires a collection ID and accepts exactly `true`; omission retains the direct-only
+behavior. A missing or another account's collection ID returns the same empty
+authorized page. `GET /albums?favorite_unfiled=true` selects live favorites assigned
+to the default, not cleared or never-favorited albums. Use exactly `true` once. The
+two collection selectors are mutually exclusive and cannot be combined with
+`favorite=false`; either may be combined with `favorite=true`.
 
 The filter can be combined with the documented library, source, creator and tag
 selectors, all supported album sort orders, and bounded keyset pagination. Current
 session and shared album visibility still apply before pagination; favorites never
 grant access. Partial indexes skip cleared rows for favorite-only or direct-folder
-ID-order pages; other orders use their existing indexes and an account/album point
-lookup. Sparse filters may still traverse candidates in the requested order.
+ID-order pages; subtree ID pages use the account/album order and check membership
+against the owned recursive folder set. Other orders use their existing indexes and
+an account/album point lookup. SQLite may materialize the subtree and scan many
+ordered candidates for sparse matches, so very large hierarchies or sparse filters
+can exceed the 10-second metadata deadline; no partial page is reported as success.
 
 Cursors bind the account, scope, exact filters and sort. A continuation uses its
 frozen position but reads current membership and access; adding, clearing or moving
 items can change which records appear between live pages. These are not immutable
 offline snapshots. Historical mutation receipts do not reactivate a cleared favorite.
-Recursive subtree browsing and complete text/media search remain required.
+The folder hierarchy and memberships are re-read for each page; complete text/media
+search and a hierarchy browsing UI remain required.
 
 ## Favorite, move or clear
 

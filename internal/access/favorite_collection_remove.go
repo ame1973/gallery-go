@@ -16,7 +16,7 @@ import (
 	"gallerygo/internal/store"
 )
 
-const favoriteDeleteFolderStageSQL = favoriteDeleteSubtreeSQL + `
+const favoriteDeleteFolderStageSQL = favoriteSubtreeSQL + `
 INSERT INTO favorite_delete_folders(id,version)
  SELECT c.id,c.version FROM subtree s CROSS JOIN favorite_collections c INDEXED BY uq_collection_owner_id
  WHERE c.user_id=? AND c.id=s.id`

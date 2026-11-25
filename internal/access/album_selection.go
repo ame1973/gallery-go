@@ -25,18 +25,19 @@ const MaxAlbumTitleBytes = 4096
 // Selectors intersect already-visible albums; they never grant access or resolve
 // a global private catalog label. Empty fields mean omitted, not an HTTP value.
 type AlbumFilter struct {
-	LibraryID            string
-	SourceID             string
-	PersonID             string
-	TagID                string
-	Favorite             string
-	FavoriteCollectionID string
-	FavoriteUnfiled      bool
-	Sort                 string
+	LibraryID                  string
+	SourceID                   string
+	PersonID                   string
+	TagID                      string
+	Favorite                   string
+	FavoriteCollectionID       string
+	FavoriteIncludeDescendants bool
+	FavoriteUnfiled            bool
+	Sort                       string
 }
 
 func (filter AlbumFilter) Validate() error {
-	if filter.FavoriteCollectionID != "" && filter.FavoriteUnfiled || filter.Favorite == "false" && (filter.FavoriteCollectionID != "" || filter.FavoriteUnfiled) {
+	if filter.FavoriteIncludeDescendants && filter.FavoriteCollectionID == "" || filter.FavoriteCollectionID != "" && filter.FavoriteUnfiled || filter.Favorite == "false" && (filter.FavoriteCollectionID != "" || filter.FavoriteUnfiled) {
 		return ErrAlbumSelection
 	}
 	switch filter.Favorite {
@@ -179,7 +180,7 @@ func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition,
 		case favoriteDriver:
 			// Both partial indexes exclude cleared revisions while preserving ID order.
 			index := "idx_favorites_active_page"
-			if folderFilter {
+			if folderFilter && !filter.FavoriteIncludeDescendants {
 				index = "idx_favorites_live_collection_page"
 			}
 			from = ` FROM favorites selection INDEXED BY ` + index + ` CROSS JOIN albums a ON a.id=selection.album_id`
@@ -195,6 +196,12 @@ func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition,
 	}
 	query := albumColumns + from + relations + ` WHERE ` + AlbumVisible
 	arguments := []any{viewer, viewer, viewer}
+	if filter.FavoriteIncludeDescendants {
+		// Resolve only the viewer's subtree in this same SQLite snapshot. Driving
+		// by album ID keeps keyset order without sorting all matching memberships.
+		query = favoriteSubtreeSQL + "\n" + query
+		arguments = append([]any{viewer, filter.FavoriteCollectionID, viewer}, arguments...)
+	}
 	if filter.TagID != "" {
 		if filter.Sort == "" {
 			query += ` AND selection.tag_id=?`
@@ -206,16 +213,26 @@ func AlbumSelectionQuery(viewer string, filter AlbumFilter, after AlbumPosition,
 	if favoriteDriver {
 		query += ` AND selection.user_id=? AND selection.favorited=1`
 		arguments = append(arguments, viewer)
-		if filter.FavoriteCollectionID != "" {
+		if filter.FavoriteIncludeDescendants {
+			query += ` AND selection.collection_id IN (SELECT id FROM subtree)`
+		} else if filter.FavoriteCollectionID != "" {
 			query += ` AND selection.collection_id=?`
 			arguments = append(arguments, filter.FavoriteCollectionID)
 		} else if filter.FavoriteUnfiled {
 			query += ` AND selection.collection_id IS NULL`
 		}
 	} else if filter.Favorite == "true" || folderFilter {
-		query += ` AND EXISTS(SELECT 1 FROM favorites f WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1`
+		index := ""
+		if filter.FavoriteIncludeDescendants {
+			// Probe this album once, rather than seeking every descendant folder
+			// for each ordered album when SQLite chooses the collection-first index.
+			index = ` INDEXED BY idx_favorites_active_page`
+		}
+		query += ` AND EXISTS(SELECT 1 FROM favorites f` + index + ` WHERE f.user_id=? AND f.album_id=a.id AND f.favorited=1`
 		arguments = append(arguments, viewer)
-		if filter.FavoriteCollectionID != "" {
+		if filter.FavoriteIncludeDescendants {
+			query += ` AND f.collection_id IN (SELECT id FROM subtree)`
+		} else if filter.FavoriteCollectionID != "" {
 			query += ` AND f.collection_id=?`
 			arguments = append(arguments, filter.FavoriteCollectionID)
 		} else if filter.FavoriteUnfiled {

@@ -50,9 +50,14 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An optional descendant selector for live favorite-collection album pages. It
+  includes an owned root and its descendants under current authorization and
+  existing keyset orders; direct-only remains the default. Large or sparse trees
+  can exceed the metadata deadline, and hierarchy UI remains pending.
+
 - An optional `make quick-check` for development: fresh pure-Go and frontend checks
-  use 5,000-album random and selection fixtures. Race/coverage, the two corresponding
-  100,000-album cases and browser/release checks remain separate required gates.
+  use 5,000-album random, selection and favorite-subtree fixtures. Race/coverage, the
+  corresponding 100,000-album cases and browser/release checks remain separate gates.
 
 - A versioned Unicode 15 text normalization and tokenization profile shared by Go
   and browser code, with bounded inputs and a cross-runtime conformance runner.
@@ -124,16 +129,15 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 - Direct personal favorite-folder and default/unfiled album selectors intersect
   current grants, existing filters and keyset orders. Folder IDs select direct live
-  assignments only; cleared rows are excluded, and foreign/missing folders yield
+  assignments by default; cleared rows are excluded, and foreign/missing folders yield
   empty pages. Migration0029 adds a partial collection/album index without rewriting
-  data. Recursive subtree browsing, UI and offline sync remain pending; selections
-  never grant media access.
+  data. Hierarchy UI and offline sync remain pending; selections never grant media
+  access.
 
 - Owner-private favorite collection create/list/detail/rename APIs support root and
   same-owner nested folders, bounded parent/root keysets, personal strong validators,
   actor receipts and atomic private change/outbox/audit. Name identity remains exact
-  binary after validation. Album assignments and shared grants are unchanged;
-  recursive subtree album listing remains pending.
+  binary after validation. Album assignments and shared grants are unchanged.
 
 - Migration0028 prepares owner-private collection hierarchies independently of the
   management API. It preserves existing folders/favorites, adds version/time and
@@ -145,7 +149,7 @@ All notable public changes are recorded here. This project uses Conventional Com
   library/source/creator/tag filters and existing keyset orders. True spans owned
   collections; false includes cleared and never-favorited albums. An index-only
   migration excludes tombstones from sparse favorite ID pages. Pages remain live;
-  recursive subtree browsing and full normalized search are not yet implemented.
+  full normalized search is not yet implemented.
 
 - Personal favorite GET/PUT/DELETE APIs with independent account/album validators,
   default or exact owned collection assignment, retained clear revisions and
@@ -153,8 +157,8 @@ All notable public changes are recorded here. This project uses Conventional Com
   and receipt without altering shared album versions, averages or grants. The
   migration preserves valid memberships/times and enforces same-account collection
   FKs, explicit collection removal and atomic nested account cascades. Source
-  outage/scan/move preservation remains required. Recursive subtree browsing,
-  hierarchy UI and offline sync remain separate required work.
+  outage/scan/move preservation remains required. Hierarchy UI and offline sync
+  remain separate required work.
 
 - Indexed high-rating album keysets (`top_rated`) using the same native SQL mean
   as public cards, DESC mean/ID ties and unrated last. Complete public float keys

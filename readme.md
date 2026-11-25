@@ -272,7 +272,9 @@ Only implemented endpoints are advertised:
   `favorite=true|false`, `favorite_collection_id` or `favorite_unfiled=true` selectors
   before indexed ID or first-indexed-time/literal-title/native-rating/view-count
   keyset pagination (`latest`, `oldest`, `name_asc`, `name_desc`, `top_rated`,
-  `popular`). High-rating order uses the native mean, not
+  `popular`). A collection selector can explicitly include its owned descendants with
+  `favorite_include_descendants=true`; direct-only remains the default. High-rating
+  order uses the native mean, not
   weighted vote counts, with unrated cards last and complete frozen score keys.
   Popular order uses the actual retained-account `view_count` and ID descending,
   with zero-view cards last; its cursor freezes the complete count.
@@ -288,8 +290,8 @@ Only implemented endpoints are advertised:
   `/deletion-preview` child: create/list/read/rename owned root or nested folders,
   or explicitly delete a confirmed subtree while moving favorites to default or
   clearing them. Deletion includes previously assigned hidden albums without
-  revealing their identities. Direct folder album selection excludes descendants;
-  recursive subtree browsing and hierarchy UI remain pending. See
+  revealing their identities. Folder album selection is direct by default and can
+  explicitly include descendants; hierarchy UI remains pending. See
   [favorite API](docs/favorites.md#confirm-and-delete-a-collection-subtree).
 - `GET/PUT/DELETE /api/v2/favorites/{album_id}`: only the current account's favorite,
   default/owned collection assignment, independent preconditions and historical
@@ -389,12 +391,13 @@ python3 -I tests/integration/docker_ingest.py gallerygo:local
 ```
 
 `quick-check` is a development shortcut, not the full validation gate. It runs fresh
-pure-Go tests and checks random-album and album-selection behavior using 5,000 albums,
-while omitting their corresponding 100,000-album tests and race/coverage. The smaller
-selection fixture has denser sparse tags and does not establish large-scale behavior.
-Other 100,000-record tests remain in the quick run. The full `make check` and CI still
-run the original 100,000-album cases and race/coverage; browser, host-load, device and
-release checks remain separate. Runtime depends on the host and is not guaranteed.
+pure-Go tests and checks random-album, album-selection and favorite-subtree behavior
+using 5,000 albums, while omitting their corresponding 100,000-album tests and
+race/coverage. The smaller selection fixtures have denser sparse matches and do not
+establish large-scale behavior. Other 100,000-record tests remain in the quick run.
+The full `make check` and CI still run the 100,000-album cases and race/coverage;
+browser, host-load, device and release checks remain separate. Runtime depends on the
+host and is not guaranteed.
 
 `views-load` is a separate host-dependent capacity check: it runs without race
 instrumentation against fresh temporary SQLite databases, including a compiled
