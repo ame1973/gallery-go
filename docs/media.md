@@ -152,10 +152,16 @@ The Linux amd64/arm64 worker-side private artifact store can write validated byt
 under `tmp/{job_id}`, fsync and rehash the temporary file, and atomically rename to
 the immutable key **without replacing an existing file**. Both directory handles
 are confined before the basename-only rename. New directories are private and
-parent directory entries are synced. Identical retries reuse the existing inode;
-a corrupt, mismatched, non-private or symbolic-link target fails rather than being
-overwritten. Group/world-writable directories, source/cache overlap and cache-root
-aliases are refused. Missing cache roots are not created by this primitive.
+parent directory entries are synced. Before temporary files or existing immutable
+targets are accepted, they must be regular, mode 0600, single-link, owned by the
+server's effective UID and on the cache root's device. The opened and named inode,
+size, permissions and change-time are rechecked after hashing. Identical retries
+reuse a qualifying inode; corrupt, changed, non-private, hard-linked or symbolic-link
+targets fail rather than being overwritten. Group/world-writable directories,
+lexical source/cache overlap and cache-root symlink aliases are refused. Missing
+cache roots are not created by this primitive. Device equality does not establish
+that two same-device bind mounts are disjoint; deployments must keep cache and source
+mount trees non-aliased.
 
 Private staging also acquires a shared Linux `flock` on the persistent zero-byte
 `cache_root/.gallerygo-artifacts.lock` before writing. The returned private

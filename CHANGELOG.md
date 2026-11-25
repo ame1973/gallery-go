@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Reject private variant staging or replay when a temporary or existing target is
+  hard-linked, has noncanonical permissions/ownership, or is on a different device
+  from the cache. Recheck inode identity and change-time after hashing. Same-UID
+  interference and same-device bind-mount aliases remain deployment boundaries.
+
 - Persist confirmed idle/absolute session expiry with its change/outbox/audit records,
   after rolling back any pending business transaction. Later clock rollback or database
   reopen cannot revive that revoked token. Newer legitimate activity is rechecked;

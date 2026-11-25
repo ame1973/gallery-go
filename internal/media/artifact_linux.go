@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -49,7 +50,7 @@ func (s *Service) storeStillArtifact(ctx context.Context, jobID string, artifact
 			gate.Close()
 		}
 	}()
-	if err := writeStillArtifact(ctx, gate.root, jobID, artifact, data); err != nil {
+	if err := writeStillArtifact(ctx, gate.root, gate.rootInfo, jobID, artifact, data); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -72,7 +73,7 @@ func artifactPathsOverlap(a, b string) bool {
 	return false
 }
 
-func writeStillArtifact(ctx context.Context, root *os.Root, jobID string, artifact stillArtifact, data []byte) error {
+func writeStillArtifact(ctx context.Context, root *os.Root, cacheInfo fs.FileInfo, jobID string, artifact stillArtifact, data []byte) error {
 	temporaryPath := path.Join("tmp", jobID)
 	temporary, err := makeArtifactDirectory(root, temporaryPath)
 	if err != nil {
@@ -106,7 +107,7 @@ func writeStillArtifact(ctx context.Context, root *os.Root, jobID string, artifa
 	if err := file.Close(); err != nil {
 		return err
 	}
-	if err := verifyArtifactFile(ctx, temporary, name, artifact); err != nil {
+	if err := verifyArtifactFile(ctx, temporary, cacheInfo, name, artifact); err != nil {
 		return err
 	}
 	from, err := temporary.Open(".")
@@ -127,7 +128,7 @@ func writeStillArtifact(ctx context.Context, root *os.Root, jobID string, artifa
 	// Never use multi-component raw renameat paths that could follow a symlink out.
 	err = unix.Renameat2(int(from.Fd()), name, int(to.Fd()), path.Base(artifact.storage), unix.RENAME_NOREPLACE)
 	if errors.Is(err, unix.EEXIST) {
-		if err := verifyArtifactFile(ctx, destination, path.Base(artifact.storage), artifact); err != nil {
+		if err := verifyArtifactFile(ctx, destination, cacheInfo, path.Base(artifact.storage), artifact); err != nil {
 			return err
 		}
 		if err := temporary.Remove(name); err != nil {
@@ -180,9 +181,11 @@ func makeArtifactDirectory(root *os.Root, relative string) (*os.Root, error) {
 	return current, nil
 }
 
-func verifyArtifactFile(ctx context.Context, root *os.Root, name string, artifact stillArtifact) error {
+// Use the reconciliation identity policy for both temporary and replayed files.
+// Change-time checks detect observed mutations, not uncooperative same-UID writers.
+func verifyArtifactFile(ctx context.Context, root *os.Root, cacheInfo fs.FileInfo, name string, artifact stillArtifact) error {
 	listed, err := root.Lstat(name)
-	if err != nil || !listed.Mode().IsRegular() || listed.Mode().Perm()&0o077 != 0 {
+	if err != nil || !artifactTempPrivate(listed, cacheInfo, false) {
 		return ErrVariantUnavailable
 	}
 	file, info, err := OpenReadOnlyFile(root, name)
@@ -190,7 +193,7 @@ func verifyArtifactFile(ctx context.Context, root *os.Root, name string, artifac
 		return err
 	}
 	defer file.Close()
-	if !os.SameFile(listed, info) || info.Size() != artifact.size {
+	if !os.SameFile(listed, info) || !artifactTempPrivate(info, cacheInfo, false) || stillFileStamp(listed) != stillFileStamp(info) || info.Size() != artifact.size {
 		return ErrVariantUnavailable
 	}
 	digest := sha256.New()
@@ -201,8 +204,12 @@ func verifyArtifactFile(ctx context.Context, root *os.Root, name string, artifac
 	if count != artifact.size || hex.EncodeToString(digest.Sum(nil)) != artifact.hash {
 		return ErrVariantUnavailable
 	}
+	current, err := file.Stat()
+	if err != nil || !artifactTempPrivate(current, cacheInfo, false) || !os.SameFile(info, current) || stillFileStamp(info) != stillFileStamp(current) {
+		return ErrVariantUnavailable
+	}
 	after, err := root.Lstat(name)
-	if err != nil || !os.SameFile(info, after) || after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime()) || !after.Mode().IsRegular() {
+	if err != nil || !artifactTempPrivate(after, cacheInfo, false) || !os.SameFile(info, after) || stillFileStamp(info) != stillFileStamp(after) {
 		return ErrVariantUnavailable
 	}
 	return file.Sync()
