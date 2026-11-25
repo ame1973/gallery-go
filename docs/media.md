@@ -157,11 +157,24 @@ targets are accepted, they must be regular, mode 0600, single-link, owned by the
 server's effective UID and on the cache root's device. The opened and named inode,
 size, permissions and change-time are rechecked after hashing. Identical retries
 reuse a qualifying inode; corrupt, changed, non-private, hard-linked or symbolic-link
-targets fail rather than being overwritten. Group/world-writable directories,
-lexical source/cache overlap and cache-root symlink aliases are refused. Missing
-cache roots are not created by this primitive. Device equality does not establish
-that two same-device bind mounts are disjoint; deployments must keep cache and source
-mount trees non-aliased.
+targets fail rather than being overwritten. Storage and reconciliation directory
+traversal, the artifact lock file and staging-file opens refuse nested mount crossings
+and symbolic links using Linux `openat2`; unavailable kernel support or `/proc/self/fd`
+fails closed. Before creating the lock file, the gate observes mount IDs for the cache
+and every configured source and rejects aliases between the cache root and sources
+represented by the current mount namespace, including bind mounts beneath a source. A missing,
+inaccessible or symlinked configured source prevents staging and reconciliation.
+The gate pins one read-only directory descriptor per distinct configured source for
+its lifetime and rechecks source directory identities and the bounded mount description;
+even an unrelated mount-table change invalidates that gate. This increases descriptor
+usage and is a conservative availability trade-off, not an atomic mount-topology lock.
+
+Group/world-writable cache directories, lexical source/cache overlap and cache-root
+symlink aliases are also refused. Missing cache roots are not created. Mount
+information and device IDs cannot prove that
+network exports, hidden backing filesystems or aliases outside the namespace are
+disjoint; privileged topology changes can also race these checks. Deployments must
+keep cache and source mount trees non-aliased.
 
 Private staging also acquires a shared Linux `flock` on the persistent zero-byte
 `cache_root/.gallerygo-artifacts.lock` before writing. The returned private

@@ -6,6 +6,11 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Reject represented aliases between the cache root and configured sources before
+  private artifact staging, and prevent nested mount or symlink crossings during
+  staging and reconciliation. Unobservable sources fail closed; hidden/network
+  backing aliases and concurrent privileged topology changes remain deployment boundaries.
+
 - Reject private variant staging or replay when a temporary or existing target is
   hard-linked, has noncanonical permissions/ownership, or is on a different device
   from the cache. Recheck inode identity and change-time after hashing. Same-UID

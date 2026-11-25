@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -14,6 +15,8 @@ type artifactGate struct {
 	file               *os.File
 	rootInfo, lockInfo fs.FileInfo
 	cacheRoot          string
+	mountGuard         func(context.Context) error
+	mountSources       []*os.File
 	exclusive          bool
 }
 
@@ -22,16 +25,20 @@ func (gate *artifactGate) Close() error {
 	if gate == nil {
 		return nil
 	}
-	var fileErr, rootErr error
+	var fileErr, sourceErr, rootErr error
 	if gate.file != nil {
 		fileErr = gate.file.Close()
 		gate.file = nil
 	}
+	for _, source := range gate.mountSources {
+		sourceErr = errors.Join(sourceErr, source.Close())
+	}
+	gate.mountSources = nil
 	if gate.root != nil {
 		rootErr = gate.root.Close()
 		gate.root = nil
 	}
-	return errors.Join(fileErr, rootErr)
+	return errors.Join(fileErr, sourceErr, rootErr)
 }
 
 // storedStillArtifact keeps the shared gate through a future publisher's final

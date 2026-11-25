@@ -203,12 +203,11 @@ func openArtifactTempDirectory(parent *os.Root, name string, cache fs.FileInfo) 
 	if !artifactTempPrivate(info, cache, true) {
 		return nil, nil, ErrVariantUnavailable
 	}
-	opened, err := parent.OpenRoot(name)
+	opened, current, err := openArtifactDirectory(parent, name)
 	if err != nil {
 		return nil, nil, err
 	}
-	current, err := opened.Stat(".")
-	if err != nil || !os.SameFile(info, current) || !artifactTempPrivate(current, cache, true) {
+	if !os.SameFile(info, current) || !artifactTempPrivate(current, cache, true) {
 		opened.Close()
 		return nil, nil, ErrVariantUnavailable
 	}

@@ -126,18 +126,21 @@ func TestPrivateArtifactPolicyRejectsDifferentOwnerDeviceOrLinkCount(t *testing.
 			}
 		})
 	}
-	root, err := os.OpenRoot(svc.cacheRoot)
+	root, err := os.OpenRoot(filepath.Dir(target))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer root.Close()
+	if err := verifyArtifactFile(t.Context(), root, cache, filepath.Base(target), artifact); err != nil {
+		t.Fatal("owned artifact failed the valid device control", err)
+	}
 	cacheStat, ok := cache.Sys().(*syscall.Stat_t)
 	if !ok {
 		t.Fatal("test filesystem does not expose a Linux stat")
 	}
 	foreignCache := artifactStatFileInfo{FileInfo: cache, stat: *cacheStat}
 	foreignCache.stat.Dev ^= 1
-	if err := verifyArtifactFile(t.Context(), root, foreignCache, artifact.storage, artifact); !errors.Is(err, ErrVariantUnavailable) {
+	if err := verifyArtifactFile(t.Context(), root, foreignCache, filepath.Base(target), artifact); !errors.Is(err, ErrVariantUnavailable) {
 		t.Fatal("artifact on a different synthetic cache device was accepted", err)
 	}
 }
@@ -172,12 +175,12 @@ func TestPrivateArtifactVerificationRejectsRestoredMetadataAfterInodeChanges(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			root, err := os.OpenRoot(svc.cacheRoot)
+			root, err := os.OpenRoot(filepath.Dir(target))
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer root.Close()
-			cacheInfo, err := root.Stat(".")
+			cacheInfo, err := os.Stat(svc.cacheRoot)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -219,7 +222,7 @@ func TestPrivateArtifactVerificationRejectsRestoredMetadataAfterInodeChanges(t *
 					time.Sleep(time.Millisecond)
 				}
 			}
-			err = verifyArtifactFile(ctx, root, cacheInfo, artifact.storage, artifact)
+			err = verifyArtifactFile(ctx, root, cacheInfo, filepath.Base(target), artifact)
 			if ctx.calls < 2 || ctx.err != nil {
 				t.Fatal("test mutation did not complete during verification", ctx.calls, ctx.err)
 			}

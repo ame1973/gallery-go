@@ -87,10 +87,14 @@ func (s *Service) lockArtifacts(ctx context.Context, exclusive bool) (*artifactG
 	if err := unix.Fstatfs(int(directory.Fd()), &filesystem); err != nil || !localArtifactFilesystem(filesystem.Type) {
 		return fail(ErrVariantUnavailable)
 	}
-	file, err := root.OpenFile(artifactGateName, os.O_CREATE|os.O_EXCL|os.O_RDWR|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0o600)
+	gate.mountGuard, gate.mountSources, err = s.artifactMountGuard(ctx, root)
+	if err != nil {
+		return fail(err)
+	}
+	file, err := openArtifactAt(root, artifactGateName, os.O_CREATE|os.O_EXCL|os.O_RDWR|unix.O_NONBLOCK, 0o600)
 	created := err == nil
 	if errors.Is(err, os.ErrExist) {
-		file, err = root.OpenFile(artifactGateName, os.O_RDWR|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+		file, err = openArtifactAt(root, artifactGateName, os.O_RDWR|unix.O_NONBLOCK, 0)
 	}
 	if err != nil {
 		return fail(fmt.Errorf("%w: %w", ErrVariantUnavailable, err))
@@ -162,5 +166,8 @@ func (gate *artifactGate) check(ctx context.Context) error {
 	if err != nil || !privateArtifactGateFile(current) || !os.SameFile(current, gate.lockInfo) {
 		return ErrVariantUnavailable
 	}
-	return ctx.Err()
+	if gate.mountGuard == nil {
+		return ErrVariantUnavailable
+	}
+	return gate.mountGuard(ctx)
 }

@@ -88,7 +88,7 @@ func writeStillArtifact(ctx context.Context, root *os.Root, cacheInfo fs.FileInf
 	}
 	defer destination.Close()
 	name := store.NewID() + ".tmp"
-	file, err := temporary.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	file, err := openArtifactAt(temporary, name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -143,6 +143,53 @@ func writeStillArtifact(ctx context.Context, root *os.Root, cacheInfo fs.FileInf
 	return from.Sync()
 }
 
+// Resolve one generated basename relative to an already-pinned directory. A mount
+// point or symlink introduced after earlier checks must not redirect cache I/O.
+func openArtifactAt(root *os.Root, name string, flags int, mode os.FileMode) (*os.File, error) {
+	if !localPath(name) || strings.Contains(name, "/") {
+		return nil, ErrVariantUnavailable
+	}
+	parent, err := root.Open(".")
+	if err != nil {
+		return nil, err
+	}
+	defer parent.Close()
+	how := unix.OpenHow{
+		Flags:   uint64(flags | unix.O_CLOEXEC | unix.O_NOFOLLOW),
+		Mode:    uint64(mode.Perm()),
+		Resolve: unix.RESOLVE_NO_XDEV | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
+	}
+	fd, err := unix.Openat2(int(parent.Fd()), name, &how)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), name), nil
+}
+
+// OpenRoot has no no-cross-device option. Reopen only the already-pinned child
+// descriptor, then verify the resulting Root still names that same directory.
+func openArtifactDirectory(root *os.Root, name string) (*os.Root, fs.FileInfo, error) {
+	file, err := openArtifactAt(root, name, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.IsDir() {
+		return nil, nil, ErrVariantUnavailable
+	}
+	child, err := os.OpenRoot(fmt.Sprintf("/proc/self/fd/%d", file.Fd()))
+	if err != nil {
+		return nil, nil, err
+	}
+	current, err := child.Stat(".")
+	if err != nil || !os.SameFile(info, current) || !current.IsDir() {
+		child.Close()
+		return nil, nil, ErrVariantUnavailable
+	}
+	return child, current, nil
+}
+
 func makeArtifactDirectory(root *os.Root, relative string) (*os.Root, error) {
 	current, err := root.OpenRoot(".")
 	if err != nil {
@@ -162,18 +209,22 @@ func makeArtifactDirectory(root *os.Root, relative string) (*os.Root, error) {
 			current.Close()
 			return nil, ErrVariantUnavailable
 		}
+		next, opened, err := openArtifactDirectory(current, component)
+		if err != nil || !os.SameFile(info, opened) || opened.Mode().Perm()&0o022 != 0 {
+			if next != nil {
+				next.Close()
+			}
+			current.Close()
+			return nil, ErrVariantUnavailable
+		}
 		parent, err := current.Open(".")
 		if err == nil {
 			err = parent.Sync()
 			parent.Close()
 		}
-		if err != nil {
-			current.Close()
-			return nil, err
-		}
-		next, err := current.OpenRoot(component)
 		current.Close()
 		if err != nil {
+			next.Close()
 			return nil, err
 		}
 		current = next
@@ -188,12 +239,13 @@ func verifyArtifactFile(ctx context.Context, root *os.Root, cacheInfo fs.FileInf
 	if err != nil || !artifactTempPrivate(listed, cacheInfo, false) {
 		return ErrVariantUnavailable
 	}
-	file, info, err := OpenReadOnlyFile(root, name)
+	file, err := openArtifactAt(root, name, os.O_RDONLY|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	if !os.SameFile(listed, info) || !artifactTempPrivate(info, cacheInfo, false) || stillFileStamp(listed) != stillFileStamp(info) || info.Size() != artifact.size {
+	info, err := file.Stat()
+	if err != nil || !os.SameFile(listed, info) || !artifactTempPrivate(info, cacheInfo, false) || stillFileStamp(listed) != stillFileStamp(info) || info.Size() != artifact.size {
 		return ErrVariantUnavailable
 	}
 	digest := sha256.New()
