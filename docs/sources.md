@@ -81,6 +81,12 @@ scope-changed cursor requires returning to the first page. Physical root paths,
 marker names and private configuration pins are not shown. Source creation, editing,
 checking and deletion remain available through the API, not this interface.
 
+Each source read sends [account and scope expectations](authentication.md#optional-read-identity-expectations)
+from the current session and verifies both response echoes before showing results.
+Missing or mismatched echoes cause the interface to reject the response and recheck
+the session. This is not a mutation fence, does not distinguish same-account sessions,
+and does not resolve delayed authentication-cookie ordering.
+
 ## Declare storage outside the API
 
 The operator declares an allowlist in the private YAML configuration:

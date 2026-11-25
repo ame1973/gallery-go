@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
+import { validReadActor } from '../../lib/api/read-identity';
 import { APIError } from '../auth/api';
 import type { User } from '../auth/api';
 import { Diagnostic, JobTime } from '../jobs/common';
@@ -10,7 +11,7 @@ import {
   LibraryNavigation,
   PageNavigation,
   usePageFocus,
-  useRevalidateSession,
+  useRevalidateReadIdentity,
   validCursorSearch,
 } from '../library/common';
 import { getSource, listSources } from './api';
@@ -55,7 +56,9 @@ function SourceError({
         ? 'source.notFound'
         : invalid
           ? 'source.invalidPage'
-          : 'source.requestError';
+          : code === 'VERSION_CONFLICT' || code === 'READ_CONTEXT_MISMATCH'
+            ? 'auth.readContextChanged'
+            : 'source.requestError';
   return (
     <div className="gallery-message" role="alert">
       <p>
@@ -96,18 +99,19 @@ export function SourcesPage() {
   const [search] = useSearchParams();
   const cursor = search.get('cursor');
   const valid = validCursorSearch(search);
+  const canRead = user.role === 'admin' && user.active && validReadActor(user);
   const main = usePageFocus(cursor, 'sources');
   const query = useQuery({
     queryKey: [user.id, user.scope_id, 'admin-sources', cursor],
-    queryFn: ({ signal }) => listSources(cursor, signal),
-    enabled: user.role === 'admin' && valid,
+    queryFn: ({ signal }) => listSources(user, cursor, signal),
+    enabled: canRead && valid,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
     refetchOnReconnect: true,
   });
-  useRevalidateSession(query.error);
+  useRevalidateReadIdentity(query.error);
   const next =
     query.data?.has_more && query.data.next_cursor
       ? `/admin/sources?${new URLSearchParams({ cursor: query.data.next_cursor })}`
@@ -128,15 +132,21 @@ export function SourcesPage() {
             <FormattedMessage id="source.description" />
           </p>
         </div>
-        {user.role === 'admin' && valid && (
+        {canRead && valid && (
           <button className="button button-secondary" disabled={query.isFetching} onClick={reload}>
             <FormattedMessage id="source.refresh" />
           </button>
         )}
       </div>
-      {user.role !== 'admin' ? (
+      {user.role !== 'admin' || !user.active ? (
         <SourceError
           error={new APIError('ADMIN_REQUIRED')}
+          back="/admin/sources"
+          onRetry={reload}
+        />
+      ) : !validReadActor(user) ? (
+        <SourceError
+          error={new APIError('READ_CONTEXT_MISMATCH')}
           back="/admin/sources"
           onRetry={reload}
         />
@@ -217,18 +227,19 @@ export function SourcePage() {
   const back = sourceBack((location.state as { from?: unknown } | null)?.from);
   const validID = safeID(sourceId);
   const validSearch = [...search.keys()].length === 0;
+  const canRead = user.role === 'admin' && user.active && validReadActor(user);
   const main = usePageFocus(null, sourceId);
   const query = useQuery({
     queryKey: [user.id, user.scope_id, 'admin-source', sourceId],
-    queryFn: ({ signal }) => getSource(sourceId, signal),
-    enabled: user.role === 'admin' && validID && validSearch,
+    queryFn: ({ signal }) => getSource(user, sourceId, signal),
+    enabled: canRead && validID && validSearch,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
     refetchOnReconnect: true,
   });
-  useRevalidateSession(query.error);
+  useRevalidateReadIdentity(query.error);
   const reload = () => {
     main.current?.focus();
     void query.refetch();
@@ -248,14 +259,16 @@ export function SourcePage() {
             <FormattedMessage id="source.healthNote" />
           </p>
         </div>
-        {user.role === 'admin' && validID && validSearch && (
+        {canRead && validID && validSearch && (
           <button className="button button-secondary" disabled={query.isFetching} onClick={reload}>
             <FormattedMessage id="source.refresh" />
           </button>
         )}
       </div>
-      {user.role !== 'admin' ? (
+      {user.role !== 'admin' || !user.active ? (
         <SourceError error={new APIError('ADMIN_REQUIRED')} back={back} onRetry={reload} />
+      ) : !validReadActor(user) ? (
+        <SourceError error={new APIError('READ_CONTEXT_MISMATCH')} back={back} onRetry={reload} />
       ) : !validID ? (
         <SourceError error={new APIError('NOT_FOUND')} back={back} onRetry={reload} />
       ) : !validSearch ? (

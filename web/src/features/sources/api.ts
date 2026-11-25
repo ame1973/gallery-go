@@ -1,4 +1,6 @@
 import { api } from '../../lib/api/client';
+import { checkReadEcho, identityHeaders } from '../../lib/api/read-identity';
+import type { ReadActor } from '../../lib/api/read-identity';
 import type { components } from '../../lib/api/schema';
 import { APIError } from '../auth/api';
 import { safeID } from '../library/api';
@@ -50,16 +52,20 @@ function failure(result: Failure): never {
         ? 'ADMIN_REQUIRED'
         : result.response.status === 404
           ? 'NOT_FOUND'
-          : result.error?.code;
+          : result.response.status === 409
+            ? 'VERSION_CONFLICT'
+            : result.error?.code;
   throw new APIError(code ?? 'INTERNAL_ERROR', result.error?.request_id);
 }
 
-export async function listSources(cursor: string | null, signal: AbortSignal) {
+export async function listSources(actor: ReadActor, cursor: string | null, signal: AbortSignal) {
   const result = await api.GET('/admin/sources', {
     signal,
+    headers: identityHeaders(actor),
     params: { query: { limit: 30, ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   const page = result.data;
   if (
     !Array.isArray(page.items) ||
@@ -78,12 +84,14 @@ export async function listSources(cursor: string | null, signal: AbortSignal) {
   return page;
 }
 
-export async function getSource(id: string, signal: AbortSignal) {
+export async function getSource(actor: ReadActor, id: string, signal: AbortSignal) {
   const result = await api.GET('/admin/sources/{source_id}', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { source_id: id } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   if (!validSource(result.data) || result.data.id !== id) {
     throw new APIError('INVALID_SOURCE_RESPONSE');
   }
