@@ -130,9 +130,13 @@ export function useRevalidateReadIdentity(error: unknown) {
   useEffect(() => {
     if (
       error instanceof APIError &&
-      ['UNAUTHENTICATED', 'ADMIN_REQUIRED', 'VERSION_CONFLICT', 'READ_CONTEXT_MISMATCH'].includes(
-        error.code,
-      )
+      [
+        'UNAUTHENTICATED',
+        'ADMIN_REQUIRED',
+        'FORBIDDEN',
+        'VERSION_CONFLICT',
+        'READ_CONTEXT_MISMATCH',
+      ].includes(error.code)
     ) {
       void client.invalidateQueries({ queryKey: ['auth', 'me'] });
     }

@@ -6,6 +6,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Bind security-page session reads to the expected account and scope, and hide
+  old rows and confirmation dialogs during refresh or revocation. This does not
+  bind account mutations or resolve delayed authentication-cookie ordering.
+
 - Bind read-only source browsing to the expected account and scope, and reject
   missing or mismatched response echoes. This does not bind source mutations or
   resolve delayed authentication-cookie ordering.

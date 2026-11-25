@@ -57,20 +57,16 @@ export async function changePassword(input: components['schemas']['PasswordReque
   return data;
 }
 
-export async function listSessions(cursor: string | null, signal: AbortSignal) {
-  const { data, error } = await api.GET('/auth/sessions', {
-    signal,
-    params: { query: { limit: 30, ...(cursor ? { cursor } : {}) } },
-  });
-  if (!data) throw failure(error);
-  return data;
-}
-
 export async function revokeSession(id: string) {
   const result = await api.DELETE('/auth/sessions/{session_id}', {
     params: { path: { session_id: id }, header: await securityHeaders() },
   });
-  if (!result.response.ok) throw failure(result.error);
+  if (!result.response.ok) {
+    if (result.response.status === 401)
+      throw new APIError('UNAUTHENTICATED', result.error?.request_id);
+    if (result.response.status === 403 && !result.error?.code) throw new APIError('FORBIDDEN');
+    throw failure(result.error);
+  }
 }
 
 export function errorMessage(error: unknown) {

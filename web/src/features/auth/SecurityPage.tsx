@@ -1,14 +1,18 @@
 import { useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { UseMutationResult } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { useNavigate, useOutletContext } from 'react-router';
-import { LibraryNavigation } from '../library/common';
+import { LibraryNavigation, useRevalidateReadIdentity } from '../library/common';
 import { Field } from '../../components/ui/field';
-import { changePassword, errorMessage, listSessions, revokeSession, signOut } from './api';
+import { validReadActor } from '../../lib/api/read-identity';
+import { APIError, changePassword, errorMessage, revokeSession, signOut } from './api';
 import type { Session, User } from './api';
+import { listSessions } from './session-read';
 import { passwordSchema } from './forms';
 
 export function SecurityPage() {
@@ -55,7 +59,7 @@ export function SecurityPage() {
       </p>
       <div className="security-layout">
         <PasswordForm />
-        <SessionList user={user} />
+        <SessionList key={JSON.stringify([user.id, user.scope_id])} user={user} />
       </div>
     </main>
   );
@@ -144,28 +148,38 @@ function PasswordForm() {
 }
 
 function SessionList({ user }: { user: User }) {
-  const intl = useIntl();
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<Session | null>(null);
-  const trigger = useRef<HTMLButtonElement | null>(null);
   const heading = useRef<HTMLHeadingElement | null>(null);
-  const queryKey = [user.scope_id, 'auth', 'sessions'];
+  const queryKey = [user.id, user.scope_id, 'auth', 'sessions'];
+  const canRead = user.active && validReadActor(user);
   const sessions = useInfiniteQuery({
     queryKey,
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => listSessions(pageParam, signal),
+    queryFn: ({ pageParam, signal }) => listSessions(user, pageParam, signal),
     getNextPageParam: (page) => page.next_cursor ?? undefined,
+    enabled: canRead,
+    staleTime: 0,
+    gcTime: 0,
     retry: false,
+    networkMode: 'always',
+    refetchOnReconnect: true,
   });
+  useRevalidateReadIdentity(sessions.error);
   const revoke = useMutation({
     mutationFn: revokeSession,
-    onSuccess: async () => {
-      setSelected(null);
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey });
     },
   });
-  const formatTime = (value: string) =>
-    intl.formatDate(value, { dateStyle: 'medium', timeStyle: 'short' });
+  useRevalidateReadIdentity(revoke.error);
+  const identityError =
+    sessions.error instanceof APIError &&
+    ['VERSION_CONFLICT', 'READ_CONTEXT_MISMATCH', 'FORBIDDEN'].includes(sessions.error.code);
+  const errorMessageID = identityError
+    ? 'auth.readContextChanged'
+    : sessions.error instanceof APIError && sessions.error.code === 'UNAUTHENTICATED'
+      ? 'auth.sessionExpired'
+      : 'auth.networkError';
   return (
     <section className="security-panel" aria-labelledby="sessions-heading">
       <h2 id="sessions-heading" ref={heading} tabIndex={-1}>
@@ -174,62 +188,57 @@ function SessionList({ user }: { user: User }) {
       <p className="form-note">
         <FormattedMessage id="auth.sessionsDescription" />
       </p>
-      {sessions.isPending && (
-        <p role="status">
-          <FormattedMessage id="auth.sessionsLoading" />
-        </p>
-      )}
-      {sessions.isError && (
+      {!canRead ? (
         <p role="alert">
-          <FormattedMessage id="auth.networkError" />{' '}
-          <button className="text-button" onClick={() => void sessions.refetch()}>
+          <FormattedMessage id="auth.readContextChanged" />{' '}
+          <button
+            className="button button-secondary"
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })}
+          >
             <FormattedMessage id="retry" />
           </button>
         </p>
+      ) : revoke.isPending ? (
+        <p role="status">
+          <FormattedMessage id="auth.revoking" />
+        </p>
+      ) : sessions.isPending || sessions.isFetching ? (
+        <p role="status">
+          <FormattedMessage id="auth.sessionsLoading" />
+        </p>
+      ) : sessions.isError ? (
+        <p role="alert">
+          <FormattedMessage id={errorMessageID} />{' '}
+          <button className="button button-secondary" onClick={() => void sessions.refetch()}>
+            <FormattedMessage id="retry" />
+          </button>
+        </p>
+      ) : (
+        <>
+          <SessionRows
+            items={sessions.data.pages.flatMap((page) => page.items)}
+            heading={heading}
+            revoke={revoke}
+          />
+          {sessions.data.pages[0]?.items.length === 0 && (
+            <p>
+              <FormattedMessage id="auth.emptySessions" />
+            </p>
+          )}
+          {sessions.hasNextPage && (
+            <button
+              className="button button-secondary"
+              disabled={sessions.isFetchingNextPage}
+              onClick={() => void sessions.fetchNextPage()}
+            >
+              <FormattedMessage id="auth.loadMore" />
+            </button>
+          )}
+        </>
       )}
-      <ul className="session-list">
-        {sessions.data?.pages
-          .flatMap((page) => page.items)
-          .map((session) => (
-            <li key={session.id}>
-              <p className="session-agent">
-                {session.user_agent || intl.formatMessage({ id: 'auth.unknownBrowser' })}
-              </p>
-              <p className="form-note">{session.ip_address}</p>
-              <p className="form-note">
-                <FormattedMessage
-                  id="auth.lastSeen"
-                  values={{ time: formatTime(session.last_seen_at) }}
-                />
-              </p>
-              <p className="form-note">
-                <FormattedMessage
-                  id="auth.expires"
-                  values={{ time: formatTime(session.expires_at) }}
-                />
-              </p>
-              {session.current ? (
-                <strong className="current-session">
-                  <FormattedMessage id="auth.thisSession" />
-                </strong>
-              ) : (
-                <button
-                  className="button button-secondary"
-                  onClick={(event) => {
-                    trigger.current = event.currentTarget;
-                    revoke.reset();
-                    setSelected(session);
-                  }}
-                >
-                  <FormattedMessage id="auth.revoke" />
-                </button>
-              )}
-            </li>
-          ))}
-      </ul>
-      {sessions.data?.pages[0]?.items.length === 0 && (
-        <p>
-          <FormattedMessage id="auth.emptySessions" />
+      {revoke.isError && (
+        <p role="alert" className="error-message">
+          <FormattedMessage id={errorMessage(revoke.error)} />
         </p>
       )}
       {revoke.isSuccess && (
@@ -237,15 +246,64 @@ function SessionList({ user }: { user: User }) {
           <FormattedMessage id="auth.revoked" />
         </p>
       )}
-      {sessions.hasNextPage && (
-        <button
-          className="button button-secondary"
-          disabled={sessions.isFetchingNextPage}
-          onClick={() => void sessions.fetchNextPage()}
-        >
-          <FormattedMessage id="auth.loadMore" />
-        </button>
-      )}
+    </section>
+  );
+}
+
+function SessionRows({
+  items,
+  heading,
+  revoke,
+}: {
+  items: Session[];
+  heading: RefObject<HTMLHeadingElement | null>;
+  revoke: UseMutationResult<void, Error, string, unknown>;
+}) {
+  const intl = useIntl();
+  const [selected, setSelected] = useState<Session | null>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const formatTime = (value: string) =>
+    intl.formatDate(value, { dateStyle: 'medium', timeStyle: 'short' });
+  return (
+    <>
+      <ul className="session-list">
+        {items.map((session) => (
+          <li key={session.id}>
+            <p className="session-agent">
+              {session.user_agent || intl.formatMessage({ id: 'auth.unknownBrowser' })}
+            </p>
+            <p className="form-note">{session.ip_address}</p>
+            <p className="form-note">
+              <FormattedMessage
+                id="auth.lastSeen"
+                values={{ time: formatTime(session.last_seen_at) }}
+              />
+            </p>
+            <p className="form-note">
+              <FormattedMessage
+                id="auth.expires"
+                values={{ time: formatTime(session.expires_at) }}
+              />
+            </p>
+            {session.current ? (
+              <strong className="current-session">
+                <FormattedMessage id="auth.thisSession" />
+              </strong>
+            ) : (
+              <button
+                className="button button-secondary"
+                onClick={(event) => {
+                  trigger.current = event.currentTarget;
+                  revoke.reset();
+                  setSelected(session);
+                }}
+              >
+                <FormattedMessage id="auth.revoke" />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
       <AlertDialog.Root
         open={selected !== null}
         onOpenChange={(open) => {
@@ -268,11 +326,6 @@ function SessionList({ user }: { user: User }) {
             <AlertDialog.Description>
               <FormattedMessage id="auth.revokeDescription" />
             </AlertDialog.Description>
-            {revoke.isError && (
-              <p role="alert" className="error-message">
-                {intl.formatMessage({ id: errorMessage(revoke.error) })}
-              </p>
-            )}
             <div className="dialog-actions">
               <AlertDialog.Cancel asChild>
                 <button className="button button-secondary" disabled={revoke.isPending}>
@@ -292,6 +345,6 @@ function SessionList({ user }: { user: User }) {
           </AlertDialog.Content>
         </AlertDialog.Portal>
       </AlertDialog.Root>
-    </section>
+    </>
   );
 }

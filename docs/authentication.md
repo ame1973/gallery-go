@@ -150,6 +150,14 @@ authentication-response ordering across browser accounts.
 - `DELETE /api/v2/auth/sessions/{session_id}` revokes one owned session. Hidden or
   nonexistent sessions return 404; revoking the current session expires its cookie.
 
+The security page sends [read identity expectations](#optional-read-identity-expectations)
+for each session-list page and requires both matching response echoes. It hides
+previous rows and the confirmation dialog during a refresh or revocation, then
+re-reads the list after the result without automatically retrying the mutation.
+These read checks do not bind the revocation, logout or password-change request to
+the originating account or session, and do not fix delayed cookie responses. The
+same-browser action-ordering limitations above still apply.
+
 All JSON request bodies are bounded to 16 KiB and reject unknown fields, duplicate
 keys, incorrect field casing, explicit null fields, trailing JSON, and excessive
 nesting. API responses are private and no-store. No CORS origins are enabled.
