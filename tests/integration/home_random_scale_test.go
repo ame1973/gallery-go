@@ -12,16 +12,31 @@ import (
 	"gallerygo/internal/auth"
 )
 
+func TestRandomAlbums5KEnforcesVisibilityWithinMetadataDeadline(t *testing.T) {
+	testRandomAlbumsScale(t, 5_000)
+}
+
 func TestRandomAlbums100KEnforcesVisibilityWithinMetadataDeadline(t *testing.T) {
+	testRandomAlbumsScale(t, 100_000)
+}
+
+func testRandomAlbumsScale(t *testing.T, total int) {
+	t.Helper()
 	f := newCollectionFixture(t)
-	if _, err := f.db.Exec(`INSERT INTO libraries(id,name,created_at) VALUES('random-visible','Visible',0),('random-hidden','Hidden',0);
+	fixture := `INSERT INTO libraries(id,name,created_at) VALUES('random-visible','Visible',0),('random-hidden','Hidden',0);
  INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES('random-source','random-visible','Visible','/never-open-random-visible','{}','unavailable',0),('random-other-source','random-hidden','Hidden','/never-open-random-hidden','{}','unavailable',0);
  INSERT INTO permission_groups(id,name,created_at) VALUES('random-group','Random readers',0);
  INSERT INTO library_access(library_id,group_id) VALUES('random-visible','random-group');
  WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<99999)
  INSERT INTO albums(id,library_id,source_id,source_name,access_restricted,created_at,updated_at)
- SELECT printf('random-%06d',i),CASE WHEN i%2=0 THEN 'random-visible' ELSE 'random-hidden' END,CASE WHEN i%2=0 THEN 'random-source' ELSE 'random-other-source' END,'Album',CASE WHEN i%10=0 THEN 1 ELSE 0 END,0,0 FROM n`); err != nil {
+ SELECT printf('random-%06d',i),CASE WHEN i%2=0 THEN 'random-visible' ELSE 'random-hidden' END,CASE WHEN i%2=0 THEN 'random-source' ELSE 'random-other-source' END,'Album',CASE WHEN i%10=0 THEN 1 ELSE 0 END,0,0 FROM n`
+	fixture = strings.Replace(fixture, "i<99999", fmt.Sprintf("i<%d", total-1), 1)
+	if _, err := f.db.Exec(fixture); err != nil {
 		t.Fatal(err)
+	}
+	var count int
+	if err := f.db.QueryRow(`SELECT count(*) FROM albums WHERE id LIKE 'random-%'`).Scan(&count); err != nil || count != total {
+		t.Fatalf("fixture contains %d albums, want %d: %v", count, total, err)
 	}
 	check := func(viewer auth.Session, want, eligible int, visibleOnly bool) {
 		t.Helper()
@@ -31,7 +46,7 @@ func TestRandomAlbums100KEnforcesVisibilityWithinMetadataDeadline(t *testing.T) 
 		elapsed := time.Since(started)
 		cancel()
 		if err != nil || items == nil || len(items) != want || elapsed >= 10*time.Second {
-			t.Fatal("100k random sample exceeded the metadata deadline or returned the wrong size", elapsed, len(items), err)
+			t.Fatalf("%d-album random sample exceeded the metadata deadline or returned the wrong size: %s %d %v", total, elapsed, len(items), err)
 		}
 		seen := map[string]bool{}
 		for _, item := range items {
@@ -47,13 +62,13 @@ func TestRandomAlbums100KEnforcesVisibilityWithinMetadataDeadline(t *testing.T) 
 				t.Fatal("empty large sample invented media or a cover", item)
 			}
 		}
-		fmt.Printf("random-albums 100k eligible=%d sample=%d elapsed=%s\n", eligible, want, elapsed)
+		fmt.Printf("random-albums total=%d eligible=%d sample=%d elapsed=%s\n", total, eligible, want, elapsed)
 	}
-	// Before the grant, all 100,000 records must be filtered out before LIMIT.
+	// Before the grant, every record must be filtered out before LIMIT.
 	check(f.other, 0, 0, false)
 	if _, err := f.db.Exec(`INSERT INTO user_groups(user_id,group_id) VALUES(?,'random-group')`, f.other.User.ID); err != nil {
 		t.Fatal(err)
 	}
-	check(f.other, 100, 40000, true)
-	check(f.owner, 100, 100000, false)
+	check(f.other, 100, total*2/5, true)
+	check(f.owner, 100, total, false)
 }

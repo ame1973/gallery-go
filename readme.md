@@ -377,6 +377,7 @@ concurrency or production settings. The full suite can take substantial time;
 the CI test job has a two-hour overall limit for all Go, frontend and browser gates.
 
 ```sh
+make quick-check                   # Fresh pure-Go + frontend checks; 5k album fixtures
 make check                         # Go race/vet, formatting, API, TS, lint, unit tests, build
 CGO_ENABLED=0 go test ./...         # Pure-Go deployment path
 pnpm exec playwright install chromium
@@ -386,6 +387,14 @@ make favorite-delete-load          # Host-dependent 100k favorite-subtree deleti
 python3 -I tests/integration/docker_smoke.py gallerygo:local
 python3 -I tests/integration/docker_ingest.py gallerygo:local
 ```
+
+`quick-check` is a development shortcut, not the full validation gate. It runs fresh
+pure-Go tests and checks random-album and album-selection behavior using 5,000 albums,
+while omitting their corresponding 100,000-album tests and race/coverage. The smaller
+selection fixture has denser sparse tags and does not establish large-scale behavior.
+Other 100,000-record tests remain in the quick run. The full `make check` and CI still
+run the original 100,000-album cases and race/coverage; browser, host-load, device and
+release checks remain separate. Runtime depends on the host and is not guaranteed.
 
 `views-load` is a separate host-dependent capacity check: it runs without race
 instrumentation against fresh temporary SQLite databases, including a compiled

@@ -9,11 +9,24 @@ import (
 	"gallerygo/internal/access"
 )
 
-// Query plans and bounded cards share the exact production SQL builder. This
-// independent binary keeps the complete 100k matrix within the race deadline.
+// Query plans and bounded cards share the exact production SQL builder.
+func TestAlbumSelection5KUsesExistingSelectiveIndexesBeforeBoundedCards(t *testing.T) {
+	testAlbumSelectionScale(t, 5_000, 17, 50)
+}
+
 func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *testing.T) {
+	testAlbumSelectionScale(t, 100_000, 997, 100)
+}
+
+func testAlbumSelectionScale(t *testing.T, total, sparseModulo, folderModulo int) {
+	t.Helper()
+	replace := strings.NewReplacer(
+		"i<99999", fmt.Sprintf("i<%d", total-1),
+		"%997", fmt.Sprintf("%%%d", sparseModulo),
+		"%100", fmt.Sprintf("%%%d", folderModulo),
+	)
 	f := newCollectionFixture(t)
-	if _, err := f.db.Exec(`INSERT INTO libraries(id,name,created_at) VALUES('scale-l1','One',0),('scale-l2','Two',0);
+	fixture := `INSERT INTO libraries(id,name,created_at) VALUES('scale-l1','One',0),('scale-l2','Two',0);
  INSERT INTO sources(id,library_id,name,root_path,mapping_json,state,created_at) VALUES('scale-s1','scale-l1','One','/never-open-folder-scale-one','{}','unavailable',0),('scale-s2','scale-l2','Two','/never-open-folder-scale-two','{}','healthy',0);
  INSERT INTO people(id,source_id,relative_path,source_name,created_at) VALUES('scale-p1','scale-s1','one','Same',0),('scale-p2','scale-s1','two','Same',0),('scale-p3','scale-s2','other','Other',0);
  INSERT INTO tags(id,name) VALUES('scale-common','Common'),('scale-sparse','Sparse'),('scale-folder-sparse','Folder sparse');
@@ -24,8 +37,13 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
  INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-sparse' FROM albums WHERE CAST(substr(id,7) AS INTEGER)%997=0;
  INSERT INTO album_tags(album_id,tag_id) SELECT id,'scale-folder-sparse' FROM albums WHERE CAST(substr(id,7) AS INTEGER)%100=0;
  INSERT INTO permission_groups(id,name,created_at) VALUES('scale-folder-group','Folder readers',0);
- INSERT INTO library_access(library_id,group_id) VALUES('scale-l1','scale-folder-group'),('scale-l2','scale-folder-group')`); err != nil {
+ INSERT INTO library_access(library_id,group_id) VALUES('scale-l1','scale-folder-group'),('scale-l2','scale-folder-group')`
+	if _, err := f.db.Exec(replace.Replace(fixture)); err != nil {
 		t.Fatal(err)
+	}
+	var count int
+	if err := f.db.QueryRow(`SELECT count(*) FROM albums WHERE id LIKE 'scale-%'`).Scan(&count); err != nil || count != total {
+		t.Fatalf("fixture contains %d albums, want %d: %v", count, total, err)
 	}
 	if _, err := f.db.Exec(`INSERT INTO user_groups(user_id,group_id) VALUES(?,'scale-folder-group')`, f.other.User.ID); err != nil {
 		t.Fatal(err)
@@ -41,15 +59,15 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 		t.Fatal(err)
 	}
 	// Retain the original sparse favorite and clear distribution for the owner.
-	if _, err := f.db.Exec(`INSERT INTO favorites(user_id,album_id,created_at,favorited,updated_at,version)
+	if _, err := f.db.Exec(replace.Replace(`INSERT INTO favorites(user_id,album_id,created_at,favorited,updated_at,version)
  SELECT ?,id,0,CASE WHEN CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 THEN 1 ELSE 0 END,0,1
- FROM albums WHERE id LIKE 'scale-%' AND (CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 OR CAST(substr(id,7) AS INTEGER)%10=0)`, f.owner.User.ID); err != nil {
+ FROM albums WHERE id LIKE 'scale-%' AND (CAST(substr(id,7) AS INTEGER)%997=0 OR CAST(substr(id,7) AS INTEGER)%97=0 OR CAST(substr(id,7) AS INTEGER)%10=0)`), f.owner.User.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.db.Exec(`INSERT INTO favorite_collections(id,user_id,name,parent_id,created_at,updated_at) VALUES('scale-folder',?,'Folder',NULL,0,0),('scale-child',?,'Child','scale-folder',0,0)`, f.other.User.ID, f.other.User.ID); err != nil {
 		t.Fatal(err)
 	}
-	// The second real actor has 4% live favorites, a 1% tag and more clear
+	// The second real actor has 4% live favorites, a sparse tag and more clear
 	// tombstones. A child assignment is never part of the direct parent page.
 	if _, err := f.db.Exec(`INSERT INTO favorites(user_id,album_id,collection_id,created_at,favorited,updated_at,version)
  SELECT ?,id,CASE WHEN CAST(substr(id,7) AS INTEGER)%25=0 AND CAST(substr(id,7) AS INTEGER)%8<4 THEN 'scale-folder' WHEN CAST(substr(id,7) AS INTEGER)%25=0 AND CAST(substr(id,7) AS INTEGER)%8=7 THEN 'scale-child' END,0,CASE WHEN CAST(substr(id,7) AS INTEGER)%25=0 THEN 1 ELSE 0 END,0,1
@@ -83,7 +101,7 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 			} else if filter.FavoriteUnfiled {
 				viewer, group = f.other, 2
 			}
-			after, indexedKey := access.AlbumPosition{ID: "scale-050000"}, int64(0)
+			after, indexedKey := access.AlbumPosition{ID: fmt.Sprintf("scale-%06d", total/2)}, int64(0)
 			var sortKey any = int64(0)
 			nameKey, ratingKey := "", 0.0
 			switch order {
@@ -184,11 +202,11 @@ func TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards(t *tes
 					t.Fatal("large selection included a non-fixture album", item.ID, err)
 				}
 				if group != 0 {
-					if number%25 != 0 || group == 1 && number%8 >= 4 || group == 2 && (number%8 < 4 || number%8 == 7) || filter.LibraryID != "" && number%2 != 0 || filter.SourceID != "" && number%2 != 0 || filter.PersonID != "" && number%4 != 0 || filter.TagID == "scale-folder-sparse" && number%100 != 0 || filter.TagID == "scale-common" && number%2 != 0 {
+					if number%25 != 0 || group == 1 && number%8 >= 4 || group == 2 && (number%8 < 4 || number%8 == 7) || filter.LibraryID != "" && number%2 != 0 || filter.SourceID != "" && number%2 != 0 || filter.PersonID != "" && number%4 != 0 || filter.TagID == "scale-folder-sparse" && number%folderModulo != 0 || filter.TagID == "scale-common" && number%2 != 0 {
 						t.Fatal("large folder selection crossed its actor, assignment or other selectors", filter, item.ID)
 					}
 				} else if filter.Favorite != "" {
-					live := number%997 == 0 || number%97 == 0
+					live := number%sparseModulo == 0 || number%97 == 0
 					if live != (filter.Favorite == "true") {
 						t.Fatal("large selection included the wrong live/cleared/absent favorite state", filter, item.ID)
 					}

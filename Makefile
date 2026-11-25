@@ -1,4 +1,4 @@
-.PHONY: build test check fmt dev api e2e views-load favorite-delete-load search-conformance
+.PHONY: build test check quick-check fmt dev api e2e views-load favorite-delete-load search-conformance
 
 build:
 	pnpm build
@@ -14,6 +14,19 @@ check:
 	# Keep production-strength bcrypt and avoid overlapping isolated package binaries.
 	go test -p 1 -timeout=15m -race -cover ./...
 	test -z "$$(gofmt -l cmd internal migrations contracts)"
+	pnpm api:check
+	pnpm typecheck
+	pnpm lint
+	pnpm format:check
+	pnpm test
+	pnpm build
+
+quick-check:
+	@printf '%s\n' 'Quick check: 5k album cases, no race or coverage; run make check for the full gate.'
+	python3 -I tests/integration/repository_hygiene.py
+	go vet ./...
+	CGO_ENABLED=0 go test -p 1 -count=1 -timeout=15m -skip '^(TestRandomAlbums100KEnforcesVisibilityWithinMetadataDeadline|TestAlbumSelection100KUsesExistingSelectiveIndexesBeforeBoundedCards)$$' ./...
+	test -z "$$(gofmt -l cmd internal migrations contracts tests/integration/home_random_scale_test.go tests/integration/favorite_folder_scale_test.go)"
 	pnpm api:check
 	pnpm typecheck
 	pnpm lint

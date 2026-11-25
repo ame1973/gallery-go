@@ -50,6 +50,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Added
 
+- An optional `make quick-check` for development: fresh pure-Go and frontend checks
+  use 5,000-album random and selection fixtures. Race/coverage, the two corresponding
+  100,000-album cases and browser/release checks remain separate required gates.
+
 - A versioned Unicode 15 text normalization and tokenization profile shared by Go
   and browser code, with bounded inputs and a cross-runtime conformance runner.
   Search APIs, indexes, authorization filtering and offline search are not yet available.
