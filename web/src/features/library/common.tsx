@@ -125,6 +125,20 @@ export function useRevalidateSession(error: unknown) {
   }, [client, error]);
 }
 
+export function useRevalidateReadIdentity(error: unknown) {
+  const client = useQueryClient();
+  useEffect(() => {
+    if (
+      error instanceof APIError &&
+      ['UNAUTHENTICATED', 'ADMIN_REQUIRED', 'VERSION_CONFLICT', 'READ_CONTEXT_MISMATCH'].includes(
+        error.code,
+      )
+    ) {
+      void client.invalidateQueries({ queryKey: ['auth', 'me'] });
+    }
+  }, [client, error]);
+}
+
 export function GalleryLoading({ message }: { message: string }) {
   return (
     <div role="status">

@@ -29,6 +29,14 @@ revocation detection without another request. An invalid or scope-changed cursor
 requires returning to the first page. Counts and diagnostics have the meanings
 explained below and must not be treated as unique media counts or source health.
 
+The interface sends [read identity expectations](authentication.md#optional-read-identity-expectations)
+on each job, attempt, and diagnostic read. It verifies both echoed values before
+showing the combined result, and refreshes the session after an identity mismatch.
+If a proxy strips the expectations or their echoes, the interface rejects the
+response rather than associating it with a different account or scope. These checks
+are not mutation fences, do not distinguish same-account sessions, and do not fix
+delayed authentication-cookie ordering.
+
 This browser is read-only. Scan creation, cancellation, retry, and batch-result
 management remain available through the API, not this interface.
 

@@ -1,35 +1,12 @@
 import { api } from '../../lib/api/client';
+import { checkReadEcho, identityHeaders, identityValue } from '../../lib/api/read-identity';
+import type { ReadActor } from '../../lib/api/read-identity';
 import type { components } from '../../lib/api/schema';
 import { APIError } from '../auth/api';
 import type { User } from '../auth/api';
 import { safeID } from '../library/api';
 
-const expectedUser = 'X-GalleryGo-Expected-User';
-const expectedScope = 'X-GalleryGo-Expected-Scope';
-type Actor = Pick<User, 'id' | 'scope_id'>;
 type Failure = { response: Response; error?: components['schemas']['Problem'] };
-
-function identityValue(value: unknown): value is string {
-  return typeof value === 'string' && /^[\x21-\x7e]{1,128}$/.test(value);
-}
-
-export function validReadActor(actor: Actor) {
-  return identityValue(actor.id) && identityValue(actor.scope_id);
-}
-
-function identityHeaders(actor: Actor) {
-  if (!validReadActor(actor)) throw new APIError('READ_CONTEXT_MISMATCH');
-  return { [expectedUser]: actor.id, [expectedScope]: actor.scope_id };
-}
-
-function checkEcho(response: Response, actor: Actor) {
-  if (
-    response.headers.get(expectedUser) !== actor.id ||
-    response.headers.get(expectedScope) !== actor.scope_id
-  ) {
-    throw new APIError('READ_CONTEXT_MISMATCH');
-  }
-}
 
 function failure(result: Failure): never {
   const code =
@@ -62,14 +39,14 @@ function validUser(value: unknown): value is User {
   );
 }
 
-export async function listUsers(actor: Actor, cursor: string | null, signal: AbortSignal) {
+export async function listUsers(actor: ReadActor, cursor: string | null, signal: AbortSignal) {
   const result = await api.GET('/admin/users', {
     signal,
     headers: identityHeaders(actor),
     params: { query: { limit: 30, ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
-  checkEcho(result.response, actor);
+  checkReadEcho(result.response, actor);
   const page = result.data;
   if (
     !Array.isArray(page.items) ||
@@ -88,14 +65,14 @@ export async function listUsers(actor: Actor, cursor: string | null, signal: Abo
   return page;
 }
 
-export async function getUser(actor: Actor, id: string, signal: AbortSignal) {
+export async function getUser(actor: ReadActor, id: string, signal: AbortSignal) {
   const result = await api.GET('/admin/users/{user_id}', {
     signal,
     headers: identityHeaders(actor),
     params: { path: { user_id: id } },
   });
   if (!result.data) return failure(result);
-  checkEcho(result.response, actor);
+  checkReadEcho(result.response, actor);
   if (!validUser(result.data) || result.data.id !== id) {
     throw new APIError('INVALID_USERS_RESPONSE');
   }

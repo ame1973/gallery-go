@@ -6,6 +6,10 @@ All notable public changes are recorded here. This project uses Conventional Com
 
 ### Fixed
 
+- Bind read-only job history requests to the expected account and scope, and reject
+  missing or mismatched echoes before displaying any list, job, attempt or diagnostic.
+  This does not bind mutations or resolve delayed authentication-cookie ordering.
+
 - Bind protected transactional GET/HEAD authorization to the session and scope
   captured by middleware, rejecting a changed scope instead of issuing a page
   cursor for an earlier authorization context. Earlier committed read snapshots

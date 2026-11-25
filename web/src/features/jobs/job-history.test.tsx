@@ -94,7 +94,18 @@ function problem(status: number, code: string) {
 }
 
 function installFetch(handler: (url: URL, request: Request) => Response | Promise<Response>) {
-  const fetch = vi.fn(async (request: Request) => handler(new URL(request.url), request));
+  const fetch = vi.fn(async (request: Request) => {
+    const url = new URL(request.url);
+    const result = await handler(url, request);
+    if (!result.ok || !url.pathname.startsWith('/api/v2/admin/jobs')) return result;
+    const user = request.headers.get('X-GalleryGo-Expected-User');
+    const scope = request.headers.get('X-GalleryGo-Expected-Scope');
+    if (!user || !scope) return result;
+    const headers = new Headers(result.headers);
+    headers.set('X-GalleryGo-Expected-User', user);
+    headers.set('X-GalleryGo-Expected-Scope', scope);
+    return new Response(result.body, { status: result.status, headers });
+  });
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }

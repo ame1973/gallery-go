@@ -11,8 +11,6 @@ const en = {
   'users.denied': 'Administrator access is required to view accounts.',
   'users.notFound': 'This account is unavailable.',
   'users.invalidPage': 'This page link is invalid or expired. Return to the first page.',
-  'users.contextChanged':
-    'The current account changed or could not be verified. Refresh the session and try again.',
   'users.error': 'Could not load accounts. Check the connection and try again.',
   'users.readOnly':
     'Account changes, password resets, groups and sessions are available through the API.',
@@ -48,7 +46,6 @@ export const userMessages: Record<'en' | 'zh-TW' | 'zh-CN', Messages> = {
     'users.denied': '需要管理員權限才能檢視帳號。',
     'users.notFound': '此帳號無法使用。',
     'users.invalidPage': '此分頁連結無效或已失效，請回到第一頁。',
-    'users.contextChanged': '目前的帳號已變更或無法確認。請重新整理工作階段後再試。',
     'users.error': '無法載入帳號。請檢查連線後再試。',
     'users.readOnly': '帳號變更、密碼重設、群組及工作階段可透過 API 管理。',
     'users.username': '使用者名稱',
@@ -78,7 +75,6 @@ export const userMessages: Record<'en' | 'zh-TW' | 'zh-CN', Messages> = {
     'users.denied': '需要管理员权限才能查看账号。',
     'users.notFound': '此账号不可用。',
     'users.invalidPage': '此分页链接无效或已失效，请返回第一页。',
-    'users.contextChanged': '当前账号已变更或无法确认。请刷新会话后重试。',
     'users.error': '无法加载账号。请检查连接后重试。',
     'users.readOnly': '账号变更、密码重置、群组及会话可通过 API 管理。',
     'users.username': '用户名',

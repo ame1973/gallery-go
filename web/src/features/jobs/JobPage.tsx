@@ -2,10 +2,11 @@ import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
+import { validReadActor } from '../../lib/api/read-identity';
 import { APIError } from '../auth/api';
 import type { User } from '../auth/api';
 import { safeID } from '../library/api';
-import { LibraryNavigation, usePageFocus, useRevalidateSession } from '../library/common';
+import { LibraryNavigation, usePageFocus, useRevalidateReadIdentity } from '../library/common';
 import { getJobHistory } from './api';
 import {
   Diagnostic,
@@ -41,18 +42,20 @@ export function JobPage() {
   const back = jobsBack((location.state as { from?: unknown } | null)?.from);
   const validID = safeID(jobId);
   const validSearch = validHistorySearch(search);
+  const canRead = user.role === 'admin' && user.active && validReadActor(user);
   const main = usePageFocus(JSON.stringify([attempt, issue]), jobId);
   const intl = useIntl();
   const query = useQuery({
     queryKey: [user.id, user.scope_id, 'admin-job', jobId, attempt, issue],
-    queryFn: ({ signal }) => getJobHistory(jobId, attempt, issue, signal),
-    enabled: user.role === 'admin' && validID && validSearch,
+    queryFn: ({ signal }) => getJobHistory(user, jobId, attempt, issue, signal),
+    enabled: canRead && validID && validSearch,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
-  useRevalidateSession(query.error);
+  useRevalidateReadIdentity(query.error);
   const first = validID ? jobPath(jobId, null, null) : '/admin/jobs';
   const reload = () => {
     main.current?.focus();
@@ -73,18 +76,25 @@ export function JobPage() {
             <FormattedMessage id="jobs.historyNote" />
           </p>
         </div>
-        {user.role === 'admin' && validID && validSearch && (
+        {canRead && validID && validSearch && (
           <button className="button button-secondary" disabled={query.isFetching} onClick={reload}>
             <FormattedMessage id="jobs.refresh" />
           </button>
         )}
       </div>
-      {user.role !== 'admin' ? (
+      {user.role !== 'admin' || !user.active ? (
         <JobError
           error={new APIError('ADMIN_REQUIRED')}
           first="/admin/jobs"
           firstLabel="library.first"
           onRetry={() => {}}
+        />
+      ) : !validReadActor(user) ? (
+        <JobError
+          error={new APIError('READ_CONTEXT_MISMATCH')}
+          first="/admin/jobs"
+          firstLabel="library.first"
+          onRetry={reload}
         />
       ) : !validID ? (
         <JobError

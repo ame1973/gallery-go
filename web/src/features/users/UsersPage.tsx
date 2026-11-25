@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
+import { validReadActor } from '../../lib/api/read-identity';
 import { APIError } from '../auth/api';
 import type { User } from '../auth/api';
 import { safeID } from '../library/api';
@@ -9,9 +9,10 @@ import {
   LibraryNavigation,
   PageNavigation,
   usePageFocus,
+  useRevalidateReadIdentity,
   validCursorSearch,
 } from '../library/common';
-import { getUser, listUsers, validReadActor } from './api';
+import { getUser, listUsers } from './api';
 
 function usersBack(from: unknown) {
   if (typeof from !== 'string' || from.includes('#')) return '/admin/users';
@@ -19,20 +20,6 @@ function usersBack(from: unknown) {
   const path = question < 0 ? from : from.slice(0, question);
   const search = new URLSearchParams(question < 0 ? '' : from.slice(question + 1));
   return path === '/admin/users' && validCursorSearch(search) ? from : '/admin/users';
-}
-
-function useIdentityRecovery(error: unknown) {
-  const client = useQueryClient();
-  useEffect(() => {
-    if (
-      error instanceof APIError &&
-      ['UNAUTHENTICATED', 'ADMIN_REQUIRED', 'VERSION_CONFLICT', 'READ_CONTEXT_MISMATCH'].includes(
-        error.code,
-      )
-    ) {
-      void client.invalidateQueries({ queryKey: ['auth', 'me'] });
-    }
-  }, [client, error]);
 }
 
 function AccountError({
@@ -57,7 +44,7 @@ function AccountError({
         : invalid
           ? 'users.invalidPage'
           : context
-            ? 'users.contextChanged'
+            ? 'auth.readContextChanged'
             : 'users.error';
   return (
     <div className="gallery-message" role="alert">
@@ -108,7 +95,7 @@ export function UsersPage() {
     networkMode: 'always',
     refetchOnReconnect: true,
   });
-  useIdentityRecovery(query.error);
+  useRevalidateReadIdentity(query.error);
   const next =
     query.data?.has_more && query.data.next_cursor
       ? `/admin/users?${new URLSearchParams({ cursor: query.data.next_cursor })}`
@@ -225,7 +212,7 @@ export function UserPage() {
     networkMode: 'always',
     refetchOnReconnect: true,
   });
-  useIdentityRecovery(query.error);
+  useRevalidateReadIdentity(query.error);
   const reload = () => {
     main.current?.focus();
     void query.refetch();

@@ -1,4 +1,6 @@
 import { api } from '../../lib/api/client';
+import { checkReadEcho, identityHeaders } from '../../lib/api/read-identity';
+import type { ReadActor } from '../../lib/api/read-identity';
 import type { components } from '../../lib/api/schema';
 import { APIError } from '../auth/api';
 import { safeID } from '../library/api';
@@ -78,16 +80,25 @@ function failure(result: Failure): never {
         ? 'ADMIN_REQUIRED'
         : result.response.status === 404
           ? 'NOT_FOUND'
-          : result.error?.code;
+          : result.response.status === 409
+            ? 'VERSION_CONFLICT'
+            : result.error?.code;
   throw new APIError(code ?? 'INTERNAL_ERROR', result.error?.request_id);
 }
 
-export async function listJobs(status: JobStatus | '', cursor: string | null, signal: AbortSignal) {
+export async function listJobs(
+  actor: ReadActor,
+  status: JobStatus | '',
+  cursor: string | null,
+  signal: AbortSignal,
+) {
   const result = await api.GET('/admin/jobs', {
     signal,
+    headers: identityHeaders(actor),
     params: { query: { limit: 30, ...(status && { status }), ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   if (!validPage(result.data) || result.data.items.some((job) => !validJob(job))) {
     throw new APIError('INVALID_JOB_RESPONSE');
   }
@@ -95,15 +106,18 @@ export async function listJobs(status: JobStatus | '', cursor: string | null, si
 }
 
 export async function getJobHistory(
+  actor: ReadActor,
   id: string,
   attemptCursor: string | null,
   issueCursor: string | null,
   signal: AbortSignal,
 ) {
+  const headers = identityHeaders(actor);
   const [job, attempts, issues] = await Promise.all([
-    api.GET('/admin/jobs/{job_id}', { signal, params: { path: { job_id: id } } }),
+    api.GET('/admin/jobs/{job_id}', { signal, headers, params: { path: { job_id: id } } }),
     api.GET('/admin/jobs/{job_id}/attempts', {
       signal,
+      headers,
       params: {
         path: { job_id: id },
         query: { limit: 30, ...(attemptCursor && { cursor: attemptCursor }) },
@@ -111,6 +125,7 @@ export async function getJobHistory(
     }),
     api.GET('/admin/jobs/{job_id}/issues', {
       signal,
+      headers,
       params: {
         path: { job_id: id },
         query: { limit: 30, ...(issueCursor && { cursor: issueCursor }) },
@@ -120,6 +135,9 @@ export async function getJobHistory(
   if (!job.data) return failure(job);
   if (!attempts.data) return failure(attempts);
   if (!issues.data) return failure(issues);
+  checkReadEcho(job.response, actor);
+  checkReadEcho(attempts.response, actor);
+  checkReadEcho(issues.response, actor);
   if (
     job.data.id !== id ||
     !validJob(job.data) ||

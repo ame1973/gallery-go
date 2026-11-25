@@ -135,7 +135,9 @@ export function JobError({
           ? 'jobs.notFound'
           : invalid
             ? 'jobs.invalidPage'
-            : 'jobs.error';
+            : code === 'VERSION_CONFLICT' || code === 'READ_CONTEXT_MISMATCH'
+              ? 'auth.readContextChanged'
+              : 'jobs.error';
   return (
     <div className="gallery-message" role="alert">
       <p>
