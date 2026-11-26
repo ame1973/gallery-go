@@ -17,8 +17,9 @@ cursor must be restarted from the first page. The album list location is retaine
 when following its detail link. The browser sends [account and scope expectations](authentication.md#optional-read-identity-expectations)
 for album-list, album-detail, album-media and personal-rating reads. It rejects
 missing or mismatched response echoes and rechecks the session on an identity error.
-These read checks do not bind preview requests, mutations or other media-detail
-reads, and do not resolve delayed authentication-cookie responses.
+These album read checks do not bind image-content requests or mutations and do not
+resolve delayed authentication-cookie responses. Media detail and preview metadata
+reads use the same expectations; see [media browsing](media.md#in-the-gallery-browser).
 
 Only near-viewport cards request ready preview metadata. The browser selects a
 bounded image variant and constructs the documented same-origin protected content

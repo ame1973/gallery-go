@@ -34,7 +34,13 @@ and an infinite loop is identified explicitly. Video duration describes the inde
 primary track, not a promise that the browser can play it.
 
 The page requests a bounded same-origin ready image preview only for the revision
-in its metadata response. A missing preview does not prove the source is absent.
+in its metadata response. Media details and ready-variant metadata send [account and
+scope expectations](authentication.md#optional-read-identity-expectations) and reject
+missing or mismatched response echoes; the details page hides its content when either
+read loses its expected identity. The separate browser image-content request still
+uses the actual session cookie without those expectation headers. This does not bind
+image bytes to the page account or resolve delayed cookie responses. A missing preview
+does not prove the source is absent.
 After a preview load fails, the page rechecks media access without endlessly
 retrying a broken image. An account with original-download permission can choose
 **Download original** explicitly when the current revision is available. This uses

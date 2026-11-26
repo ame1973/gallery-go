@@ -153,6 +153,66 @@ test('media detail uses current visibility, protected previews, and honest metad
     await expect(page.getByRole('heading', { name: '媒体详情' })).toBeVisible();
     await expect(page.getByText('编码尺寸')).toBeVisible();
     await page.getByRole('combobox', { name: '语言' }).selectOption('en');
+
+    const meResponse = await page.request.get('/api/v2/auth/me');
+    expect(meResponse.status()).toBe(200);
+    const me = (await meResponse.json()) as components['schemas']['User'];
+    for (const endpoint of [mediaAPI, `${mediaAPI}/variants`]) {
+      for (const mode of [
+        'stripped-request',
+        'partial-request',
+        'wrong-echo',
+        'wrong-request',
+      ] as const) {
+        const matches = (candidate: URL) => candidate.pathname === endpoint;
+        let observed = false;
+        await page.route(matches, async (route) => {
+          const requestHeaders = await route.request().allHeaders();
+          expect(requestHeaders['x-gallerygo-expected-user']).toBe(me.id);
+          expect(requestHeaders['x-gallerygo-expected-scope']).toBe(me.scope_id);
+          if (mode === 'stripped-request' || mode === 'partial-request') {
+            delete requestHeaders['x-gallerygo-expected-scope'];
+            if (mode === 'stripped-request') delete requestHeaders['x-gallerygo-expected-user'];
+          } else if (mode === 'wrong-request') {
+            requestHeaders['x-gallerygo-expected-user'] = 'different-account';
+          }
+          const upstream = await route.fetch({ headers: requestHeaders });
+          const responseHeaders = upstream.headers();
+          if (mode === 'wrong-request' || mode === 'partial-request') {
+            expect(upstream.status()).toBe(mode === 'wrong-request' ? 409 : 400);
+            expect(await upstream.json()).toMatchObject({
+              code: mode === 'wrong-request' ? 'VERSION_CONFLICT' : 'INVALID_READ_CONTEXT',
+            });
+          } else if (mode === 'stripped-request') {
+            expect(upstream.status()).toBe(200);
+            expect(responseHeaders['x-gallerygo-expected-user']).toBeUndefined();
+            expect(responseHeaders['x-gallerygo-expected-scope']).toBeUndefined();
+          } else {
+            expect(upstream.status()).toBe(200);
+            expect(responseHeaders['x-gallerygo-expected-user']).toBe(me.id);
+            expect(responseHeaders['x-gallerygo-expected-scope']).toBe(me.scope_id);
+            responseHeaders['x-gallerygo-expected-scope'] = 'different-scope';
+          }
+          observed = true;
+          await route.fulfill({ response: upstream, headers: responseHeaders });
+        });
+        try {
+          await page.goto(detailPath);
+          await expect(page.getByRole('alert')).toContainText(
+            'The current account changed or could not be verified.',
+          );
+          expect(observed).toBe(true);
+          await expect(page.getByRole('heading', { name: 'fixture.png' })).toHaveCount(0);
+          await expect(page.getByText('Encoded dimensions')).toHaveCount(0);
+          await expect(page.getByRole('img', { name: 'Preview of fixture.png' })).toHaveCount(0);
+        } finally {
+          await page.unroute(matches);
+        }
+        await page.getByRole('button', { name: 'Try again' }).click();
+        await expect(page.getByRole('heading', { name: 'fixture.png' })).toBeVisible();
+        await expect(page.getByRole('img', { name: 'Preview of fixture.png' })).toBeVisible();
+      }
+    }
     await page.getByRole('link', { name: 'Back to album' }).click();
     await expect(page).toHaveURL(new RegExp(`/albums/${albumID}$`));
     await page.getByRole('link', { name: 'View fixture.png details' }).click();

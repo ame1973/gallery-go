@@ -84,7 +84,9 @@ function installFetch(handler: (url: URL) => Response | Promise<Response>) {
     const response = await handler(url);
     if (
       request.method === 'GET' &&
-      (url.pathname.startsWith('/api/v2/people') || url.pathname.startsWith('/api/v2/albums')) &&
+      (url.pathname.startsWith('/api/v2/people') ||
+        url.pathname.startsWith('/api/v2/albums') ||
+        url.pathname.startsWith('/api/v2/media/')) &&
       response.ok
     ) {
       for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {
@@ -201,8 +203,8 @@ describe('protected media detail', () => {
     expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
   });
 
-  it('hides the original link when the page account ID is unsafe', async () => {
-    installFetch((url) => {
+  it('does not read media for an invalid account ID', async () => {
+    const fetch = installFetch((url) => {
       if (url.pathname.endsWith('/auth/me')) {
         return Response.json({ ...user, id: '\ud800', download_original: true });
       }
@@ -210,8 +212,12 @@ describe('protected media detail', () => {
       return Response.json(media);
     });
     renderPage('/inspect/media-one/details');
-    expect(await screen.findByRole('heading', { name: 'photo.png' })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'photo.png' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Download original' })).not.toBeInTheDocument();
+    expect(
+      fetch.mock.calls.every(([request]) => new URL(request.url).pathname.endsWith('/auth/me')),
+    ).toBe(true);
   });
 
   it('requires the real session before requesting a media item', async () => {

@@ -90,7 +90,9 @@ function installFetch(handler: (url: URL) => Response | Promise<Response>) {
     const response = await handler(url);
     if (
       request.method === 'GET' &&
-      (url.pathname.startsWith('/api/v2/people') || url.pathname.startsWith('/api/v2/albums')) &&
+      (url.pathname.startsWith('/api/v2/people') ||
+        url.pathname.startsWith('/api/v2/albums') ||
+        url.pathname.startsWith('/api/v2/media/')) &&
       response.ok
     ) {
       for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {

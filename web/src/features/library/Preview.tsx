@@ -4,6 +4,7 @@ import { FormattedMessage } from 'react-intl';
 import { APIError } from '../auth/api';
 import type { User } from '../auth/api';
 import { previewURL } from './api';
+import { useRevalidateReadIdentity } from './common';
 
 export function Preview({
   mediaID,
@@ -43,17 +44,25 @@ export function Preview({
 
   const preview = useQuery({
     queryKey: [user.id, user.scope_id, 'preview', mediaID, { revision }],
-    queryFn: ({ signal }) => previewURL(mediaID!, signal, revision),
+    queryFn: ({ signal }) => previewURL(user, mediaID!, signal, revision),
     enabled: visible && mediaID !== null && revision !== null,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
+  useRevalidateReadIdentity(preview.error);
   useEffect(() => {
     if (
       preview.error instanceof APIError &&
-      ['NOT_FOUND', 'UNAUTHENTICATED', 'FORBIDDEN'].includes(preview.error.code)
+      [
+        'NOT_FOUND',
+        'UNAUTHENTICATED',
+        'FORBIDDEN',
+        'VERSION_CONFLICT',
+        'READ_CONTEXT_MISMATCH',
+      ].includes(preview.error.code)
     ) {
       onAccessLost?.(preview.error);
     }

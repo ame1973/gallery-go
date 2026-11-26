@@ -18,12 +18,14 @@ function failure(result: Failure): never {
       ? 'UNAUTHENTICATED'
       : result.response.status === 404
         ? 'NOT_FOUND'
-        : (result.error?.code ??
-          (result.response.status === 403
-            ? 'FORBIDDEN'
-            : result.response.status === 409
-              ? 'VERSION_CONFLICT'
-              : undefined));
+        : result.response.status === 400 && result.error?.code === 'INVALID_READ_CONTEXT'
+          ? 'READ_CONTEXT_MISMATCH'
+          : (result.error?.code ??
+            (result.response.status === 403
+              ? 'FORBIDDEN'
+              : result.response.status === 409
+                ? 'VERSION_CONFLICT'
+                : undefined));
   throw new APIError(code ?? 'INTERNAL_ERROR', result.error?.request_id);
 }
 
@@ -159,12 +161,14 @@ export async function listMedia(
   return result.data;
 }
 
-export async function getMedia(id: string, signal: AbortSignal) {
+export async function getMedia(actor: ReadActor, id: string, signal: AbortSignal) {
   const result = await api.GET('/media/{media_id}', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { media_id: id } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   if (result.data.id !== id || !safeID(result.data.album_id)) {
     throw new APIError('INVALID_MEDIA_RESPONSE');
   }
@@ -205,13 +209,20 @@ export function safeID(id: string) {
   );
 }
 
-export async function previewURL(mediaID: string, signal: AbortSignal, revision?: string | null) {
+export async function previewURL(
+  actor: ReadActor,
+  mediaID: string,
+  signal: AbortSignal,
+  revision?: string | null,
+) {
   if (!safeID(mediaID) || revision === null) return null;
   const result = await api.GET('/media/{media_id}/variants', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { media_id: mediaID }, query: { limit: 100 } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   const items =
     revision === undefined
       ? result.data.items

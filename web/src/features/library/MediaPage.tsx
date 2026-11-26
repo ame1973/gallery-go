@@ -15,7 +15,7 @@ import {
   peopleListBack,
   personDetailBack,
   usePageFocus,
-  useRevalidateSession,
+  useRevalidateReadIdentity,
 } from './common';
 import { Preview } from './Preview';
 
@@ -52,15 +52,16 @@ function MediaPageContent({ user, mediaId }: { user: User; mediaId: string }) {
   const main = usePageFocus(null, mediaId);
   const query = useQuery({
     queryKey: [user.id, user.scope_id, 'media', mediaId],
-    queryFn: ({ signal }) => getMedia(mediaId, signal),
+    queryFn: ({ signal }) => getMedia(user, mediaId, signal),
     enabled: validID && validSearch,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
-  useRevalidateSession(query.error);
-  useRevalidateSession(previewDenial);
+  useRevalidateReadIdentity(query.error);
+  useRevalidateReadIdentity(previewDenial);
 
   const retained = candidate && (!query.isSuccess || candidate.id === query.data.album_id);
   const currentAlbum =
