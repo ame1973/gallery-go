@@ -82,7 +82,11 @@ function installFetch(handler: (url: URL) => Response | Promise<Response>) {
   const fetch = vi.fn(async (request: Request) => {
     const url = new URL(request.url);
     const response = await handler(url);
-    if (url.pathname.startsWith('/api/v2/people') && response.ok) {
+    if (
+      request.method === 'GET' &&
+      (url.pathname.startsWith('/api/v2/people') || url.pathname.startsWith('/api/v2/albums')) &&
+      response.ok
+    ) {
       for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {
         const value = request.headers.get(name);
         if (value) response.headers.set(name, value);

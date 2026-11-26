@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -85,12 +85,25 @@ function ratingResponse() {
 }
 
 function installFetch(handler: (url: URL) => Response | Promise<Response>) {
-  const fetch = vi.fn(async (request: Request) => handler(new URL(request.url)));
+  const fetch = vi.fn(async (request: Request) => {
+    const url = new URL(request.url);
+    const response = await handler(url);
+    if (request.method === 'GET' && url.pathname.startsWith('/api/v2/albums') && response.ok) {
+      for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {
+        const value = request.headers.get(name);
+        if (value) response.headers.set(name, value);
+      }
+    }
+    return response;
+  });
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  onlineManager.setOnline(true);
+  vi.unstubAllGlobals();
+});
 
 describe('album browsing', () => {
   it('requires the actual session before requesting gallery data', async () => {
@@ -335,6 +348,140 @@ describe('album browsing', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'First page' })).toHaveAttribute('href', '/albums');
+  });
+
+  it.each([
+    { page: '/albums', target: '/api/v2/albums', hidden: 'album' },
+    { page: '/albums/album-one', target: '/api/v2/albums/album-one', hidden: 'album' },
+    { page: '/albums/album-one', target: '/api/v2/albums/album-one/media', hidden: 'media' },
+    { page: '/albums/album-one', target: '/api/v2/albums/album-one/rating', hidden: 'rating' },
+  ])(
+    'hides stale $hidden while $target revalidates after reconnecting',
+    async ({ page, target, hidden }) => {
+      let reconnecting = false;
+      let finish!: (response: Response) => void;
+      installFetch((url) => {
+        if (url.pathname.endsWith('/auth/me')) return Response.json(user);
+        if (url.pathname.endsWith('/variants')) {
+          return Response.json({ items: [], next_cursor: null, has_more: false });
+        }
+        if (reconnecting && url.pathname === target) {
+          return new Promise<Response>((resolve) => {
+            finish = resolve;
+          });
+        }
+        if (url.pathname === '/api/v2/albums') {
+          return Response.json({ items: [album], next_cursor: null, has_more: false });
+        }
+        if (url.pathname.endsWith('/albums/album-one')) return Response.json(album);
+        if (url.pathname.endsWith('/albums/album-one/media')) {
+          return Response.json({ items: [media], next_cursor: null, has_more: false });
+        }
+        if (url.pathname.endsWith('/albums/album-one/rating')) return ratingResponse();
+        return problem(404, 'NOT_FOUND');
+      });
+      renderPage(page);
+      if (hidden === 'rating') {
+        expect(await screen.findByRole('radio', { name: 'No rating' })).toBeChecked();
+      } else if (hidden === 'media') {
+        expect(await screen.findByText('photo.png')).toBeInTheDocument();
+      } else {
+        expect(await screen.findByText('A family trip')).toBeInTheDocument();
+      }
+      reconnecting = true;
+      act(() => {
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() => expect(finish).toBeDefined());
+      if (hidden === 'rating') {
+        expect(screen.queryByRole('radio', { name: 'No rating' })).not.toBeInTheDocument();
+      } else {
+        expect(
+          screen.queryByText(hidden === 'media' ? 'photo.png' : 'A family trip'),
+        ).not.toBeInTheDocument();
+      }
+      await act(async () => finish(problem(503, 'INTERNAL_ERROR')));
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+    },
+  );
+
+  it.each(['media', 'rating'] as const)(
+    'hides the album when %s loses identity while the album read is pending',
+    async (failedRead) => {
+      let failing = false;
+      let releaseAlbum!: (response: Response) => void;
+      installFetch((url) => {
+        if (url.pathname.endsWith('/auth/me')) return Response.json(user);
+        if (url.pathname.endsWith('/albums/album-one')) {
+          return failing
+            ? new Promise<Response>((resolve) => {
+                releaseAlbum = resolve;
+              })
+            : Response.json(album);
+        }
+        if (url.pathname.endsWith('/albums/album-one/media')) {
+          return failing && failedRead === 'media'
+            ? problem(409, 'VERSION_CONFLICT')
+            : Response.json({ items: [media], next_cursor: null, has_more: false });
+        }
+        if (url.pathname.endsWith('/albums/album-one/rating')) {
+          return failing && failedRead === 'rating'
+            ? problem(409, 'VERSION_CONFLICT')
+            : ratingResponse();
+        }
+        return Response.json({ items: [], next_cursor: null, has_more: false });
+      });
+      const { client } = renderPage('/albums/album-one');
+      expect(await screen.findByRole('heading', { name: 'A family trip' })).toBeInTheDocument();
+      expect(await screen.findByRole('radio', { name: 'No rating' })).toBeChecked();
+      failing = true;
+      act(() => {
+        void client.invalidateQueries({ queryKey: [user.id, user.scope_id, 'album', album.id] });
+        void client.invalidateQueries({
+          queryKey: [user.id, user.scope_id, `album-${failedRead}`, album.id],
+        });
+      });
+      await waitFor(() => expect(releaseAlbum).toBeDefined());
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(screen.queryByText('A family trip')).not.toBeInTheDocument();
+      expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: 'No rating' })).not.toBeInTheDocument();
+      failing = false;
+      await act(async () => releaseAlbum(Response.json(album)));
+      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(await screen.findByRole('heading', { name: 'A family trip' })).toBeInTheDocument();
+    },
+  );
+
+  it.each(['id', 'scope_id'] as const)(
+    'does not send album reads for an invalid account %s',
+    async (field) => {
+      const fetch = installFetch((url) =>
+        url.pathname.endsWith('/auth/me')
+          ? Response.json({ ...user, [field]: 'invalid value' })
+          : Response.json({ items: [], next_cursor: null, has_more: false }),
+      );
+      renderPage('/albums');
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(
+        fetch.mock.calls.every(([request]) => new URL(request.url).pathname.endsWith('/auth/me')),
+      ).toBe(true);
+    },
+  );
+
+  it('rejects an album response with a different resource ID', async () => {
+    installFetch((url) => {
+      if (url.pathname.endsWith('/auth/me')) return Response.json(user);
+      if (url.pathname.endsWith('/albums/album-one')) {
+        return Response.json({ ...album, id: 'different-album' });
+      }
+      return Response.json({ items: [media], next_cursor: null, has_more: false });
+    });
+    renderPage('/albums/album-one');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('A family trip')).not.toBeInTheDocument();
+    expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
   });
 
   it('never chooses oversized or non-image variant content as a thumbnail', () => {

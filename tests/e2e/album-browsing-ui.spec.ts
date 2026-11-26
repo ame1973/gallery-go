@@ -122,6 +122,66 @@ test('authenticated album browsing uses private previews, scoped pages, and curr
     await expect.poll(() => page.locator('.gallery-media img').count()).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath('album-detail.png'), fullPage: true });
 
+    const meResponse = await page.request.get('/api/v2/auth/me');
+    expect(meResponse.status()).toBe(200);
+    const me = (await meResponse.json()) as components['schemas']['User'];
+    const albumAPI = `/api/v2/albums/${prefix}-album`;
+    for (const [urlPath, endpoint] of [
+      ['/albums', '/api/v2/albums'],
+      [`/albums/${prefix}-album`, albumAPI],
+      [`/albums/${prefix}-album`, `${albumAPI}/media`],
+      [`/albums/${prefix}-album`, `${albumAPI}/rating`],
+    ] as const) {
+      for (const mode of ['stripped-request', 'wrong-echo', 'wrong-request'] as const) {
+        const matches = (candidate: URL) => candidate.pathname === endpoint;
+        let observed = false;
+        await page.route(matches, async (route) => {
+          const requestHeaders = await route.request().allHeaders();
+          expect(requestHeaders['x-gallerygo-expected-user']).toBe(me.id);
+          expect(requestHeaders['x-gallerygo-expected-scope']).toBe(me.scope_id);
+          if (mode === 'stripped-request') {
+            delete requestHeaders['x-gallerygo-expected-user'];
+            delete requestHeaders['x-gallerygo-expected-scope'];
+          } else if (mode === 'wrong-request') {
+            requestHeaders['x-gallerygo-expected-user'] = 'different-account';
+          }
+          const upstream = await route.fetch({ headers: requestHeaders });
+          const responseHeaders = upstream.headers();
+          if (mode === 'wrong-request') {
+            expect(upstream.status()).toBe(409);
+            expect(await upstream.json()).toMatchObject({ code: 'VERSION_CONFLICT' });
+          } else if (mode === 'stripped-request') {
+            expect(upstream.status()).toBe(200);
+            expect(responseHeaders['x-gallerygo-expected-user']).toBeUndefined();
+            expect(responseHeaders['x-gallerygo-expected-scope']).toBeUndefined();
+          } else {
+            expect(upstream.status()).toBe(200);
+            expect(responseHeaders['x-gallerygo-expected-user']).toBe(me.id);
+            expect(responseHeaders['x-gallerygo-expected-scope']).toBe(me.scope_id);
+            responseHeaders['x-gallerygo-expected-scope'] = 'different-scope';
+          }
+          observed = true;
+          await route.fulfill({ response: upstream, headers: responseHeaders });
+        });
+        try {
+          await page.goto(urlPath);
+          await expect(page.getByRole('alert')).toContainText(
+            'The current account changed or could not be verified.',
+          );
+          expect(observed).toBe(true);
+          await expect(page.getByText('Real PNG fixture')).toHaveCount(0);
+          await expect(page.getByText('fixture.png', { exact: true })).toHaveCount(0);
+          await expect(page.getByRole('radio', { name: 'No rating' })).toHaveCount(0);
+        } finally {
+          await page.unroute(matches);
+        }
+        await page.getByRole('button', { name: 'Try again' }).click();
+        await expect(page.getByText('Real PNG fixture')).toBeVisible();
+      }
+    }
+    await page.goto(`/albums/${prefix}-album`);
+    await expect(page.getByRole('heading', { name: 'Real PNG fixture' })).toBeVisible();
+
     const current = await api.get(path);
     expect(current.status()).toBe(200);
     const revoked = await api.put(path, {

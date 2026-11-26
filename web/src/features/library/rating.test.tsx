@@ -68,7 +68,7 @@ function setup(initial: Vote = { rating: null, version: 1 }, otherVotes: number[
     version: vote.version,
     updated_at: vote.version === 1 ? null : '2026-11-11T00:00:00Z',
   });
-  const fetch = vi.fn(async (request: Request): Promise<Response> => {
+  const respond = async (request: Request): Promise<Response> => {
     requests.push(request.clone());
     const path = new URL(request.url).pathname;
     if (path.endsWith('/auth/me'))
@@ -171,6 +171,20 @@ function setup(initial: Vote = { rating: null, version: 1 }, otherVotes: number[
       return Response.json(value(next), { headers: { ETag: tag(actor, next) } });
     }
     return problem(404, 'NOT_FOUND');
+  };
+  const fetch = vi.fn(async (request: Request) => {
+    const response = await respond(request);
+    if (
+      request.method === 'GET' &&
+      new URL(request.url).pathname.startsWith('/api/v2/albums') &&
+      response.ok
+    ) {
+      for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {
+        const value = request.headers.get(name);
+        if (value) response.headers.set(name, value);
+      }
+    }
+    return response;
   });
   vi.stubGlobal('fetch', fetch);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

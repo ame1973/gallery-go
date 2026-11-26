@@ -27,21 +27,31 @@ function failure(result: Failure): never {
   throw new APIError(code ?? 'INTERNAL_ERROR', result.error?.request_id);
 }
 
-export async function listAlbums(sort: AlbumSort | '', cursor: string | null, signal: AbortSignal) {
+export async function listAlbums(
+  actor: ReadActor,
+  sort: AlbumSort | '',
+  cursor: string | null,
+  signal: AbortSignal,
+) {
   const result = await api.GET('/albums', {
     signal,
+    headers: identityHeaders(actor),
     params: { query: { limit: 30, ...(sort && { sort }), ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   return result.data;
 }
 
-export async function getAlbum(id: string, signal: AbortSignal) {
+export async function getAlbum(actor: ReadActor, id: string, signal: AbortSignal) {
   const result = await api.GET('/albums/{album_id}', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { album_id: id } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
+  if (result.data.id !== id) throw new APIError('INVALID_ALBUM_RESPONSE');
   return result.data;
 }
 
@@ -87,12 +97,18 @@ export async function listPersonAlbums(
 export type RatingSnapshot = { value: components['schemas']['AlbumRating']; etag: string };
 export type RatingCommand = { albumID: string; rating: number | null; etag: string; key: string };
 
-export async function getRating(albumID: string, signal: AbortSignal): Promise<RatingSnapshot> {
+export async function getRating(
+  actor: ReadActor,
+  albumID: string,
+  signal: AbortSignal,
+): Promise<RatingSnapshot> {
   const result = await api.GET('/albums/{album_id}/rating', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { album_id: albumID } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   const etag = result.response.headers.get('ETag');
   if (
     !etag?.startsWith('"') ||
@@ -124,12 +140,19 @@ export async function saveRating(command: RatingCommand, signal: AbortSignal) {
   if (!result.data) return failure(result);
 }
 
-export async function listMedia(id: string, cursor: string | null, signal: AbortSignal) {
+export async function listMedia(
+  actor: ReadActor,
+  id: string,
+  cursor: string | null,
+  signal: AbortSignal,
+) {
   const result = await api.GET('/albums/{album_id}/media', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { album_id: id }, query: { limit: 30, ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   if (result.data.items.some((item) => !safeID(item.id) || item.album_id !== id)) {
     throw new APIError('INVALID_MEDIA_RESPONSE');
   }

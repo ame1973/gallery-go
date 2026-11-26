@@ -14,6 +14,7 @@ import {
   peopleListBack,
   personDetailBack,
   usePageFocus,
+  useRevalidateReadIdentity,
   useRevalidateSession,
 } from './common';
 import { Preview } from './Preview';
@@ -44,48 +45,58 @@ export function AlbumPage() {
     (cursor === null || (cursor.length > 0 && cursor.length <= 512));
   const album = useQuery({
     queryKey: [user.id, user.scope_id, 'album', albumId],
-    queryFn: ({ signal }) => getAlbum(albumId, signal),
+    queryFn: ({ signal }) => getAlbum(user, albumId, signal),
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
   const media = useQuery({
     queryKey: [user.id, user.scope_id, 'album-media', albumId, cursor],
-    queryFn: ({ signal }) => listMedia(albumId, cursor, signal),
+    queryFn: ({ signal }) => listMedia(user, albumId, cursor, signal),
     enabled: valid,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
   const rating = useQuery({
     queryKey: [user.id, user.scope_id, 'album-rating', albumId],
-    queryFn: ({ signal }) => getRating(albumId, signal),
+    queryFn: ({ signal }) => getRating(user, albumId, signal),
     enabled: album.isSuccess,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
     refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
   const average = useQuery({
     queryKey: [user.id, user.scope_id, 'album-rating-average', albumId],
-    queryFn: ({ signal }) => getAlbum(albumId, signal),
+    queryFn: ({ signal }) => getAlbum(user, albumId, signal),
     enabled: false,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
   });
-  useRevalidateSession(album.error);
-  useRevalidateSession(media.error);
-  useRevalidateSession(rating.error);
-  useRevalidateSession(average.error);
+  useRevalidateReadIdentity(album.error);
+  useRevalidateReadIdentity(media.error);
+  useRevalidateReadIdentity(rating.error);
+  useRevalidateReadIdentity(average.error);
   useRevalidateSession(mutationDenial);
   const accessLost = [album.error, media.error, rating.error, average.error, mutationDenial].find(
     (error): error is APIError =>
-      error instanceof APIError && ['NOT_FOUND', 'UNAUTHENTICATED'].includes(error.code),
+      error instanceof APIError &&
+      [
+        'NOT_FOUND',
+        'FORBIDDEN',
+        'UNAUTHENTICATED',
+        'VERSION_CONFLICT',
+        'READ_CONTEXT_MISMATCH',
+      ].includes(error.code),
   );
   const showContent = album.isSuccess && !album.isFetching && !accessLost;
   const first = `/albums/${encodeURIComponent(albumId)}`;
@@ -99,7 +110,26 @@ export function AlbumPage() {
       <Link className="gallery-back" to={back} state={parentState}>
         <FormattedMessage id={backLabel} />
       </Link>
-      {album.isPending || album.isFetching ? (
+      {accessLost ? (
+        <>
+          <h1 id="gallery-page-title">
+            <FormattedMessage id="library.album" />
+          </h1>
+          <PageError
+            error={accessLost}
+            onRetry={() => {
+              setDenial(null);
+              void album.refetch();
+              void media.refetch();
+              void rating.refetch();
+              if (average.isError) void average.refetch();
+            }}
+            first={back}
+            notFoundLabel={backLabel}
+            {...(parentState && { state: parentState })}
+          />
+        </>
+      ) : album.isPending || album.isFetching ? (
         <>
           <h1 id="gallery-page-title">
             <FormattedMessage id="library.album" />
@@ -114,25 +144,6 @@ export function AlbumPage() {
           <PageError
             error={album.error}
             onRetry={() => void album.refetch()}
-            first={back}
-            notFoundLabel={backLabel}
-            {...(parentState && { state: parentState })}
-          />
-        </>
-      ) : accessLost ? (
-        <>
-          <h1 id="gallery-page-title">
-            <FormattedMessage id="library.album" />
-          </h1>
-          <PageError
-            error={accessLost}
-            onRetry={() => {
-              setDenial(null);
-              void album.refetch();
-              void media.refetch();
-              void rating.refetch();
-              if (average.isError) void average.refetch();
-            }}
             first={back}
             notFoundLabel={backLabel}
             {...(parentState && { state: parentState })}

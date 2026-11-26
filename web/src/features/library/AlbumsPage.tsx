@@ -11,7 +11,7 @@ import {
   PageError,
   PageNavigation,
   usePageFocus,
-  useRevalidateSession,
+  useRevalidateReadIdentity,
 } from './common';
 import { Preview } from './Preview';
 
@@ -43,14 +43,15 @@ export function AlbumsPage() {
   const selected = sorts.find((option) => option.value === sort)?.value ?? '';
   const query = useQuery({
     queryKey: [user.id, user.scope_id, 'albums', selected, cursor],
-    queryFn: ({ signal }) => listAlbums(selected, cursor, signal),
+    queryFn: ({ signal }) => listAlbums(user, selected, cursor, signal),
     enabled: valid,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
-  useRevalidateSession(query.error);
+  useRevalidateReadIdentity(query.error);
   const firstParams = new URLSearchParams();
   if (selected) firstParams.set('sort', selected);
   const first = `/albums${firstParams.size ? `?${firstParams}` : ''}`;
