@@ -24,6 +24,12 @@ open an album for its media metadata. Back links retain the previous people and
 person-album pages while navigating in the app. If permissions change, a saved
 page link can expire; use **First page** to read the current selection.
 
+The people browser sends [read identity expectations](authentication.md#optional-read-identity-expectations)
+for the people list, person details and person-album pages. It rejects missing or
+mismatched response echoes, hides the current people or person/album content and
+rechecks the session when the read context changes. These checks do not bind preview
+requests or mutations and do not resolve delayed authentication-cookie responses.
+
 The people browser is read-only. Display-name and creator-association management,
 search, richer sorting and offline browsing are not yet available in this UI.
 

@@ -178,6 +178,7 @@ export function PageError({
 }) {
   const code = error instanceof APIError ? error.code : '';
   const invalid = code === 'INVALID_CURSOR' || code === 'INVALID_FILTER';
+  const context = code === 'VERSION_CONFLICT' || code === 'READ_CONTEXT_MISMATCH';
   return (
     <div className="gallery-message" role="alert">
       <p>
@@ -185,9 +186,13 @@ export function PageError({
           id={
             invalid
               ? 'library.invalidPage'
-              : code === 'NOT_FOUND'
+              : code === 'NOT_FOUND' || code === 'FORBIDDEN'
                 ? notFoundMessage
-                : 'library.requestError'
+                : context
+                  ? 'auth.readContextChanged'
+                  : code === 'UNAUTHENTICATED'
+                    ? 'auth.sessionExpired'
+                    : 'library.requestError'
           }
         />
       </p>

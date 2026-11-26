@@ -79,7 +79,17 @@ function problem(status: number, code: string) {
 }
 
 function installFetch(handler: (url: URL) => Response | Promise<Response>) {
-  const fetch = vi.fn(async (request: Request) => handler(new URL(request.url)));
+  const fetch = vi.fn(async (request: Request) => {
+    const url = new URL(request.url);
+    const response = await handler(url);
+    if (url.pathname.startsWith('/api/v2/people') && response.ok) {
+      for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {
+        const value = request.headers.get(name);
+        if (value) response.headers.set(name, value);
+      }
+    }
+    return response;
+  });
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }

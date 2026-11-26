@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -85,7 +85,17 @@ function problem(status: number, code: string) {
 }
 
 function installFetch(handler: (url: URL) => Response | Promise<Response>) {
-  const fetch = vi.fn(async (request: Request) => handler(new URL(request.url)));
+  const fetch = vi.fn(async (request: Request) => {
+    const url = new URL(request.url);
+    const response = await handler(url);
+    if (url.pathname.startsWith('/api/v2/people') && response.ok) {
+      for (const name of ['X-GalleryGo-Expected-User', 'X-GalleryGo-Expected-Scope']) {
+        const value = request.headers.get(name);
+        if (value) response.headers.set(name, value);
+      }
+    }
+    return response;
+  });
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
@@ -94,7 +104,10 @@ const emptyPage = { items: [], next_cursor: null, has_more: false };
 const invalidPage =
   'This page link is invalid or expired, or access has changed. Return to the first page.';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  onlineManager.setOnline(true);
+  vi.unstubAllGlobals();
+});
 
 describe('people browsing', () => {
   it.each(['/people', '/people/person-one'])('requires a session for %s', async (path) => {
@@ -538,4 +551,165 @@ describe('people browsing', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByText('Same name')).not.toBeInTheDocument();
   });
+
+  it.each([
+    { page: '/people', target: '/api/v2/people' },
+    { page: '/people/person-one', target: '/api/v2/people/person-one' },
+    { page: '/people/person-one', target: '/api/v2/people/person-one/albums' },
+  ])(
+    'hides stale people content when $target revalidates after reconnecting',
+    async ({ page, target }) => {
+      let reconnecting = false;
+      let finish!: (value: Response) => void;
+      installFetch((url) => {
+        if (url.pathname.endsWith('/auth/me')) return Response.json(user);
+        if (url.pathname.endsWith('/variants')) return Response.json(emptyPage);
+        if (reconnecting && url.pathname === target) {
+          return new Promise<Response>((resolve) => {
+            finish = resolve;
+          });
+        }
+        if (url.pathname === '/api/v2/people') {
+          return Response.json({ ...emptyPage, items: [person] });
+        }
+        if (url.pathname.endsWith('/albums')) {
+          return Response.json({ ...emptyPage, items: [album] });
+        }
+        return Response.json(person);
+      });
+      renderPage(page);
+      expect(await screen.findByText('Same name')).toBeInTheDocument();
+      reconnecting = true;
+      act(() => {
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      });
+      await waitFor(() => expect(finish).toBeDefined());
+      expect(screen.queryByText('Same name')).not.toBeInTheDocument();
+      expect(screen.queryByText('First album')).not.toBeInTheDocument();
+      await act(async () => finish(problem(503, 'INTERNAL_ERROR')));
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(screen.queryByText('Same name')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['id', 'scope_id'] as const)(
+    'does not send people reads for an invalid account %s',
+    async (field) => {
+      const fetch = installFetch((url) =>
+        url.pathname.endsWith('/auth/me')
+          ? Response.json({ ...user, [field]: 'invalid value' })
+          : Response.json(emptyPage),
+      );
+      renderPage('/people');
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(
+        fetch.mock.calls.every(([request]) => new URL(request.url).pathname.endsWith('/auth/me')),
+      ).toBe(true);
+    },
+  );
+
+  it('rejects a person response with the wrong resource ID even when its identity echoes match', async () => {
+    installFetch((url) => {
+      if (url.pathname.endsWith('/auth/me')) return Response.json(user);
+      if (url.pathname.endsWith('/albums')) return Response.json({ ...emptyPage, items: [album] });
+      return Response.json({ ...person, id: 'different-person' });
+    });
+    renderPage('/people/person-one');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('Same name')).not.toBeInTheDocument();
+    expect(screen.queryByText('First album')).not.toBeInTheDocument();
+  });
+
+  it('hides an existing people page and rechecks the session after an identity mismatch', async () => {
+    let mismatch = false;
+    let authCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        const path = new URL(request.url).pathname;
+        if (path.endsWith('/auth/me')) {
+          authCalls++;
+          return Response.json(user);
+        }
+        if (path.endsWith('/variants')) return Response.json(emptyPage);
+        return Response.json(
+          { ...emptyPage, items: [person] },
+          {
+            headers: {
+              'X-GalleryGo-Expected-User': mismatch ? 'account-b' : user.id,
+              'X-GalleryGo-Expected-Scope': user.scope_id,
+            },
+          },
+        );
+      }),
+    );
+    const client = renderPage('/people');
+    expect(await screen.findByRole('link', { name: /Same name/ })).toBeInTheDocument();
+    mismatch = true;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: [user.id, user.scope_id, 'people'] });
+    });
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('Same name')).not.toBeInTheDocument();
+    await waitFor(() => expect(authCalls).toBeGreaterThan(1));
+    mismatch = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('link', { name: /Same name/ })).toBeInTheDocument();
+  });
+
+  it.each(['detail', 'albums'] as const)(
+    'hides both person and albums when the %s read loses identity while the other read is pending',
+    async (failedRead) => {
+      let failing = false;
+      let authCalls = 0;
+      let finishOther!: () => void;
+      const success = (body: unknown) =>
+        Response.json(body, {
+          headers: {
+            'X-GalleryGo-Expected-User': user.id,
+            'X-GalleryGo-Expected-Scope': user.scope_id,
+          },
+        });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (request: Request) => {
+          const path = new URL(request.url).pathname;
+          if (path.endsWith('/auth/me')) {
+            authCalls++;
+            return Response.json(user);
+          }
+          if (path.endsWith('/variants')) return Response.json(emptyPage);
+          const kind = path.endsWith('/albums') ? 'albums' : 'detail';
+          const body = kind === 'albums' ? { ...emptyPage, items: [album] } : person;
+          if (!failing) return success(body);
+          if (kind === failedRead) return problem(409, 'VERSION_CONFLICT');
+          return new Promise<Response>((resolve) => {
+            finishOther = () => resolve(success(body));
+          });
+        }),
+      );
+      const client = renderPage('/people/person-one');
+      expect(await screen.findByRole('heading', { name: 'Same name' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /First album/ })).toBeInTheDocument();
+      failing = true;
+      act(() => {
+        void client.invalidateQueries({ queryKey: [user.id, user.scope_id, 'person', person.id] });
+        void client.invalidateQueries({
+          queryKey: [user.id, user.scope_id, 'person-albums', person.id],
+        });
+      });
+      await waitFor(() => expect(finishOther).toBeDefined());
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(screen.queryByText('Same name')).not.toBeInTheDocument();
+      expect(screen.queryByText('First album')).not.toBeInTheDocument();
+      await waitFor(() => expect(authCalls).toBeGreaterThan(1));
+      failing = false;
+      await act(async () => finishOther());
+      expect(screen.queryByText('Same name')).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(await screen.findByRole('heading', { name: 'Same name' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /First album/ })).toBeInTheDocument();
+    },
+  );
 });

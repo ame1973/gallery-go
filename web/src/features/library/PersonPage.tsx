@@ -11,7 +11,7 @@ import {
   PageNavigation,
   peopleListBack,
   usePageFocus,
-  useRevalidateSession,
+  useRevalidateReadIdentity,
   validCursorSearch,
 } from './common';
 import { Preview } from './Preview';
@@ -29,27 +29,36 @@ export function PersonPage() {
   const main = usePageFocus(cursor, personId);
   const person = useQuery({
     queryKey: [user.id, user.scope_id, 'person', personId],
-    queryFn: ({ signal }) => getPerson(personId, signal),
+    queryFn: ({ signal }) => getPerson(user, personId, signal),
     enabled: validID && validSearch,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
   const albums = useQuery({
     queryKey: [user.id, user.scope_id, 'person-albums', personId, cursor],
-    queryFn: ({ signal }) => listPersonAlbums(personId, cursor, signal),
+    queryFn: ({ signal }) => listPersonAlbums(user, personId, cursor, signal),
     enabled: validID && validSearch,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
-  useRevalidateSession(person.error);
-  useRevalidateSession(albums.error);
+  useRevalidateReadIdentity(person.error);
+  useRevalidateReadIdentity(albums.error);
   const accessLost = [person.error, albums.error].find(
     (error): error is APIError =>
-      error instanceof APIError && ['NOT_FOUND', 'UNAUTHENTICATED'].includes(error.code),
+      error instanceof APIError &&
+      [
+        'NOT_FOUND',
+        'FORBIDDEN',
+        'UNAUTHENTICATED',
+        'VERSION_CONFLICT',
+        'READ_CONTEXT_MISMATCH',
+      ].includes(error.code),
   );
   const loading = person.isPending || person.isFetching || albums.isPending || albums.isFetching;
   const error = !validID

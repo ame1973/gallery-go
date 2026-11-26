@@ -1,4 +1,6 @@
 import { api } from '../../lib/api/client';
+import { checkReadEcho, identityHeaders } from '../../lib/api/read-identity';
+import type { ReadActor } from '../../lib/api/read-identity';
 import type { components, operations } from '../../lib/api/schema';
 import { APIError, securityHeaders } from '../auth/api';
 
@@ -16,7 +18,12 @@ function failure(result: Failure): never {
       ? 'UNAUTHENTICATED'
       : result.response.status === 404
         ? 'NOT_FOUND'
-        : result.error?.code;
+        : (result.error?.code ??
+          (result.response.status === 403
+            ? 'FORBIDDEN'
+            : result.response.status === 409
+              ? 'VERSION_CONFLICT'
+              : undefined));
   throw new APIError(code ?? 'INTERNAL_ERROR', result.error?.request_id);
 }
 
@@ -38,30 +45,42 @@ export async function getAlbum(id: string, signal: AbortSignal) {
   return result.data;
 }
 
-export async function listPeople(cursor: string | null, signal: AbortSignal) {
+export async function listPeople(actor: ReadActor, cursor: string | null, signal: AbortSignal) {
   const result = await api.GET('/people', {
     signal,
+    headers: identityHeaders(actor),
     params: { query: { limit: 30, ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   return result.data;
 }
 
-export async function getPerson(id: string, signal: AbortSignal) {
+export async function getPerson(actor: ReadActor, id: string, signal: AbortSignal) {
   const result = await api.GET('/people/{person_id}', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { person_id: id } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
+  if (result.data.id !== id) throw new APIError('INVALID_PERSON_RESPONSE');
   return result.data;
 }
 
-export async function listPersonAlbums(id: string, cursor: string | null, signal: AbortSignal) {
+export async function listPersonAlbums(
+  actor: ReadActor,
+  id: string,
+  cursor: string | null,
+  signal: AbortSignal,
+) {
   const result = await api.GET('/people/{person_id}/albums', {
     signal,
+    headers: identityHeaders(actor),
     params: { path: { person_id: id }, query: { limit: 30, ...(cursor && { cursor }) } },
   });
   if (!result.data) return failure(result);
+  checkReadEcho(result.response, actor);
   return result.data;
 }
 

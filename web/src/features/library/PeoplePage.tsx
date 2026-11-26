@@ -10,7 +10,7 @@ import {
   PageError,
   PageNavigation,
   usePageFocus,
-  useRevalidateSession,
+  useRevalidateReadIdentity,
   validCursorSearch,
 } from './common';
 import { Preview } from './Preview';
@@ -24,14 +24,15 @@ export function PeoplePage() {
   const main = usePageFocus(cursor);
   const query = useQuery({
     queryKey: [user.id, user.scope_id, 'people', cursor],
-    queryFn: ({ signal }) => listPeople(cursor, signal),
+    queryFn: ({ signal }) => listPeople(user, cursor, signal),
     enabled: valid,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     networkMode: 'always',
+    refetchOnReconnect: true,
   });
-  useRevalidateSession(query.error);
+  useRevalidateReadIdentity(query.error);
   const next =
     query.data?.has_more && query.data.next_cursor
       ? `/people?${new URLSearchParams({ cursor: query.data.next_cursor })}`
