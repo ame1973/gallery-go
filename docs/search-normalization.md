@@ -38,8 +38,7 @@ Tokenization retains the normalized text, deduplicated word tokens, individual H
 characters, and adjacent Han bigrams in first-seen order. Punctuation remains in
 normalized text and breaks word/Han runs. A word-token match does not by itself
 establish a literal punctuation match. These primitives do not yet define ranking,
-query syntax, filtering, pagination, FTS candidate selection or the complete online
-and offline search contract.
+complete query syntax, filtering, pagination or the online/offline search contract.
 
 ## Bounded server literal verification
 
@@ -58,6 +57,32 @@ check, or a complete online/offline query definition. Applying a page limit befo
 full verification can miss matches. Future integration must filter visibility in
 SQL, verify index freshness and account for cancellation and bounded work; it must
 not return partial results as complete.
+
+## FTS candidates for one literal
+
+The server-only `LiteralPostingsVersion` projection encodes every normalized Unicode
+scalar and adjacent pair, including punctuation, as deduplicated ASCII hex terms.
+`CompileLiteralCandidates` selects the single scalar or the first and last adjacent
+pairs as **necessary** anchors. Terms are at most 17 ASCII bytes, avoiding SQLite's
+long-token truncation; the generated expression must be bound as a MATCH parameter,
+not inserted into SQL. The document postings string is bounded to 2,359,296 bytes,
+besides normalization buffers and the deduplication map. This is an additional
+candidate projection, not the shared word/Han token list used above.
+
+An anchor hit is not a literal hit: candidates can be false positives and the
+complete normalized literal must be checked with `ContainsNormalized`. One- and
+two-character CJK literals do not rely on trigrams. This mechanism does not maintain
+or migrate an index, enforce authorization or revision freshness, define the complete
+query/ranking/filter contract, establish online/offline equivalence, or guarantee
+performance for broad/adversarial queries. Do not limit before all necessary
+verification or present a timed-out partial scan as a complete result.
+
+`make search-candidates-load` runs a synthetic 100,000-document adversarial candidate
+scan three times with Go's race detector and a 10-second query deadline, using only
+temporary SQLite data. Setup creates about 400 MiB of normalized text outside that
+query deadline. The fixture checks all coarse matches before finding one literal;
+it does not exercise authorization, index maintenance, ranking, pagination, API,
+network, NAS latency or the product P95 target.
 
 ## Conformance and changes
 

@@ -1,4 +1,4 @@
-.PHONY: build test check quick-check fmt dev api e2e views-load favorite-delete-load search-conformance
+.PHONY: build test check quick-check fmt dev api e2e views-load favorite-delete-load search-conformance search-candidates-load
 
 build:
 	pnpm build
@@ -51,6 +51,10 @@ e2e:
 
 search-conformance:
 	python3 -I tests/searchconformance/run.py
+
+# Synthetic lower bound only; this does not exercise ACL, ranking or an API.
+search-candidates-load:
+	go test -p 1 -count=3 -timeout=15m -race -tags=search_candidate_probe ./internal/search -run '^TestLiteralCandidates100KAdversarialProbe$$' -v
 
 # Host-dependent production-deadline load checks use only isolated test databases.
 views-load:
