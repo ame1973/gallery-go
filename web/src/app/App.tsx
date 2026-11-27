@@ -70,7 +70,7 @@ export function App() {
           fallback={
             <main>
               <p role="status">
-                <FormattedMessage id="auth.loading" />
+                <FormattedMessage id="pageLoading" />
               </p>
             </main>
           }
