@@ -41,6 +41,24 @@ establish a literal punctuation match. These primitives do not yet define rankin
 query syntax, filtering, pagination, FTS candidate selection or the complete online
 and offline search contract.
 
+## Bounded server literal verification
+
+`internal/search.CompileLiteral` normalizes a nonempty literal and compiles a
+reusable prefix table. `ContainsNormalized` then verifies the whole literal against
+one already-normalized document in linear byte time, preserving punctuation. It
+rejects invalid UTF-8, NUL and documents over the 64 KiB normalized budget; it
+cannot verify that the caller used the correct profile or current document revision.
+The table uses at most four bytes per normalized query byte, in addition to the
+normalization buffers and query string. A compiled pattern may be shared across
+concurrent calls. The caller must separately bound the number of candidates and
+honor request cancellation between them.
+
+This server-only helper is not an FTS index, endpoint, ranking rule, permission
+check, or a complete online/offline query definition. Applying a page limit before
+full verification can miss matches. Future integration must filter visibility in
+SQL, verify index freshness and account for cancellation and bounded work; it must
+not return partial results as complete.
+
 ## Conformance and changes
 
 `make search-conformance` checks table regeneration, Go fixtures, every valid
