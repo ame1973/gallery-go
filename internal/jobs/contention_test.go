@@ -12,6 +12,18 @@ import (
 )
 
 func TestRunnerRetriesWriterContentionDuringTransactionBoundHeartbeats(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		startDelay time.Duration
+	}{{"immediate writer", 0}, {"delayed writer", 2 * time.Second}} {
+		t.Run(test.name, func(t *testing.T) {
+			testRunnerRetriesWriterContention(t, test.startDelay)
+		})
+	}
+}
+
+func testRunnerRetriesWriterContention(t *testing.T, startDelay time.Duration) {
+	t.Helper()
 	q := runtimeFixture(t)
 	q.policy.Concurrency = 1
 	job := enqueued(t, q, "long-publication", 0)
@@ -35,14 +47,26 @@ func TestRunnerRetriesWriterContentionDuringTransactionBoundHeartbeats(t *testin
 		}
 		// This real second writer must reach the production 5s busy timeout. The
 		// publisher's own connection continues renewing its live 3s lease meanwhile.
+		writerDone := make(chan error, 1)
 		go func() {
+			if startDelay > 0 {
+				timer := time.NewTimer(startDelay)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					writerDone <- context.Cause(ctx)
+					return
+				case <-timer.C:
+				}
+			}
 			_, err := q.db.ExecContext(ctx, `UPDATE jobs SET version=version WHERE id=?`, lease.Job.ID)
-			busyResult <- err
+			writerDone <- err
 		}()
 		deadline := time.NewTimer(6 * time.Second)
 		defer deadline.Stop()
 		heartbeat := time.NewTicker(250 * time.Millisecond)
 		defer heartbeat.Stop()
+		var heldLongEnough, writerFinished bool
 		for {
 			select {
 			case <-ctx.Done():
@@ -51,7 +75,16 @@ func TestRunnerRetriesWriterContentionDuringTransactionBoundHeartbeats(t *testin
 				if err := q.HeartbeatTx(ctx, tx, lease); err != nil {
 					return err
 				}
+			case err := <-writerDone:
+				busyResult <- err
+				writerFinished = true
+				writerDone = nil
 			case <-deadline.C:
+				heldLongEnough = true
+			}
+			// Do not finish the handler and cancel its context before the contending
+			// writer has actually produced the busy result being asserted below.
+			if heldLongEnough && writerFinished {
 				if _, err := q.ProgressTx(ctx, tx, lease, Counts{Total: 1, Done: 1, Succeeded: 1}, true); err != nil {
 					return err
 				}
