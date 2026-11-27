@@ -1,10 +1,10 @@
-# Player ordering foundation
+# Player foundations
 
 GalleryGo does not yet provide a player screen or playback controls. The internal
 `web/src/features/player/order.ts` module is a building block for a **fully acquired,
 fixed** sequence of media IDs; it is not an authorization check or a playback API.
-No route, video player, timer, gestures, progress persistence, or offline support is
-enabled by this module.
+No route, video player, automatic timer, gestures, progress persistence, or offline
+support is enabled by these modules.
 
 The caller must obtain a valid account- and scope-bound media snapshot, retain each
 item's revision and availability separately, and reauthorize or rebuild it when
@@ -37,6 +37,26 @@ constant-time, while creating or crossing a round takes work proportional to the
 sequence size. Seed, direction, shuffle and repeat settings are fixed for this order;
 changing settings or the sequence requires a later player integration to define how
 to reconcile the current item and history. The full player must still implement
-incremental paging, revision/availability changes, timing, video events, visibility,
-accessibility, data-aware preloading, and the device/browser acceptance in the product
-specification.
+incremental paging, revision/availability changes, integrated scheduling, video events,
+visibility handling, accessibility, data-aware preloading, and device/browser acceptance.
+
+## Still-image clock foundation
+
+`web/src/features/player/slide-clock.ts` models one still or animated image without
+creating timers or touching the DOM. Intervals are 500–30,000 milliseconds. If the
+caller requests respect for animation and supplies a known positive cycle duration,
+the image duration is the longer of that cycle and the configured interval; an
+unknown or zero cycle falls back to the interval.
+
+The caller supplies nondecreasing monotonic milliseconds from one time origin, such
+as `performance.now()`. Pause preserves elapsed time; resuming establishes a new
+deadline without charging the paused interval. A delayed tick ends at most this one
+clock. If a pause arrives after its deadline, the clock stays paused at the duration
+and ends on the next tick after resumption. Seek clamps to the current duration; a
+seek backward from an ended clock leaves it paused. Reset creates a new ready clock.
+
+The integration must pause on background visibility or buffering, fence stale callbacks
+against the current account, media and revision, and reinitialize timing after reload
+or a different time origin. This helper does not do any of those tasks itself and does
+not model video: video play/pause/ended events and clipped playback require separate
+handling and real browser tests. It does not authorize or cache media.
